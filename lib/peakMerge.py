@@ -11,13 +11,11 @@ import umap
 import argparse
 import os
 import pynndescent
-import igraph
-import leidenalg
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 import sys
 import cv2
-import plot_utils
+from lib.utils import plot_utils, matrix_utils, overlap_utils
 from sklearn.metrics import adjusted_rand_score, adjusted_mutual_info_score
 from fastcluster import linkage_vector
 import scipy.cluster.hierarchy as hierarchy
@@ -522,47 +520,14 @@ class peakMerger:
             else:
                 metric = "correlation"
         if reDo or (self.clustered[int(transpose)] is None):
-            # Create NN graph
             if transpose:
-                if k == "auto":
-                    k = int(np.power(len(self.matrix.T), 0.33)+1)
-                index = pynndescent.NNDescent(self.matrix.T, n_neighbors=k+1, metric=metric, diversify_prob=0.0, pruning_degree_multiplier=9.0)
+                self.clustered[int(transpose)] = graphClustering(self.matrix.T, 
+                                                                 metric, method==SNN,
+                                                                 restarts=restarts)
             else:
-                if k == "auto":
-                    k = int(np.power(len(self.matrix), 0.33) + 1)
-                index = pynndescent.NNDescent(self.matrix, n_neighbors=k+1, metric=metric, diversify_prob=0.0, pruning_degree_multiplier=9.0)
-            nnGraph = index.neighbor_graph[0][:, 1:]
-            edges = np.empty((nnGraph.shape[0]*nnGraph.shape[1], 2), dtype='int64')
-            if method == "SNN":
-                weights = np.empty((nnGraph.shape[0]*nnGraph.shape[1]), dtype='float')
-            for i in range(len(nnGraph)):
-                for j in range(nnGraph.shape[1]):
-                    if nnGraph[i, j] > -0.5:    # Pynndescent may fail to find nearest neighbors in some cases
-                        link = nnGraph[i, j]
-                        edges[i*nnGraph.shape[1]+j] = [i, link]
-                        if method == "SNN":
-                            # Weight the edges based on the number of shared nearest neighbors between two nodes
-                            weights[i*nnGraph.shape[1]+j] = len(np.intersect1d(nnGraph[i], nnGraph[link]))
-            graph = igraph.Graph(n=len(nnGraph), edges=edges, directed=True)
-            # Restart clustering multiple times and keep the best partition
-            best = -np.inf
-            partitions = None
-            for i in range(restarts):
-                if method == "SNN":
-                    part = leidenalg.find_partition(graph, leidenalg.RBConfigurationVertexPartition, 
-                                                    seed=i, resolution_parameter=r, weights=weights, n_iterations=-1)
-                else:
-                    part = leidenalg.find_partition(graph, leidenalg.RBConfigurationVertexPartition, 
-                                                    seed=i,resolution_parameter=r, n_iterations=-1)
-                if part.quality() > best:
-                    partitions = part
-                    best = part.quality()
-            # Map partitions to per object assignments
-            self.clustered[int(transpose)] = np.zeros(len(nnGraph), dtype="int")
-            for i, p in enumerate(partitions):
-                self.clustered[int(transpose)][p] = i
-            print(f"Found {len(partitions)} partitions")
-
+                self.clustered[int(transpose)] = graphClustering(self.matrix, 
+                                                                 metric, method==SNN,
+                                                                 restarts=restarts)
         # Get experiment annotation
         if not annotationFile == None:
             annotationDf = pd.read_csv(annotationFile, sep="\t", index_col=0)
