@@ -939,20 +939,3 @@ if __name__ == "__main__":
         else:
             print("No annotation file given, will skip 1-NN accuracy.")
     sys.exit()
-
-'''
-# %%
-merger = peakMerger("data/hg38.chrom.sizes.sorted", "outputCage/")
-merger.mergePeaks("experiments/cage_data/peaks", "bed", True)
-# %%
-import importlib
-importlib.reload(plot_utils)
-e = merger.umap(transpose=True, annotationFile="experiments/cage_data/cage_annot.csv")
-# %%
-merger.umap(transpose=False, annotationFile="experiments/cage_data/cage_annot.csv")
-# %%
-merger.clusterize(transpose=True, annotationFile="experiments/cage_data/cage_annot.csv", restarts=100)
-# %%
-merger.clusterize(transpose=False, annotationFile="experiments/cage_data/cage_annot.csv", restarts=2)
-# %%
-'''
