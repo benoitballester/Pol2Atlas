@@ -1,7 +1,7 @@
 import pandas
 import re
 import urllib.request
-from config.params import *
+from settings.paths import *
 
 manifest = pandas.read_csv(parameters.dataPath + "GWAS/LDSC Sumstat Manifest for Neale UKB GWAS - ukb31063_ldsc_sumstat_manifest.tsv", sep="\t")
 lookupTable = pandas.read_csv(parameters.dataPath + "GWAS/LDSC Sumstat Manifest for Neale UKB GWAS - ukb31063_ldsc_sumstat_manifest.tsv", sep="\t", header=None)[[0,1]]
