@@ -22,7 +22,7 @@ import scipy.cluster.hierarchy as hierarchy
 from statsmodels.stats.multitest import multipletests
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.neighbors import KNeighborsClassifier
-
+import pickle
 
 
 class peakMerger:
@@ -91,6 +91,10 @@ class peakMerger:
         self.matrix = None
         self.consensuses = None
         self.labels = None
+    
+    def save(self):
+        with open(self.outputPath + "merger", "wb") as f:
+            pickle.dump(self, f, protocol=4)
 
     def mergePeaks(self, folderPath, fileFormat, inferCenter=False, forceUnstranded=False, 
                   sigma="auto_1", perPeakDensity=False, perPeakMultiplier=0.5,
@@ -312,6 +316,7 @@ class peakMerger:
         if self.score == "binary":
             self.matrix = self.matrix.astype(bool)
         self.consensuses = pd.DataFrame(self.consensuses)
+        self.save()
 
 
     def writePeaks(self):
@@ -453,6 +458,7 @@ class peakMerger:
                 pd.DataFrame(self.embedding[int(transpose)]).to_csv(self.outputPath + f"embedding_consensuses.txt", header=False, index=False, sep="\t")
                 plt.savefig(self.outputPath + f"umap_consensuses.{figureFmt}", bbox_inches='tight')
         plt.show()
+        self.save()
         return self.embedding[int(transpose)]
 
 
@@ -521,11 +527,11 @@ class peakMerger:
                 metric = "correlation"
         if reDo or (self.clustered[int(transpose)] is None):
             if transpose:
-                self.clustered[int(transpose)] = graphClustering(self.matrix.T, 
+                self.clustered[int(transpose)] = matrix_utils.graphClustering(self.matrix.T, 
                                                                  metric, method==SNN,
                                                                  restarts=restarts)
             else:
-                self.clustered[int(transpose)] = graphClustering(self.matrix, 
+                self.clustered[int(transpose)] = matrix_utils.graphClustering(self.matrix, 
                                                                  metric, method==SNN,
                                                                  restarts=restarts)
         # Get experiment annotation
@@ -655,6 +661,7 @@ class peakMerger:
                     self.consensuses.iloc[self.clustered[int(transpose)] == i].to_csv(f"{self.outputPath}/clusters_bed/cluster_{i}.bed", 
                                                                         sep="\t", header=False, index=False)
         plt.show()
+        self.save()
         return self.clustered[int(transpose)]
 
 
