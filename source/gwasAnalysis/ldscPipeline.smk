@@ -3,7 +3,7 @@ import re
 import urllib.request
 from config.params import *
 import os 
-
+from settings import params, paths
 
 try:
     os.mkdir(parameters.tempDir + "liftedClusters/")

@@ -35,7 +35,10 @@ def getPalette(labels, palette=None):
         0-1 rgb color values for each point
     """
     numLabels = np.max(labels)
-    if numLabels < 12:
+    if numLabels < 10:
+        palette = np.array(sns.color_palette())
+        colors = palette[labels]
+    elif numLabels < 12:
         palette = np.array(sns.color_palette("Paired"))
         colors = palette[labels]
     elif numLabels < 18:
@@ -72,7 +75,7 @@ def plotUmap(points, colors, forceVectorized=False):
     forceVectorized: Boolean (optional, default False)
         Forces the use of the matplotlib backend.
     """
-    if (len(points) > 100000) and not forceVectorized:
+    if (len(points) > 10000) and not forceVectorized:
         # Compute points per pixel for scalability to very large datasets
         alpha = 1.0
         size = 4000
@@ -131,8 +134,12 @@ def plotUmap(points, colors, forceVectorized=False):
         mat = 1.0 - alpha[:, :, None] + alpha[:, :, None] * img / (1e-7+sums[:, :, None])
         plt.imshow(mat, interpolation="lanczos")
     else:
-        plt.scatter(points[:, 0], points[:, 1], s=min(30.0,300/np.sqrt(len(points))),
+        plt.scatter(points[:, 0], points[:, 1], s=min(20.0,200/np.sqrt(len(points))),
                     linewidths=0.0, c=np.clip(colors,0.0,1.0))
         xScale = plt.xlim()[1] - plt.xlim()[0]
         yScale = plt.ylim()[1] - plt.ylim()[0]
         plt.gca().set_aspect(xScale/yScale)
+
+
+def plotHC(matrix, rowOrder, colOrder, annotation):
+    pass

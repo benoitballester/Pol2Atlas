@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 import sys
 import cv2
-from lib.utils import plot_utils, matrix_utils, overlap_utils
+from .utils import plot_utils, matrix_utils, overlap_utils
 from sklearn.metrics import adjusted_rand_score, adjusted_mutual_info_score
 from fastcluster import linkage_vector
 import scipy.cluster.hierarchy as hierarchy
@@ -344,7 +344,7 @@ class peakMerger:
             f.write("Genome size\t" + str(self.genomeSize) + "\n")
 
 
-    def umap(self, transpose, annotationFile=None, annotationPalette=None, metric="auto", k=15, figureFmt="pdf", reDo=False):
+    def umap(self, transpose, altMatrix=None, annotationFile=None, annotationPalette=None, metric="auto", k=15, figureFmt="pdf", reDo=False):
         """
         Performs UMAP dimensionnality reduction on the matrix, and plot results 
         with the annotation.
@@ -358,6 +358,11 @@ class peakMerger:
         annotationFile: None or string (optionnal, default None)
             Path to a tab separated file, with each line linking a file name 
             (first column)to its annotation (column named 'Annotation', case sensitive)
+
+        altMatrix: None or array-like (optional, default None)
+            Alternative representation of the data matrix, which will be used as a 
+            base for UMAP. For example, PCA or Autoencoder latent space. Array shape
+            has to match the merger matrix.
 
         metric: "auto" or string (optional, default "auto")
             Metric used by umap. If set to "auto", it will use the jaccard index 
@@ -403,7 +408,10 @@ class peakMerger:
         if transpose:
             if reDo or (self.embedding[1] is None):
                 self.embedderT = umap.UMAP(n_neighbors=k, metric=metric)
-                self.embedding[1] = self.embedderT.fit_transform(self.matrix.T)
+                if altMatrix is None:
+                    self.embedding[1] = self.embedderT.fit_transform(self.matrix.T)
+                else:
+                    self.embedding[1] = self.embedderT.fit_transform(altMatrix)
             if annotationPalette is None:
                 palette, colors = plot_utils.getPalette(annotations)
             else:
@@ -412,7 +420,10 @@ class peakMerger:
         else:
             if reDo or (self.embedding[0] is None):
                 self.embedder = umap.UMAP(n_neighbors=k, metric=metric)
-                self.embedding[0] = self.embedder.fit_transform(self.matrix)
+                if altMatrix is None:
+                    self.embedding[0] = self.embedder.fit_transform(self.matrix)
+                else:
+                    self.embedding[0] = self.embedder.fit_transform(altMatrix)
             # Annotate each point according to strongest mean annotation signal in consensus
             signalPerCategory = np.zeros((np.max(annotations)+1, len(self.embedding[0])))
             for i in range(np.max(annotations)+1):
@@ -462,9 +473,9 @@ class peakMerger:
         return self.embedding[int(transpose)]
 
 
-    def clusterize(self, transpose, metric="auto", r=0.4, k="auto", method="SNN", 
-                  restarts=1, annotationFile=None, annotationPalette=None, figureFmt="pdf", 
-                  reDo=False):
+    def clusterize(self, transpose, altMatrix=None, metric="auto", r=0.4, k="auto", 
+                  method="SNN", restarts=1, annotationFile=None, annotationPalette=None, 
+                  figureFmt="pdf", reDo=False):
         """
         Performs graph based clustering on the matrix.
 
@@ -527,13 +538,23 @@ class peakMerger:
                 metric = "correlation"
         if reDo or (self.clustered[int(transpose)] is None):
             if transpose:
-                self.clustered[int(transpose)] = matrix_utils.graphClustering(self.matrix.T, 
-                                                                 metric, method==SNN,
-                                                                 restarts=restarts)
+                if altMatrix is None:
+                    self.clustered[1] = matrix_utils.graphClustering(self.matrix.T, 
+                                                                    metric, method=="SNN",
+                                                                    restarts=restarts)
+                else:
+                    self.clustered[1] = matrix_utils.graphClustering(altMatrix, 
+                                                                    metric, method=="SNN",
+                                                                    restarts=restarts)
             else:
-                self.clustered[int(transpose)] = matrix_utils.graphClustering(self.matrix, 
-                                                                 metric, method==SNN,
-                                                                 restarts=restarts)
+                if altMatrix is None:
+                    self.clustered[0] = matrix_utils.graphClustering(self.matrix, 
+                                                                    metric, method=="SNN",
+                                                                    restarts=restarts)
+                else:
+                    self.clustered[0] = matrix_utils.graphClustering(altMatrix, 
+                                                                    metric, method=="SNN",
+                                                                    restarts=restarts)
         # Get experiment annotation
         if not annotationFile == None:
             annotationDf = pd.read_csv(annotationFile, sep="\t", index_col=0)

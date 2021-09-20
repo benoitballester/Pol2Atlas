@@ -2,6 +2,10 @@ import numpy as np
 import pynndescent
 import igraph
 import leidenalg
+from sklearn.metrics import balanced_accuracy_score
+from kneed import KneeLocator
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
 
 
 def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, restarts=1):
@@ -41,13 +45,14 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, restarts=1):
         Index of the cluster each sample belongs to.
     """
     # Create NN graph
-    k = int(np.power(len(matrix), 0.33) + 1)
+    if k == "auto":
+        k = int(np.power(len(matrix), 0.33) + 1)
     index = pynndescent.NNDescent(matrix, n_neighbors=k+1, metric=metric, 
                                   diversify_prob=0.0, pruning_degree_multiplier=9.0)
     nnGraph = index.neighbor_graph[0][:, 1:]
-    edges = np.empty((nnGraph.shape[0]*nnGraph.shape[1], 2), dtype='int64')
+    edges = np.zeros((nnGraph.shape[0]*nnGraph.shape[1], 2), dtype='int64')
     if snn:
-        weights = np.empty((nnGraph.shape[0]*nnGraph.shape[1]), dtype='float')
+        weights = np.zeros((nnGraph.shape[0]*nnGraph.shape[1]), dtype='float')
     for i in range(len(nnGraph)):
         for j in range(nnGraph.shape[1]):
             if nnGraph[i, j] > -0.5:    # Pynndescent may fail to find nearest neighbors in some cases
@@ -75,3 +80,59 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, restarts=1):
     for i, p in enumerate(partitions):
         clustered[p] = i
     return clustered
+
+def autoRankPCA(mat, whiten=False, plot=True, maxRank=None):
+    '''
+    Performs PCA and select the adequate PCA dimensionnality using the elbow
+    method.
+
+    Parameters
+    ----------
+    mat: ndarray
+        Input matrix
+
+    whiten: boolean (optional, default False)
+        Whether to whiten the PCA space or not
+    
+    plot: boolean (optional, default True)
+        Plots the elbow curve
+
+    maxRank: None or integer (optional, default None)
+        Maximum PCA rank to compute. If set to None, selects the 
+        smallest dimension of the matrix.
+
+    Returns
+    -------
+    decomp : ndarray
+        PCA space with optimal rank according to the elbow method.
+    '''
+    if maxRank is None:
+        maxRank = np.min(mat.shape)
+    model = PCA(maxRank, whiten=whiten)
+    decomp = model.fit_transform(mat)
+    kneedl = KneeLocator(np.arange(maxRank), model.explained_variance_, 
+                         S=1.0, direction="decreasing", curve="convex")
+    bestR = kneedl.knee
+    if plot:
+        plt.figure(dpi=300)
+        kneedl.plot_knee()
+        plt.xlabel("Principal component")
+        plt.ylabel("Explained variance")
+        plt.show()
+    return decomp[:, :bestR]
+
+def pseudoHC(matrix, consensusOrdering, sampleOrdering):
+    pass
+
+def looKnnCV(X, Y, metric, k):
+    index = pynndescent.NNDescent(X, n_neighbors=min(30+k, len(X)-1), 
+                                metric=metric, diversify_prob=0.0, pruning_degree_multiplier=9.0)
+    # Exclude itself and select NNs (equivalent to leave-one-out cross-validation)
+    # Pynndescent is ran with a few extra neighbors for a better accuracy on ANNs
+    nnGraph = index.neighbor_graph[0][:, 1:k+1]
+    pred = []
+    for nns in Y[nnGraph]:
+        # Find the most represented annotation in the k nearest neighbors
+        pred.append(np.argmax(np.bincount(nns)))
+    score = balanced_accuracy_score(Y, pred)
+    return balanced_accuracy_score(Y, pred)

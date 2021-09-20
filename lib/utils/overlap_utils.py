@@ -12,8 +12,39 @@ def countOverlaps(catalog, query):
 
 
 def computeEnrichVsBg(catalog, query, universe):
+    """
+    Computes an hypergeometric enrichment test on the number of intersections
+    for different classes of genomic elements.
+
+    Parameters
+    ----------
+    catalog: PyRanges
+        Elements to find enrichment on.
+        PyRanges having the category of the genomic element in the "name" column.
+    query: PyRanges
+        The genomic regions on interest. Must be contained in universe.
+    universe: PyRanges
+        The background regions wose intersection count serves as a null
+        distribution.
+    """
     pass
 
+def computeEnrichForLabels(catalog, universe, labels):
+    """
+    Computes an hypergeometric enrichment test on the number of intersections
+    for different classes of genomic elements and for each group in the universe
+
+    Parameters
+    ----------
+    catalog: PyRanges
+        Elements to find enrichment on.
+        PyRanges having the category of the genomic element in the "name" column.
+    universe: PyRanges
+        Genomic regions.
+    labels: array like of integers
+        The group each genomic region in universe belongs to.
+    """
+    pass
 
 @nb.njit(parallel=True)
 def addGenomicContext(starts, ends, annots, array):

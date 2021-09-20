@@ -11,9 +11,17 @@ for i in range(len(biotype)):
     b = biotype[i]
     if b == "VcaP":
         biotype[i] = "VCaP"
+    if b == "erythroblasts":
+        biotype[i] = "erythroblast"
+    if b == "HEK293T":
+        biotype[i] = "HEK293t"
 # %%
 origAnnot.index = origAnnot["Cell_or_tissue"]
 newFmt = origAnnot.loc[biotype][["Annotation"]]
-newFmt["Sample"] = allFiles
+newFmt["Cell_or_tissue"] = origAnnot["Cell_or_tissue"]
+newFmt.index = allFiles
+newFmt.index.name = "Sample"
+newFmt
+# %%
 newFmt.to_csv("/scratch/pdelangen/projet_these/data_clean/annotPol2.tsv", sep="\t")
 # %%
