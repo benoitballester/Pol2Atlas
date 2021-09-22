@@ -3,10 +3,10 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-df = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/filtered.bed", 
+df = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/filteredInterg.bed", 
                  sep="\t", header=None)
 logQvalCutoff = 5
-peakCountCutoff = 1000
+peakCountCutoff = 100
 # %%
 hasPol2 = df[3].str.split(".", expand=True)[1] == "POLR2A"
 # %%
@@ -28,11 +28,11 @@ splited = dict(([(k,x[np.arange(8)]) for k, x in selected.groupby(9)]))
 peaksPerDataset = []
 for f in splited.keys():
     if len(splited[f]) > peakCountCutoff:
-        splited[f].to_csv(f"/scratch/pdelangen/projet_these/data_clean/peaks/{f}.bed.gz", 
+        splited[f].to_csv(f"/scratch/pdelangen/projet_these/data_clean/peaksInterg/{f}.bed.gz", 
                         sep="\t", header=False, index=False)
         a=0
     peaksPerDataset.append(len(splited[f]))
-
+peaksPerDataset = np.array(peaksPerDataset)
 # %%
 plt.figure()
 plt.hist(np.sort(peaksPerDataset), np.logspace(0, 5.2,50))

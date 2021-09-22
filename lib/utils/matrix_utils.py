@@ -47,9 +47,12 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, restarts=1):
     # Create NN graph
     if k == "auto":
         k = int(np.power(len(matrix), 0.33) + 1)
-    index = pynndescent.NNDescent(matrix, n_neighbors=k+1, metric=metric, 
-                                  diversify_prob=0.0, pruning_degree_multiplier=9.0)
-    nnGraph = index.neighbor_graph[0][:, 1:]
+    # Add a few extra NNs to compute in order to get better ANNs
+    extraNN = 10
+    lowMem = len(matrix) > 100000
+    index = pynndescent.NNDescent(matrix, n_neighbors=k+extraNN+1, metric=metric, 
+                                  delta=0.0, low_memory=lowMem)
+    nnGraph = index.neighbor_graph[0][:, 1:k+1]
     edges = np.zeros((nnGraph.shape[0]*nnGraph.shape[1], 2), dtype='int64')
     if snn:
         weights = np.zeros((nnGraph.shape[0]*nnGraph.shape[1]), dtype='float')

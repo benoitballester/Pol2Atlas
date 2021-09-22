@@ -4,7 +4,7 @@ import pandas as pd
 origAnnot = pd.read_csv("/scratch/pdelangen/projet_these/data/peakMerge/annotcellLine.csv")
 # %%
 import os
-allFiles = os.listdir("/scratch/pdelangen/projet_these/data_clean/peaks/")
+allFiles = os.listdir("/scratch/pdelangen/projet_these/data_clean/peaksInterg/")
 # %%
 biotype = [i.split(".")[2].split("_")[0] for i in allFiles]
 for i in range(len(biotype)):

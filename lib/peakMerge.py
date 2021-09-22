@@ -365,8 +365,7 @@ class peakMerger:
             has to match the merger matrix.
 
         metric: "auto" or string (optional, default "auto")
-            Metric used by umap. If set to "auto", it will use the jaccard index 
-            on the experiments and the hamming distance on the consensuses
+            Metric used by umap. If set to "auto", it will use the dice distance
             if the peak scoring is set to binary, or pearson correlation otherwise. 
             See the UMAP documentation for a list of available metrics.
 
@@ -389,10 +388,7 @@ class peakMerger:
         # Autoselect metric
         if metric == "auto":
             if self.score == "binary":
-                if transpose:
-                    metric = "jaccard"
-                else:
-                    metric = "hamming"
+                    metric = "dice"
             else:
                 metric = "correlation"
         # Load annotation file
@@ -485,8 +481,7 @@ class peakMerger:
             If set to true will perform clustering on the experiments, otherwise on the consensuses.
 
         metric: "auto" or string (optional, default "auto")
-            Metric used by umap. If set to "auto", it will use the jaccard index 
-            on the experiments and the hamming distance on the consensuses
+            Metric used by umap. If set to "auto", it will use the dice ditance
             if the peak scoring is set to binary, or pearson correlation otherwise. 
             See the UMAP documentation for a list of available metrics.
 
@@ -530,30 +525,27 @@ class peakMerger:
             raise TypeError(f"Invalid clustering method : {method}, please use 'SNN' or 'KNN'")
         if metric == "auto":
             if self.score == "binary":
-                if transpose:
-                    metric = "jaccard"
-                else:
-                    metric = "hamming"
+                    metric = "dice"
             else:
                 metric = "correlation"
         if reDo or (self.clustered[int(transpose)] is None):
             if transpose:
                 if altMatrix is None:
                     self.clustered[1] = matrix_utils.graphClustering(self.matrix.T, 
-                                                                    metric, method=="SNN",
+                                                                    metric, k, r, method=="SNN",
                                                                     restarts=restarts)
                 else:
                     self.clustered[1] = matrix_utils.graphClustering(altMatrix, 
-                                                                    metric, method=="SNN",
+                                                                    metric, k, r, method=="SNN",
                                                                     restarts=restarts)
             else:
                 if altMatrix is None:
                     self.clustered[0] = matrix_utils.graphClustering(self.matrix, 
-                                                                    metric, method=="SNN",
+                                                                    metric, k, r, method=="SNN",
                                                                     restarts=restarts)
                 else:
                     self.clustered[0] = matrix_utils.graphClustering(altMatrix, 
-                                                                    metric, method=="SNN",
+                                                                    metric, k, r, method=="SNN",
                                                                     restarts=restarts)
         # Get experiment annotation
         if not annotationFile == None:
@@ -768,7 +760,7 @@ class peakMerger:
             (first column) to its annotation (column named 'Annotation', case sensitive)
 
         metric: "auto" or string (optional, default "auto")
-            Metric used by umap. If set to "auto", it will use the jaccard index 
+            Metric used to build the NN graph. If set to "auto", it will use the Dice distance 
             if the peak scoring is set to binary, or pearson correlation otherwise. 
             See the UMAP documentation for a list of available metrics.
 
@@ -788,7 +780,7 @@ class peakMerger:
         """
         if metric == "auto":
             if self.score == "binary":
-                metric = "jaccard"
+                metric = "dice"
             else:
                 metric = "correlation"
         index = pynndescent.NNDescent(self.matrix.T, n_neighbors=min(30+k, len(self.matrix.T)-1), 
@@ -808,7 +800,7 @@ class peakMerger:
             score = evalMetric(annotations, pred)
         with open(self.outputPath + "knnBalancedAcc.txt", "w") as f:
             f.write(str(score))
-        return balanced_accuracy_score(annotations, pred), KNeighborsClassifier(1, metric="jaccard").fit(self.matrix.T, annotations)
+        return balanced_accuracy_score(annotations, pred), KNeighborsClassifier(1, metric="dice").fit(self.matrix.T, annotations)
 
 
 

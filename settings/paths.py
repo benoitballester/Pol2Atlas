@@ -4,7 +4,7 @@ tempDir = "/scratch/pdelangen/projet_these/tempPol2/"
 genomeFile = "/scratch/pdelangen/projet_these/data_clean/hg38.chrom.sizes.sorted"
 annotationFile = "/scratch/pdelangen/projet_these/data_clean/annotPol2.tsv"
 # ---------- Required for Integrative analysis ---------- 
-peaksFolder = "/scratch/pdelangen/projet_these/data_clean/peaks/"
+peaksFolder = "/scratch/pdelangen/projet_these/data_clean/peaksInterg/"
 # ---------- Required for GWAS analysis ---------- 
 # ---------- Required for RNA-seq analysis ---------- 
 countDirectory = "/scratch/pdelangen/projet_these/output_POL2_lenient_largerTSS_latestGENCODE/counts/500centroid/"
