@@ -4,3 +4,5 @@ Main analyses are in integrativeAnalysis.py and can be called using the peakMerg
 We perform secondary, more specific plots/analyses in the other small scripts.
 
 The pol2_preprocessing folder contains scripts specific to the preprocessing of some files for our analyses.
+
+# Applying our approach to your dataset
