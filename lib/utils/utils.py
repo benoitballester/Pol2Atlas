@@ -1,4 +1,5 @@
 import subprocess
+import pickle
 
 def runScript(script, argumentList, outFile=None):
     # Runs the command as a standard bash command

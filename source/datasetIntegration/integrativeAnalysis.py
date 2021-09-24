@@ -22,6 +22,6 @@ merger.umap(transpose=False, annotationFile=paths.annotationFile)
 # %% 
 # Clustering consensus peaks
 merger.clusterize(transpose=False, restarts=1, annotationFile=paths.annotationFile,
-                  reDo=True, r=0.5)
+                  reDo=True)
 # %%
 # Intersect enrichments

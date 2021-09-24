@@ -361,7 +361,7 @@ class peakMerger:
 
         altMatrix: None or array-like (optional, default None)
             Alternative representation of the data matrix, which will be used as a 
-            base for UMAP. For example, PCA or Autoencoder latent space. Array shape
+            for UMAP. For example, PCA or Autoencoder latent space. Array shape
             has to match the merger matrix.
 
         metric: "auto" or string (optional, default "auto")
@@ -403,7 +403,7 @@ class peakMerger:
         # Run UMAP
         if transpose:
             if reDo or (self.embedding[1] is None):
-                self.embedderT = umap.UMAP(n_neighbors=k, metric=metric)
+                self.embedderT = umap.UMAP(n_neighbors=k, min_dist=0.0, metric=metric)
                 if altMatrix is None:
                     self.embedding[1] = self.embedderT.fit_transform(self.matrix.T)
                 else:
@@ -415,7 +415,7 @@ class peakMerger:
                                                           eq, annotationPalette)
         else:
             if reDo or (self.embedding[0] is None):
-                self.embedder = umap.UMAP(n_neighbors=k, metric=metric)
+                self.embedder = umap.UMAP(n_neighbors=k, min_dist=0.0, metric=metric)
                 if altMatrix is None:
                     self.embedding[0] = self.embedder.fit_transform(self.matrix)
                 else:
@@ -483,14 +483,19 @@ class peakMerger:
         metric: "auto" or string (optional, default "auto")
             Metric used by umap. If set to "auto", it will use the dice ditance
             if the peak scoring is set to binary, or pearson correlation otherwise. 
-            See the UMAP documentation for a list of available metrics.
+            See the pynnDescent documentation for a list of available metrics.
+
+        altMatrix: None or array-like (optional, default None)
+            Alternative representation of the data matrix, which will be used as a 
+            for clustering. For example, PCA or Autoencoder latent space. Array shape
+            has to match the merger matrix.
 
         r: float (optional, default 0.4)
             Resolution parameter of the graph partitionning algorithm. Lower values = less clusters.
 
         k: "auto" or integer (optional, default "auto")
             Number of nearest neighbors used to build the NN graph.
-            If set to auto uses numPoints^0.33 neighbors as a rule of thumb, as too few 
+            If set to auto uses 2*numPoints^0.25 neighbors as a rule of thumb, as too few 
             NN with a lot of points can create disconnections in the graph.
 
         method: {"SNN", "KNN"} (optional, default "SNN")

@@ -1,8 +1,8 @@
 # ---------- Common ---------- 
-outputDir = "/scratch/pdelangen/projet_these/outputPol2/"   # Main results
-tempDir = "/scratch/pdelangen/projet_these/tempPol2/"       # Mostly temporary/unimportant
+outputDir = "/scratch/pdelangen/projet_these/outputPol2_Interg/"   # Main results
+tempDir = "/scratch/pdelangen/projet_these/tempPol2_Interg/"       # Mostly temporary/unimportant
 genomeFile = "/scratch/pdelangen/projet_these/data_clean/hg38.chrom.sizes.sorted"
-annotationFile = "/scratch/pdelangen/projet_these/data_clean/annotPol2.tsv"
+annotationFile = "/scratch/pdelangen/projet_these/data_clean/annotPol2_All.tsv"
 
 # ---------- Required for peak integrative analysis ---------- 
 peaksFolder = "/scratch/pdelangen/projet_these/data_clean/peaksInterg/"

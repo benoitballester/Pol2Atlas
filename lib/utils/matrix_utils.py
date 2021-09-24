@@ -25,7 +25,7 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, restarts=1):
 
     k: "auto" or integer (optional, default "auto")
         Number of nearest neighbors used to build the NN graph.
-        If set to auto uses numPoints^0.33 neighbors as a rule of thumb, as too few 
+        If set to auto uses 2*numPoints^0.25 neighbors as a rule of thumb, as too few 
         NN with a lot of points can create disconnections in the graph.
 
     snn: Boolean (optional, default True)
@@ -46,8 +46,8 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, restarts=1):
     """
     # Create NN graph
     if k == "auto":
-        k = int(np.power(len(matrix), 0.33) + 1)
-    # Add a few extra NNs to compute in order to get better ANNs
+        k = int(np.power(len(matrix), 0.25)*2)
+    # Add a few extra NNs to compute in order to get more accurate ANNs
     extraNN = 10
     lowMem = len(matrix) > 100000
     index = pynndescent.NNDescent(matrix, n_neighbors=k+extraNN+1, metric=metric, 

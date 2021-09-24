@@ -4,7 +4,7 @@ import pandas as pd
 origAnnot = pd.read_csv("/scratch/pdelangen/projet_these/data/peakMerge/annotcellLine.csv")
 # %%
 import os
-allFiles = os.listdir("/scratch/pdelangen/projet_these/data_clean/peaksInterg/")
+allFiles = os.listdir("/scratch/pdelangen/projet_these/data_clean/peaks/")
 # %%
 biotype = [i.split(".")[2].split("_")[0] for i in allFiles]
 for i in range(len(biotype)):
@@ -23,5 +23,5 @@ newFmt.index = allFiles
 newFmt.index.name = "Sample"
 newFmt
 # %%
-newFmt.to_csv("/scratch/pdelangen/projet_these/data_clean/annotPol2.tsv", sep="\t")
+newFmt.to_csv("/scratch/pdelangen/projet_these/data_clean/annotPol2_All.tsv", sep="\t")
 # %%
