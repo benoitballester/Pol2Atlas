@@ -50,16 +50,19 @@ rule dlCount:
     shell:
         """
         # Download bam file
+        # Redirect to dev/null because it would write terabytes of loading bars
         {paths.gdcClientPath} download {wildcards.fileIDs} \
                                  -t {paths.tokenPath} \
-                                 -d {paths.tempDir}
+                                 -d {paths.tempDir} &> /dev/null
 
         # Count reads in 10bp intervals in +-500bp around centroid
         sh source/rnaseqAnalysis/downloadCount/readCountsAtlas.sh \
            {paths.tempDir}Pol2_windowed.saf \
            {countDir10}/{wildcards.fileIDs}.counts \
            {paths.tempDir}{wildcards.fileIDs}/{params.nameID} \
-           {paths.featureCountPath}
+           {paths.featureCountPath}\
+           {paths.tempDir}{wildcards.fileIDs}_tmpw/
+
 
        
         # Count reads in +-500bp around centroid
@@ -67,7 +70,8 @@ rule dlCount:
            {paths.tempDir}Pol2_500.saf \
            {countDir500}/{wildcards.fileIDs}.counts \
            {paths.tempDir}{wildcards.fileIDs}/{params.nameID} \
-           {paths.featureCountPath}
+           {paths.featureCountPath}\
+           {paths.tempDir}{wildcards.fileIDs}_tmp500/
 
 
         # Count reads in +-500bp around centroid (all Pol2)
@@ -75,23 +79,26 @@ rule dlCount:
            {paths.tempDir}Pol2.saf \
            {countDir}/{wildcards.fileIDs}.counts \
            {paths.tempDir}{wildcards.fileIDs}/{params.nameID} \
-           {paths.featureCountPath}
+           {paths.featureCountPath}\
+           {paths.tempDir}{wildcards.fileIDs}_tmpall/
 
         # Count reads in consensus
         sh source/rnaseqAnalysis/downloadCount/readCountsAtlas.sh \
            {paths.tempDir}Pol2_all_500.saf \
            {countDirAll}/{wildcards.fileIDs}.counts \
            {paths.tempDir}{wildcards.fileIDs}/{params.nameID} \
-           {paths.featureCountPath}
+           {paths.featureCountPath}\
+           {paths.tempDir}{wildcards.fileIDs}_tmpall500/
 
 
-        # Count reads at random locations to estimate background noise
+        # Count reads at random locations
         # Non-gencode v38 transcript and non-Pol2
         sh source/rnaseqAnalysis/downloadCount/readCountsAtlas.sh \
            {paths.tempDir}backgroundReg.saf \
            {countDirBg}/{wildcards.fileIDs}.counts \
            {paths.tempDir}{wildcards.fileIDs}/{params.nameID} \
-           {paths.featureCountPath}
+           {paths.featureCountPath}\
+           {paths.tempDir}{wildcards.fileIDs}_tmpBG/
         
         
 

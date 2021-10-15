@@ -2,6 +2,9 @@
 # $2 : Output count file
 # $3 : Bam file to count
 # $4 : Path to featureCount executable
+# $5 : Temporary directory
+# Create temp dir
+mkdir $5
 # Count reads using feature counts
 # First attempt paired end reads
 $4 -T 1 \
@@ -11,14 +14,17 @@ $4 -T 1 \
 -p \
 --countReadPairs \
 -o $2 \
+--tmpDir $5 \
 $3 \
-|| \    # If it failed try single end
+|| (\    # If it failed try single end
+rm -rf $5 && mkdir $5 && \
 $4 -T 1 \
 -F SAF \
 -O \
 -a $1 \
 -o $2 \
-$3
+--tmpDir $5 \
+$3)
 
                 
     
@@ -26,3 +32,4 @@ $3
 cut -f 7 $2 > $2.txt
 gzip -f $2.txt
 rm $2
+rm -rf $5

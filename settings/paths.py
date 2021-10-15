@@ -6,7 +6,8 @@ annotationFile = "/scratch/pdelangen/projet_these/data_clean/annotPol2.tsv"
 
 # ---------- Required for peak integrative analysis ---------- 
 peaksFolder = "/scratch/pdelangen/projet_these/data_clean/peaksInterg/"
-
+remapFile = "/scratch/pdelangen/projet_these/data_clean/remap2020_nr.bed"
+repeatFile = "/scratch/pdelangen//projet_these/oldBackup/temp_POL2_lenient/repeatBedType.bed"
 # ---------- Pol II specific ---------- 
 # You will likely not need this for your analyses
 gencode = "/scratch/pdelangen/projet_these/data/annotation/gencode.v38.annotation.gtf"
@@ -24,6 +25,6 @@ gdcClientPath = "/scratch/pdelangen/projet_these/data/tcga/gdc-client"
 featureCountPath = "/scratch/pdelangen/projet_these/data/tcga/featureCounts"
 
 # ---------- Required for RNA-seq analysis ---------- 
-countDirectory = "/scratch/pdelangen/projet_these/output_POL2_lenient_largerTSS_latestGENCODE/counts/500centroid/"
+countDirectory = "/scratch/pdelangen/projet_these/outputPol2/rnaseq/counts/"
 atlasPath = "/scratch/pdelangen/projet_these/temp_POL2_lenient_largerTSS_latestGENCODE/POLR2A_Inter_500.saf"
 tableDirectory = outputDir + "rnaseq"

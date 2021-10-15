@@ -1,0 +1,5 @@
+cases.samples.sample_type
+cases.samples.tissue_type
+cases.project.name
+cases.project.project_id
+cases.case_id

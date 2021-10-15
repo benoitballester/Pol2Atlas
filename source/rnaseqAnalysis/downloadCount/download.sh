@@ -1,3 +1,6 @@
 snakemake --snakefile source/rnaseqAnalysis/downloadCount/getTCGAreadCounts.smk \
+          --cores 32 \
+          --rerun-incomplete \
           -k \
-          --cores 16  
+          --cluster "sbatch -A b169 -p skylake -A b169 --time=8:00:0 -N 1 --ntasks-per-node=1 -o slurmOutput/job.out -e slurmOutput/job.err"
+
