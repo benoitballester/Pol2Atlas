@@ -11,7 +11,7 @@ from io import StringIO
 
 manifest = pd.read_csv(paths.manifest, sep="\t")
 filenames = list(manifest["filename"])
-fields = pd.read_csv("source/rnaseqAnalysis/downloadCount/queries_samples.txt", header=None)
+fields = pd.read_csv("source/trash/queries_samples.txt", header=None)
 fields = list(fields.values.ravel())
 
 def query(queries, fieldQuery, fields, endpt):
@@ -34,12 +34,12 @@ def query(queries, fieldQuery, fields, endpt):
     return df
 
 # Split whole query into smaller chunks or connection timeout
-chunkSize = 100
+chunkSize = 50
 chunks = list(range(0, len(manifest), chunkSize)) + [len(manifest)]
 allChunks = []
 for i in range(len(chunks)-1):
     queryFiles = filenames[chunks[i]:chunks[i+1]]
-    allChunks.append(query(queryFiles, "file_name", fields,"https://api.gdc.cancer.gov/files/"))
+    allChunks.append(query(['376b389a-6edd-44fd-a66a-82061c9d538b_gdc_realn_rehead.bam'], "file_name", fields,"https://api.gdc.cancer.gov/cases/"))
 allChunks = pd.concat(allChunks)
 
 

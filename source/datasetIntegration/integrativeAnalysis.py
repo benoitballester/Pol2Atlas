@@ -22,22 +22,42 @@ merger.clusterize(transpose=True, restarts=100, annotationFile=paths.annotationF
 merger.umap(transpose=False, annotationFile=paths.annotationFile)
 # %% 
 # Clustering consensus peaks
-merger.clusterize(transpose=False, restarts=1, annotationFile=paths.annotationFile,
+merger.clusterize(transpose=False, restarts=10, annotationFile=paths.annotationFile,
                   reDo=True)
 
 # %%
 # Intersect enrichments
 remap_catalog = pr.read_bed(paths.remapFile)
-allPolII = overlap_utils.dfToPrWorkaround(merger.consensuses[[0,1,2]])
-enrichments = overlap_utils.computeEnrichForLabels(remap_catalog, allPolII, merger.clustered[0])
-orderedP = np.argsort(enrichments[2].loc[19])
-enrichments[2].loc[19][orderedP][:20]
+enrichments = overlap_utils.computeEnrichForLabels(remap_catalog, merger.consensuses, merger.clustered[0])
+orderedP = np.argsort(enrichments[2].loc[3])
+enrichments[2].loc[3][orderedP][:20]
 del remap_catalog
 # %%
 # Repeats
 repeats = pr.read_bed(paths.repeatFile)
-enrichments = overlap_utils.computeEnrichForLabels(repeats, allPolII, merger.clustered[0])
+enrichments = overlap_utils.computeEnrichForLabels(repeats, merger.consensuses, merger.clustered[0])
 orderedP = np.argsort(enrichments[2].loc[3])
 enrichments[2].loc[3][orderedP][:10]
 del repeats
+# %%
+
+from lib.pyGREAT import pyGREAT
+enricher = pyGREAT(oboFile=paths.GOfolder + "/go_eq.obo", geneFile=paths.gencode, 
+                   geneGoFile=paths.GOfolder + "/goa_human.gaf")
+# %%
+goEnrich = enricher.findEnriched(merger.consensuses[6==merger.clustered[0]], merger.consensuses)
+
+goClass = "biological_process"
+
+hasEnrich = goEnrich[goClass][2].index[goEnrich[goClass][2] < 0.05]
+subset = enricher.matrices[goClass].loc[hasEnrich]
+clustered = matrix_utils.graphClustering(subset, "dice", k=20, r=0.4, restarts=10)
+topK = 5
+for c in np.arange(clustered.max()+1):
+    inClust = hasEnrich[clustered == c]
+    strongest = goEnrich[goClass][2][inClust].sort_values()[:topK]
+    print("-"*20)
+    print(strongest)
+
+print(goEnrich[goClass][2][(goEnrich[goClass][2] < 0.05) & (goEnrich[goClass][1] > 2)].sort_values())
 # %%

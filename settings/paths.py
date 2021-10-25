@@ -8,6 +8,7 @@ annotationFile = "/scratch/pdelangen/projet_these/data_clean/annotPol2.tsv"
 peaksFolder = "/scratch/pdelangen/projet_these/data_clean/peaksInterg/"
 remapFile = "/scratch/pdelangen/projet_these/data_clean/remap2020_nr.bed"
 repeatFile = "/scratch/pdelangen//projet_these/oldBackup/temp_POL2_lenient/repeatBedType.bed"
+GOfolder = "/scratch/pdelangen/projet_these/data_clean/GO_annotations"
 # ---------- Pol II specific ---------- 
 # You will likely not need this for your analyses
 gencode = "/scratch/pdelangen/projet_these/data/annotation/gencode.v38.annotation.gtf"

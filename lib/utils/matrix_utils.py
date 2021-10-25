@@ -8,7 +8,7 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
 
-def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, restarts=1):
+def graphClustering(matrix, metric, k="auto", r=0.8, snn=True, restarts=1):
     """
     Performs graph based clustering on the matrix.
 
@@ -46,12 +46,12 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, restarts=1):
     """
     # Create NN graph
     if k == "auto":
-        k = int(np.power(len(matrix), 0.25)*2)
+        k = int(np.power(len(matrix), 0.2)*2)
     # Add a few extra NNs to compute in order to get more accurate ANNs
     extraNN = 10
     lowMem = len(matrix) > 100000
     index = pynndescent.NNDescent(matrix, n_neighbors=k+extraNN+1, metric=metric, 
-                                  delta=0.0, low_memory=lowMem)
+                                  delta=0.0, low_memory=lowMem, random_state=42)
     nnGraph = index.neighbor_graph[0][:, 1:k+1]
     edges = np.zeros((nnGraph.shape[0]*nnGraph.shape[1], 2), dtype='int64')
     if snn:

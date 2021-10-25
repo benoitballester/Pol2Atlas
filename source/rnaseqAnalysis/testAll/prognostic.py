@@ -12,7 +12,7 @@ from lib import normRNAseq
 from scipy.special import expit
 from sklearn.preprocessing import power_transform, PowerTransformer
 # %%
-case = "TCGA-KIRC"
+case = "TCGA-BRCA"
 # %%
 # Select only relevant files and annotations
 annotation = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnotation.tsv", 
@@ -30,7 +30,14 @@ annotation = annotation.loc[ids]
 # Read survival information
 survived = (annotation["vital_status"] == "Alive").values
 timeToEvent = annotation["days_to_last_follow_up"].where(survived, annotation["days_to_death"])
+# Drop rows with missing survival information
+toDrop = timeToEvent.index[timeToEvent == "'--"]
+boolIndexing = np.logical_not(np.isin(timeToEvent.index, toDrop))
+timeToEvent = timeToEvent.drop(toDrop)
 timeToEvent = timeToEvent.astype("float")
+survived = survived[boolIndexing]
+annotation.drop(toDrop)
+dlFiles = dlFiles[boolIndexing]
 # %%
 # Read files and setup data matrix
 counts = []
@@ -129,31 +136,39 @@ df.index = order
 df = df.copy()
 r_dataframe = ro.conversion.py2rpy(df)
 # %%
+from sklearn.cluster import AgglomerativeClustering, MeanShift
+import kaplanmeier as km
 pvals = []
 cutoffs = []
 notDropped = []
 for i in range(top.sum()):
+    '''
     fml = ro.r(f"Surv(TTE, Survived) ~ X{i}")
-    try:
-        mstat = maxstat.maxstat_test(fml, data=r_dataframe, smethod="LogRank", pmethod="Lau92")
-        pvals.append(mstat.rx2('p.value')[0])
-        cutoffs.append(mstat.rx2("estimate")[0])
-        notDropped.append(i)
-    except: 
-        # Sometimes the 10th percentile and the 90th percentile are same values and raises an error
-        continue
+    mstat = maxstat.maxstat_test(fml, data=r_dataframe, minprop=0.0, maxprop=1.0, smethod="LogRank", pmethod="condMC")
+    pvals.append(mstat.rx2('p.value')[0])
+    cutoffs.append(mstat.rx2("estimate")[0])
+    '''
+    groups = AgglomerativeClustering(2, linkage="single").fit_predict(countsScaled[:, i].reshape(-1, 1))
+    # groups = countsScaled[:, i] > cutoffs[i]
+    kmf = km.fit(df["TTE"], 
+                            df["Survived"], groups)
+    pvals.append(kmf["logrank_P"])
+    notDropped.append(i)
+
+plt.hist(countsScaled[:, i][groups.astype(bool)], 10)
+plt.hist(countsScaled[:, i][(1-groups).astype(bool)], 10)
 pvals = np.array(pvals)
 # %%
 from statsmodels.stats.multitest import fdrcorrection, multipletests
-qvals = multipletests(pvals, method="fdr_gbs")[1]
+qvals = multipletests(pvals, method="fdr_bh")[1]
 # qvals=pvals
 # %%
 consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
 consensuses = consensuses[nzPos][top].iloc[notDropped]
 topLocs = consensuses.iloc[(qvals < 0.05).nonzero()[0]]
-topLocs[3] = -np.log10(qvals[[(qvals < 0.05).nonzero()[0]]])
-topLocs.sort_values(3, ascending=False, inplace=True)
-topLocs.to_csv(paths.tempDir + "topLocsBRCA_prog.csv", sep="\t", header=None, index=None)
+# topLocs[3] = (pvals[[(qvals < 0.05).nonzero()[0]]])
+# topLocs.sort_values(3, ascending=True, inplace=True)
+topLocs.to_csv(paths.tempDir + f"topLocs{case}_prog.bed", sep="\t", header=None, index=None)
 topLocs
 # %%
 import kaplanmeier as km

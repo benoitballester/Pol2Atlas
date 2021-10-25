@@ -24,11 +24,11 @@ def getIntersected(query, catalog):
     pass
 
 def countOverlapPerCategory(catalog, query):
-    return catalog.overlap(query, how=None).as_df()["Name"].value_counts()
+    return catalog.intersect(query).as_df()["Name"].value_counts().to_dict()
 
 
 def countOverlaps(catalog, query):
-    return len(catalog.overlap(query))
+    return len(catalog.intersect(query))
 
 
 def computeEnrichVsBg(catalog, universe, query):
@@ -56,24 +56,24 @@ def computeEnrichVsBg(catalog, universe, query):
     qvalues: pandas Series
         Benjamini-Hochberg qvalues for each class of genomic element
     """
-    # Compute intersections for universe
-    refCounts = countOverlapPerCategory(catalog, dfToPrWorkaround(universe))
+    refCounts = countOverlapPerCategory(catalog, universe)
     allCats = np.array(list(refCounts.keys()))
     pvals = np.zeros(len(allCats))
     fc = np.zeros(len(allCats))
     M = len(universe)
-    # Then for the query
-    obsCounts = countOverlapPerCategory(catalog, dfToPrWorkaround(query))
+    i = 0
+    obsCounts = countOverlapPerCategory(catalog, query)
     N = len(query)
-    # Find hypergeometric enrichment
-    k = pd.Series(np.zeros(len(allCats), dtype="int"), allCats)
-    isFound = np.isin(allCats, obsCounts.index, assume_unique=True)
-    k[allCats[isFound]] = obsCounts
-    n = pd.Series(np.zeros(len(allCats), dtype="int"), allCats)
-    n[allCats] = refCounts
-    pvals = np.array(rs.phyper(k.values-1,n.values,M-n.values,N, lower_tail=False))
-    pvals = np.nan_to_num(pvals, nan=1.0)
-    fc = (k/np.maximum(N, 1e-7))/np.maximum(n/np.maximum(M, 1e-7), 1e-7)
+    j = 0
+    for c in allCats:
+        n = refCounts[c]
+        if c in obsCounts.keys():
+            k = obsCounts[c]
+        else:
+            k = 0
+        pvals[j] = np.array(rs.phyper(k-1,n,M-n,N, lower_tail=False))[0]
+        fc[j] = (k/max(N, 1e-7))/max(n/max(M, 1e-7), 1e-7)
+        j += 1
     qvals = fdrcorrection(pvals)[1]
     pvals = pd.Series(pvals)
     pvals.index = allCats
@@ -84,53 +84,66 @@ def computeEnrichVsBg(catalog, universe, query):
     return pvals, fc, qvals
 
 
-def computeEnrichNoBg(catalog, universe, genome):
+def computeEnrichForLabels(catalog, universe, labels):
     """
     Computes an hypergeometric enrichment test on the number of intersections
-    for different classes of genomic elements (catalog).
+    for different classes of genomic elements in the catalog (name column)
+    and for each class (labels) of the universe.
 
     Parameters
     ----------
     catalog: PyRanges
         Elements to find enrichment on.
         PyRanges having the category of the genomic element in the "name" column.
-    query: PyRanges
-        The genomic regions of interest. 
-
+    universe: PyRanges
+        All genomic regions.
+    labels: array like
+        The group each genomic region in universe belongs to. Can be integer or string.
+        It will iterate over each unique label.
+    
     Returns
     -------
-    pvalues: pandas Series
-        pvalues for each class of genomic element
-    fc: pandas Series
-        Fold change for each lass of genomic element
-    qvalues: pandas Series
-        Benjamini-Hochberg qvalues for each class of genomic element
+    pvalues: pandas DataFrame
+        pvalues for each label and class of genomic element
+    fc: pandas DataFrame
+        Fold change for each label and class of genomic element
+    qvalues: pandas DataFrame
+        Benjamini-Hochberg qvalues for each label and class of genomic element
+        
     """
-    # Compute intersections for universe
-    refCounts = countOverlapPerCategory(catalog, dfToPrWorkaround(universe))
+    allLabels = np.unique(labels)
+    refCounts = countOverlapPerCategory(catalog, universe)
     allCats = np.array(list(refCounts.keys()))
-    pvals = np.zeros(len(allCats))
-    fc = np.zeros(len(allCats))
+    pvals = np.zeros((len(allLabels), len(allCats)))
+    fc = np.zeros((len(allLabels), len(allCats)))
     M = len(universe)
-    # Then for the query
-    obsCounts = countOverlapPerCategory(catalog, dfToPrWorkaround(query))
-    N = len(query)
-    # Find hypergeometric enrichment
-    k = pd.Series(np.zeros(len(allCats), dtype="int"), allCats)
-    isFound = np.isin(allCats, obsCounts.index, assume_unique=True)
-    k[allCats[isFound]] = obsCounts
-    n = pd.Series(np.zeros(len(allCats), dtype="int"), allCats)
-    n[allCats] = refCounts
-    pvals = np.array(rs.phyper(k.values-1,n.values,M-n.values,N, lower_tail=False))
-    pvals = np.nan_to_num(pvals, nan=1.0)
-    fc = (k/np.maximum(N, 1e-7))/np.maximum(n/np.maximum(M, 1e-7), 1e-7)
-    qvals = fdrcorrection(pvals)[1]
-    pvals = pd.Series(pvals)
-    pvals.index = allCats
-    qvals = pd.Series(qvals)
-    qvals.index = allCats
-    fc = pd.Series(fc)
-    fc.index = allCats
+    i = 0
+    for l in allLabels:
+        query = universe[labels == l]
+        obsCounts = countOverlapPerCategory(catalog, query)
+        N = len(query)
+        j = 0
+        for c in allCats:
+            n = refCounts[c]
+            if c in obsCounts.keys():
+                k = obsCounts[c]
+            else:
+                k = 0
+            pvals[i, j] = hypergeom(M, n, N).sf(k-1)
+            fc[i, j] = (k/max(N, 1e-7))/max(n/max(M, 1e-7), 1e-7)
+            j += 1
+        i += 1
+    qvals = fdrcorrection(pvals.ravel())[1].reshape(pvals.shape)
+    pvals = pd.DataFrame(pvals)
+    pvals.columns = allCats
+    pvals.index = allLabels
+    qvals = pd.DataFrame(qvals)
+    qvals.columns = allCats
+    qvals.index = allLabels
+    fc = pd.DataFrame(fc)
+    fc.columns = allCats
+    fc.index = allLabels
     return pvals, fc, qvals
+    
 
     

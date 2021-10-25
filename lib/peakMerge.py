@@ -683,6 +683,48 @@ class peakMerger:
         return self.clustered[int(transpose)]
 
 
+    def computeOverlapEnrichment(self, catalogFile, labels, name=None):
+        """
+        Computes an hypergeometric enrichment test on the number of intersections
+        for different classes of genomic elements in the catalog (name column)
+        and for each class (labels) of consensus peaks.
+
+        Parameters
+        ----------
+        catalogFile: string
+            Elements to find enrichment on.
+            PyRanges having the category of the genomic element in the "name" column.
+        labels: array like
+            The group each consensus peak belongs to. Can be integer or string.
+            It will iterate over each unique label. Ex: clustering labels
+        name: string
+            Name of the output folder (which will already be located in the output directory).
+            Will contain pvalues, fold changes and q values tsv files.
+        
+        Returns
+        -------
+        pvalues: pandas DataFrame
+            pvalues for each label and class of genomic element
+        fc: pandas DataFrame
+            Fold change for each label and class of genomic element
+        qvalues: pandas DataFrame
+            Benjamini-Hochberg qvalues for each label and class of genomic element
+            
+        """
+        catalog = pr.read_bed(catalogFile)
+        prConsensuses = overlap_utils.dfToPrWorkaround(merger.consensuses)
+        enrichments = overlap_utils.computeEnrichForLabels(catalog, prConsensuses, labels)
+        names = ["pvalues", "fold_change", "qvalues"]
+        try:
+            os.mkdir(self.outputPath + name)
+        except:
+            print("Warning : Can't create fold with path", self.outputPath + name)
+        
+        for i, df in enumerate(enrichments):
+            df.to_csv(self.outputPath + name + "/" + names, sep="\t")
+        return enrichments
+
+
     def topPeaksPerAnnot(self, annotationFile, multitesting="fdr_by", alpha=0.05):
         """
         For each annotation, find the consensuses with enriched presence in experiments

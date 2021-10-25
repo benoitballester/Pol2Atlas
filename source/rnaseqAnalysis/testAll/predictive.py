@@ -10,10 +10,10 @@ from kneed import KneeLocator
 from settings import params, paths
 from lib import normRNAseq
 from scipy.special import expit
-from sklearn.preprocessing import power_transform, PowerTransformer
+from sklearn.preprocessing import power_transform, PowerTransformer, QuantileTransformer
 # %%
-case = "TCGA-KIRC"
-# %%
+case = "TCGA-PRAD"
+
 # Select only relevant files and annotations
 annotation = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnotation.tsv", 
                         sep="\t", index_col=0)
@@ -43,129 +43,15 @@ for f in dlFiles:
     except:
         continue
 allReads = np.array(allReads)
-# %%
 allCounts = np.concatenate(counts, axis=1)
-# %%
-# %%
-# Remove low counts + scran deconvolution normalization
-from rpy2.robjects.packages import importr
-from rpy2.robjects import numpy2ri
-numpy2ri.activate()
-scran = importr("scran")
 
-
-countsNorm = allCounts.T / np.mean(allCounts, axis=0)[:, None]
+# %%
+scale = np.mean(allCounts, axis=0)
+nz = np.sum(allCounts.T > 1, axis=0) > 2
+countsNorm = allCounts.T / allReads[:, None]
+countsNorm = countsNorm[:, nz]
 countsNorm = countsNorm / np.min(countsNorm[countsNorm.nonzero()])
-nzPos = np.mean(countsNorm, axis=0) > 1
-countsNorm = countsNorm[:, nzPos]
-'''
-scale = np.array(scran.calculateSumFactors(countsNorm.T))
-countsNorm = countsNorm / scale[:, None]
-countsNorm = countsNorm / np.min(countsNorm[countsNorm.nonzero()])
-'''
-# %%
-import scipy.stats as ss
-from scipy import interpolate
-from statsmodels.stats.multitest import fdrcorrection, multipletests
-import numba as nb
 
-@nb.njit(parallel=True)
-def permutationVariance(df, ntot=50000):
-    n = int(ntot/df.shape[1])
-    var = np.zeros(n*df.shape[1])
-    for i in nb.prange(n):
-        shuffled = np.random.permutation(df.ravel()).reshape(df.shape)
-        for j in range(df.shape[1]):
-            var[i+j*n] = np.var(shuffled[:, j])
-    return var
-
-@nb.njit(parallel=True)
-def computeEmpiricalP(x, dist):
-    pvals = np.zeros(len(x))
-    for i in range(len(x)):
-        pvals[i] = np.mean(x[i] < dist)
-    return pvals
-
-quantileSize = 50
-logCounts = np.log2(1+countsNorm)
-mean = np.mean(logCounts, axis=0)
-var = np.var(logCounts, axis=0)
-n = int(logCounts.shape[1]/quantileSize)
-evals = np.percentile(mean, np.linspace(0,100,n))
-evals[-1] += 1e-5 # Slightly extend last bin to include last gene
-assigned = np.digitize(mean, evals)
-pvals = np.zeros(len(mean))
-hasDoubleExpected = np.zeros(len(mean), dtype=bool)
-regVar = np.zeros(len(evals))
-# Evaluate significance of variance with a permutation test per quantile of mean expression 
-for i in range(n):
-    inBin = (assigned) == i
-    if inBin.sum() > 0.5:
-        rand = permutationVariance(logCounts[:, inBin])
-        # regVar[i] = np.percentile(var[inBin],5)
-        # hasDoubleExpected[inBin] = np.var(logCounts[:, inBin], axis=0) > regVar[i]*2
-        pvals[inBin] = computeEmpiricalP(var[inBin], rand)
-top = fdrcorrection(pvals)[1] < 0.05
-c = np.zeros((len(pvals), 3)) + np.array([0.0,0.0,1.0])
-c[top] = [1.0,0.0,0.0]
-plt.figure(dpi=500)
-plt.scatter(mean, var, c=c, s=0.5, alpha=0.5, linewidths=0.0)
-plt.plot(evals, regVar)
-plt.show()
-# %%
-# Yeo-johnson transform and scale to unit variance
-countsScaled = power_transform(countsNorm[:, top])
-# countsScaled = StandardScaler().fit_transform(np.log2(1+countsNorm[:, top]))
-# countsScaled = StandardScaler().fit_transform(countsNorm[:, top])
-# countsScaled = sTransform(countsNorm[:, top], 0.55)
-plt.figure()
-plt.hist(countsScaled.ravel(), 20)
-plt.yscale("log")
-plt.xlabel("Z-scores")
-plt.show()
-# %%
-# Check for outliers
-plt.figure(dpi=500)
-plt.boxplot(countsScaled[np.random.choice(len(countsScaled), 100, replace=False)].T,showfliers=False)
-plt.xlabel("100 samples")
-plt.ylabel("Distribution of expression z-scores per sample")
-plt.tick_params(
-    axis='x',          # changes apply to the x-axis
-    which='both',      # both major and minor ticks are affected
-    bottom=False,      # ticks along the bottom edge are off
-    top=False,         # ticks along the top edge are off
-    labelbottom=False) # labels along the bottom edge are off
-plt.show()
-# %%
-import umap
-from lib.utils.plot_utils import plotUmap, getPalette
-from matplotlib.patches import Patch
-embedding = umap.UMAP(min_dist=0.0, metric="correlation", low_memory=False).fit_transform(countsScaled)
-# %%
-from lib.utils.plot_utils import plotUmap, getPalette
-from matplotlib.patches import Patch
-
-
-# cancerType, eq = pd.factorize(tcgaProjects["Origin"].loc[project_id])
-# cancerType, eq = pd.factorize(annotation["primary_diagnosis"].loc[order])
-cancerType, eq = pd.factorize(annotation["Sample Type"].loc[order])
-plt.figure(dpi=500)
-palette, colors = getPalette(cancerType)
-# allReadsScaled = (allReads - allReads.min()) / (allReads.max()-allReads.min())
-# col = sns.color_palette("rocket_r", as_cmap=True)(allReadsScaled)
-plt.scatter(embedding[:, 0], embedding[:, 1], s=min(10.0,100/np.sqrt(len(embedding))),
-            linewidths=0.0, c=colors)
-xScale = plt.xlim()[1] - plt.xlim()[0]
-yScale = plt.ylim()[1] - plt.ylim()[0]
-plt.gca().set_aspect(xScale/yScale)
-plt.show()
-plt.figure(dpi=500)
-patches = []
-for i in np.unique(cancerType):
-    legend = Patch(color=palette[i], label=eq[i])
-    patches.append(legend)
-plt.legend(handles=patches)
-plt.show()
 # %%
 # Predictive model
 from sklearn.model_selection import train_test_split, StratifiedKFold
@@ -174,9 +60,9 @@ import catboost
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score, recall_score, precision_score, confusion_matrix,balanced_accuracy_score
 from sklearn.linear_model import LogisticRegression
-from scipy.stats import mannwhitneyu
+from scipy.stats import mannwhitneyu, ttest_ind, ranksums
 from statsmodels.stats.multitest import fdrcorrection
-
+from sklearn.decomposition import PCA
 
 
 labels = []
@@ -186,18 +72,22 @@ for a in annotation["Sample Type"].loc[order]:
     else:
         labels.append(1)
 labels = np.array(labels)
+
+# %%
 predictions = np.zeros(len(labels), dtype=int)
-for train, test in StratifiedKFold(10, shuffle=True, random_state=42).split(countsNorm[:, top], labels):
-    # Fit power transform on train data only
-    scaler = PowerTransformer()
-    scaled = countsNorm[train][:, top]
-    # Fit classifier on scaled train data
-    model = catboost.CatBoostClassifier(iterations=100, rsm=np.sqrt(top.sum())/top.sum(),
+for train, test in StratifiedKFold(10, shuffle=True, random_state=42).split(countsNorm, labels):
+    pvals = mannwhitneyu(countsNorm[train][labels[train] == 0], countsNorm[train][labels[train] == 1])[1]
+    pvals = np.nan_to_num(pvals, nan=1.0)
+    meanFC = np.mean(countsNorm[train][labels[train] == 0], axis=0) / np.mean(countsNorm[train][labels[train] == 1], axis=0)
+    kept = (fdrcorrection(pvals)[1] < 0.05) & (np.abs(np.log2(meanFC)) > 1)
+    x_train = countsNorm[train][:, kept]
+    # Fit classifier on train data
+    model = catboost.CatBoostClassifier(iterations=100, rsm=np.sqrt(x_train.shape[1])/x_train.shape[1],
                                         class_weights=len(labels) / (2 * np.bincount(labels)))
-    model.fit(scaled, labels[train])
-    # Scale and predict on test data
-    scaled = countsNorm[test][:, top]
-    predictions[test] = model.predict(scaled)
+    model.fit(x_train, labels[train])
+    # Predict on test data
+    x_test = countsNorm[test][:, kept]
+    predictions[test] = model.predict(x_test)
 print("Weighted accuracy :", balanced_accuracy_score(labels, predictions))
 print("Recall :", recall_score(labels, predictions))
 print("Precision :", precision_score(labels, predictions))
@@ -207,18 +97,21 @@ df.index = ["Normal Tissue predicted", "Tumor predicted"]
 
 # %%
 # DE Genes
-def findDE(counts, labels):
-    tumorExpr = counts[labels == 1]
-    normalExpr = counts[labels == 0]
-    pvals = []
-    for i in range(counts.shape[1]):
-        pvals.append(mannwhitneyu(normalExpr[:, i], tumorExpr[:, i])[1])
-    return fdrcorrection(pvals)[1]
 
-qvals = findDE(countsNorm[:, top], labels)
+
+qvals = findDE(countsNorm, labels)
 consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
-consensuses = consensuses[nzPos][top]
+# consensuses = consensuses[nzPos][top]
 topLocs = consensuses.iloc[(qvals < 0.05).nonzero()[0]]
 topLocs.to_csv(paths.tempDir + f"topLocs{case}_DE.csv", sep="\t", header=None, index=None)
 topLocs
+# %%
+from lib.utils import overlap_utils
+import pyranges as pr
+
+remap_catalog = pr.read_bed(paths.remapFile)
+allPolII = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
+topDEpr = topLocs
+enrichments = overlap_utils.computeEnrichVsBg(remap_catalog, allPolII, topLocs)
+enrichments[2].sort_values()[:50]
 # %%
