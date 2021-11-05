@@ -11,9 +11,8 @@ from settings import params, paths
 from lib import normRNAseq
 from scipy.special import expit
 from sklearn.preprocessing import power_transform, PowerTransformer
-from lifelines.statistics import logrank_test
 # %%
-case = "TCGA-KIRC"
+case = "TCGA-BRCA"
 # %%
 # Select only relevant files and annotations
 annotation = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnotation.tsv", 
@@ -31,7 +30,14 @@ annotation = annotation.loc[ids]
 # Read survival information
 survived = (annotation["vital_status"] == "Alive").values
 timeToEvent = annotation["days_to_last_follow_up"].where(survived, annotation["days_to_death"])
+# Drop rows with missing survival information
+toDrop = timeToEvent.index[timeToEvent == "'--"]
+boolIndexing = np.logical_not(np.isin(timeToEvent.index, toDrop))
+timeToEvent = timeToEvent.drop(toDrop)
 timeToEvent = timeToEvent.astype("float")
+survived = survived[boolIndexing]
+annotation.drop(toDrop)
+dlFiles = dlFiles[boolIndexing]
 # %%
 # Read files and setup data matrix
 counts = []
@@ -88,7 +94,7 @@ def computeEmpiricalP(x, dist):
     return pvals
 
 quantileSize = 50
-logCounts = np.log2(1+countsNorm)
+logCounts = np.log10(1+countsNorm)
 mean = np.mean(logCounts, axis=0)
 var = np.var(logCounts, axis=0)
 n = int(logCounts.shape[1]/quantileSize)
@@ -106,7 +112,7 @@ for i in range(n):
         # regVar[i] = np.percentile(var[inBin],5)
         # hasDoubleExpected[inBin] = np.var(logCounts[:, inBin], axis=0) > regVar[i]*2
         pvals[inBin] = computeEmpiricalP(var[inBin], rand)
-top = fdrcorrection(pvals)[1] < 0.05
+top = fdrcorrection(pvals)[1] < 0.01
 c = np.zeros((len(pvals), 3)) + np.array([0.0,0.0,1.0])
 c[top] = [1.0,0.0,0.0]
 plt.figure(dpi=500)
@@ -115,17 +121,18 @@ plt.plot(evals, regVar)
 plt.show()
 # %%
 # Yeo-johnson transform and scale to unit variance
-countsScaled = (countsNorm[:, top])
+countsScaled = power_transform(countsNorm[:, top])
 # %%
 from rpy2.robjects import r, pandas2ri
 import rpy2.robjects as ro
+from sklearn.preprocessing import scale
 pandas2ri.activate()
 maxstat = importr("maxstat")
 survival = importr("survival")
 df = pd.DataFrame()
+df["Dead"] = np.logical_not(survived[np.isin(timeToEvent.index, order)])
+df["TTE"] = timeToEvent.loc[order].values + 1e-5
 df[np.arange(countsScaled.shape[1])] = countsScaled
-df["Survived"] = survived[np.isin(timeToEvent.index, order)]
-df["TTE"] = timeToEvent.loc[order].values
 df.index = order
 df = df.copy()
 r_dataframe = ro.conversion.py2rpy(df)
@@ -138,22 +145,20 @@ evalPcts = np.linspace(minPct, maxPct, n)
 pvals = []
 cutoffs = []
 notDropped = []
-ttes = timeToEvent.loc[order].values
-events = survived[np.isin(timeToEvent.index, order)]
 for i in range(top.sum()):
-        i = 335
-        e = np.median(countsScaled[:, i][countsScaled[:, i]>0])
-        gr1 = countsScaled[:, i] < e
-        gr2 = np.logical_not(gr1)
-        p = logrank_test(ttes[gr1], ttes[gr2], events[gr1], events[gr2]).p_value
-        fml = ro.r(f"Surv(TTE, Survived) ~ X{i}")
+    try:
+        fml = ro.r(f"Surv(TTE, Dead) ~ X{i}")
         mstat = maxstat.maxstat_test(fml, data=r_dataframe, smethod="LogRank", pmethod="condMC")
         mp = mstat.rx2('p.value')[0]
-        break
+        pvals.append(mp)
+        notDropped.append(i)
+    except:
+        continue
+
 
 pvals = np.array(pvals)
 # %%
-qvals = multipletests(pvals, method="fdr_gbs")[1]
+qvals = multipletests(pvals, method="fdr_bh")[1]
 # qvals=pvals
 # %%
 consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)

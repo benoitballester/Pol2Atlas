@@ -2,11 +2,11 @@ import numpy as np
 from scipy.stats.mstats import gmean
 
 
-def RLE(counts):
+def deseqNorm(counts):
     m = gmean(counts, axis=0)
     c1 = np.where(m > 0.9, counts / m, np.nan)
     scales = np.nanmedian(c1, axis=1)[:, None]
-    return counts / scales
+    return scales
 
 
 def fpkm(counts):

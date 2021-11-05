@@ -143,3 +143,87 @@ def plotUmap(points, colors, forceVectorized=False):
 
 def plotHC(matrix, rowOrder, colOrder, annotation):
     pass
+
+
+def labelsOnCond(labels, pcts, threshold):
+    # Replace string label with empty string if pct is under threshold
+    return [label if pct > threshold else "" for pct, label in zip(pcts, labels,)]
+
+
+def donutPlot(donutSize, counts, nMult, labels, 
+             nCenter, centerCaption, palette, fName=None, showPct=True, labelsCutThreshold=0.05, showTitle=True):
+    plt.figure(1, (21,9))
+    _, label, autopcts = plt.pie(counts, 
+            labels=labelsOnCond(labels, counts/np.sum(counts), labelsCutThreshold), 
+            colors=palette,
+            autopct=lambda p:str(int(p*nMult/100+0.5))+"%"*showPct,
+            pctdistance= 1.0-donutSize*0.5, shadow=False, wedgeprops = { 'linewidth' : 7, 'edgecolor' : 'white' })
+
+    for i in range(len(label)):
+        plt.setp(label[i], **{'color':palette[i], 'weight':'bold', 'fontsize':40})
+    plt.setp(autopcts, **{'color':'white', 'weight':'bold', 'fontsize':24})
+    #Draw a circle at the center of pie to make it look like a donut
+    centre_circle = plt.Circle((0,0),1.0-donutSize,color='black', fc='white',linewidth=0)
+    totalTxt = plt.text(0, 0, str(nCenter),
+                        {'weight':'bold', 'fontsize':60,
+                        'ha':"center", 'va':"center"})
+                        
+    pol2Txt = plt.text(0, -0.15, centerCaption,
+                        {'fontsize':18,
+                        'ha':"center", 'va':"center"})
+    fig = plt.gcf()
+    fig.gca().add_artist(centre_circle)
+    plt.axis('equal')
+    if fName is not None:
+        plt.savefig("%s.pdf"%fName)
+        plt.savefig("%s.png"%fName)
+    plt.show()
+    plt.close()
+
+
+
+
+palette = sns.color_palette()
+def stackedBarplot(counts, labels, plotTitle="",showPct=True, showNinPct=True, showTitle=True, savefig=False, palette=palette):
+    plt.figure(figsize=(20,30))
+    summed = 0
+    tot = np.sum(counts)
+    side = 0.1
+    plt.ylim((0.0, tot))
+    for x, l, i in zip(counts,labels, range(len(counts))):
+        plt.bar(0, x, bottom=summed, width=0.1, color=palette[i])
+        if showPct: 
+            if showNinPct:
+                plt.text(0, summed+x/2, str(int(x/tot*100)) + " %" + f" ({x})", 
+                        va="center", ha="center",
+                        color=(1.0,1.0,1.0), weight='bold', fontsize=40)
+            else:
+                
+                plt.text(0, summed+x/2, str(int(x/tot*100)) + " %", 
+                        va="center", ha="center",
+                        color=(1.0,1.0,1.0), weight='bold', fontsize=40)
+            
+        else:
+            plt.text(0, summed+x/2, x, 
+                    va="center", ha="center",
+                    color=(1.0,1.0,1.0), weight='bold', fontsize=40)
+        plt.text(side, summed+x/2, l, 
+                va="center", ha="center",
+                color=palette[i], weight='bold', fontsize=60)
+        side *= 1
+        summed += x
+    plt.axis("off", )
+    plt.tick_params(
+        axis='both',          # changes apply to the x-axis
+        which='both',      # both major and minor ticks are affected
+        bottom=False,      # ticks along the bottom edge are off
+        top=False,         # ticks along the top edge are off
+        labelleft=False,
+        labelbottom=False) # labels along the bottom edge are off
+    plt.title(plotTitle, va="center", ha="center",
+              color=(0.05,0.05,0.05), weight='bold', fontsize=60, y=1.05)
+    plt.tight_layout()
+    if savefig:
+        plt.savefig(parameters.outputDir + "figures/descrPlots/%s.pdf"%plotTitle)
+        plt.savefig(parameters.outputDir + "figures/descrPlots/%s.png"%plotTitle, dpi=300)
+    plt.show()

@@ -30,6 +30,9 @@ def countOverlapPerCategory(catalog, query):
 def countOverlaps(catalog, query):
     return len(catalog.overlap(query))
 
+def getHits(query, catalog):
+    query.Name = np.arange(len(query))
+    return query.intersect(catalog)
 
 def computeEnrichVsBg(catalog, universe, query):
     """
@@ -81,7 +84,7 @@ def computeEnrichVsBg(catalog, universe, query):
     qvals.index = allCats
     fc = pd.Series(fc)
     fc.index = allCats
-    return pvals, fc, qvals
+    return pvals, fc, qvals, k
 
 
 def computeEnrichNoBg(catalog, universe, genome):

@@ -8,7 +8,7 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
 
-def graphClustering(matrix, metric, k="auto", r=0.8, snn=True, restarts=1):
+def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, disconnection_distance=None, restarts=1):
     """
     Performs graph based clustering on the matrix.
 
@@ -25,7 +25,7 @@ def graphClustering(matrix, metric, k="auto", r=0.8, snn=True, restarts=1):
 
     k: "auto" or integer (optional, default "auto")
         Number of nearest neighbors used to build the NN graph.
-        If set to auto uses 2*numPoints^0.25 neighbors as a rule of thumb, as too few 
+        If set to auto uses 2*numPoints^0.2 neighbors as a rule of thumb, as too few 
         NN with a lot of points can create disconnections in the graph.
 
     snn: Boolean (optional, default True)
@@ -51,14 +51,18 @@ def graphClustering(matrix, metric, k="auto", r=0.8, snn=True, restarts=1):
     extraNN = 10
     lowMem = len(matrix) > 100000
     index = pynndescent.NNDescent(matrix, n_neighbors=k+extraNN+1, metric=metric, 
-                                  delta=0.0, low_memory=lowMem, random_state=42)
+                                 low_memory=lowMem, random_state=42)
     nnGraph = index.neighbor_graph[0][:, 1:k+1]
+    dists = index.neighbor_graph[1][:, 1:k+1]
     edges = np.zeros((nnGraph.shape[0]*nnGraph.shape[1], 2), dtype='int64')
     if snn:
         weights = np.zeros((nnGraph.shape[0]*nnGraph.shape[1]), dtype='float')
     for i in range(len(nnGraph)):
         for j in range(nnGraph.shape[1]):
             if nnGraph[i, j] > -0.5:    # Pynndescent may fail to find nearest neighbors in some cases
+                if disconnection_distance is not None:
+                    if dists[i, j] >= disconnection_distance:
+                        continue
                 link = nnGraph[i, j]
                 edges[i*nnGraph.shape[1]+j] = [i, link]
                 if snn:

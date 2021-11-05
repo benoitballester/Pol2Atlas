@@ -9,9 +9,12 @@ peaksFolder = "/scratch/pdelangen/projet_these/data_clean/peaksInterg/"
 remapFile = "/scratch/pdelangen/projet_these/data_clean/remap2020_nr.bed"
 repeatFile = "/scratch/pdelangen//projet_these/oldBackup/temp_POL2_lenient/repeatBedType.bed"
 GOfolder = "/scratch/pdelangen/projet_these/data_clean/GO_annotations"
+gencode = "/scratch/pdelangen/projet_these/data/annotation/gencode.v38.annotation.gtf"
+# ---------- Required for GWAS LDSC ---------- 
+ldscFilesPath = "/scratch/pdelangen/projet_these/data_clean/ldsc/"
+liftoverPath = ""
 # ---------- Pol II specific ---------- 
 # You will likely not need this for your analyses
-gencode = "/scratch/pdelangen/projet_these/data/annotation/gencode.v38.annotation.gtf"
 bedtoolsPath = "/home/pdelangen/bedtools"
 encodeBlacklist = "/scratch/pdelangen/projet_these/data_clean/hg38-blacklist.v2.bed"
 # ---------- Required for GWAS analysis ---------- 

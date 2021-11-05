@@ -716,12 +716,15 @@ class peakMerger:
         enrichments = overlap_utils.computeEnrichForLabels(catalog, prConsensuses, labels)
         names = ["pvalues", "fold_change", "qvalues"]
         try:
-            os.mkdir(self.outputPath + name)
+            os.mkdir(self.outputPath + "enrichments/")
         except:
-            print("Warning : Can't create fold with path", self.outputPath + name)
-        
+            pass
+        try:
+            os.mkdir(self.outputPath + "enrichments/" + name)
+        except:
+            print("Warning : Can't create folder with path :'", self.outputPath + "enrichments/" + name, "', folder probably already exists")
         for i, df in enumerate(enrichments):
-            df.to_csv(self.outputPath + name + "/" + names, sep="\t")
+            df.to_csv(self.outputPath + "enrichments/" + name + f"/{names[i]}.tsv", sep="\t")
         return enrichments
 
 
@@ -788,8 +791,8 @@ class peakMerger:
                 sig, qvals = multitesting(pvals)[0:2]
             sigConsensuses = self.consensuses.iloc[sig]
             if self.outputPath is not None:
-                sigConsensuses.to_csv(self.outputPath + f"topEnriched/{eq[i]}.bed", header=False, index=False, sep="\t")
-                pd.DataFrame(qvals[sig]).to_csv(self.outputPath + f"topEnriched/{eq[i]}_qvals.bed", header=False, index=False, sep="\t")
+                sigConsensuses.to_csv(self.outputPath + f"enrichedPerAnnot/{eq[i]}.bed", header=False, index=False, sep="\t")
+                pd.DataFrame(qvals[sig]).to_csv(self.outputPath + f"enrichedPerAnnot/{eq[i]}_qvals.bed", header=False, index=False, sep="\t")
             perAnnotQvals[eq[i]] = qvals[sig]
             perAnnotConsensuses[eq[i]] = sigConsensuses
         return perAnnotConsensuses, perAnnotQvals
