@@ -344,6 +344,13 @@ class peakMerger:
             f.write("Genome size\t" + str(self.genomeSize) + "\n")
 
 
+    def pseudoHC(self, annotationFile=None, metric="dice", kMetaSamples=50000, method="ward"):
+        orderRows = matrix_utils.threeStagesHC(self.matrix.T, metric)
+        orderCols = matrix_utils.threeStagesHC(self.matrix, metric)
+        plot_utils.plotHC(self.matrix, self.labels, annotationFile, rowOrder=orderRows, colOrder=orderCol)
+        plt.savefig(self.outputPath + f"pseudoHC.{figureFmt}", bbox_inches='tight')
+        plt.show()
+
     def umap(self, transpose, altMatrix=None, annotationFile=None, annotationPalette=None, metric="auto", k=15, figureFmt="pdf", reDo=False):
         """
         Performs UMAP dimensionnality reduction on the matrix, and plot results 

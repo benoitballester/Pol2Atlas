@@ -1,16 +1,25 @@
 # %%
 from lib.peakMerge import peakMerger
-from lib.utils import overlap_utils, matrix_utils
+from lib.utils import overlap_utils, matrix_utils, plot_utils
 import numpy as np
 from settings import params, paths
 import pyranges as pr
 import pandas as pd
+import matplotlib.pyplot as plt
+
 # %%
 # First merge peaks and generate data matrix
 merger = peakMerger(paths.genomeFile, outputPath=paths.outputDir)
 merger.mergePeaks(paths.peaksFolder, inferCenter=params.inferCenter, 
                   minOverlap=params.minOverlap, fileFormat=params.fileFormat)
 merger.writePeaks()
+# %%
+highVar = np.mean(merger.matrix.T, axis=0) < 0.51
+orderRows = matrix_utils.threeStagesHC(merger.matrix.T[:, highVar], "dice")
+# orderCols = matrix_utils.threeStagesHC(merger.matrix, "dice")
+# %%
+plot_utils.plotHC(merger.matrix, merger.labels, paths.annotationFile, rowOrder=orderRows, colOrder=orderCol)
+plt.savefig(paths.outputDir + "pseudoHC.png")
 # %%
 # UMAP of samples
 merger.umap(transpose=True, annotationFile=paths.annotationFile)

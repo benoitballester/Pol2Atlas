@@ -7,7 +7,7 @@
 mkdir $5
 # Count reads using feature counts
 # First attempt paired end reads
-$4 -T 1 \
+$4 -T 2 \
 -F SAF \
 -O \
 -a $1 \
@@ -18,7 +18,7 @@ $4 -T 1 \
 $3 \
 || (\    # If it failed try single end
 rm -rf $5 && mkdir $5 && \
-$4 -T 1 \
+$4 -T 2 \
 -F SAF \
 -O \
 -a $1 \

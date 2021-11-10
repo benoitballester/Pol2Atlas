@@ -16,6 +16,8 @@ import scipy.stats as ss
 from scipy import interpolate
 from statsmodels.stats.multitest import fdrcorrection, multipletests
 import numba as nb
+import kaplanmeier as km
+import lifelines as ll
 
 @nb.njit(parallel=True)
 def permutationVariance(df, ntot=50000):
@@ -86,7 +88,7 @@ for case in allAnnots["project_id"].unique():
         continue
     allReads = np.array(allReads)
     allCounts = np.concatenate(counts, axis=1).T
-
+    # Remove zeros counts and deseq normalization
     nz = np.sum(allCounts >= 0.9, axis=0) > len(allCounts)*0.05
     scale = normRNAseq.deseqNorm(allCounts[:, nz])
     countsNorm = allCounts[:, nz] / scale
@@ -128,19 +130,20 @@ for case in allAnnots["project_id"].unique():
     df[np.arange(countsScaled.shape[1])] = countsScaled
     df.index = order
     df = df.copy()
-    import kaplanmeier as km
-    import lifelines as ll
 
     stats = []
     cutoffs = []
     notDropped = []
     print(f"Evaluating {top.sum()} peaks")
+    # Compute univariate cox proportionnal hazards p value for consensuses with high variance
+    # and detectable reads in > 5 % experiments
     for i in range(top.sum()):
         try:
             cph = ll.CoxPHFitter()
             cph.fit(df[[i, "TTE", "Dead"]], duration_col="TTE", event_col="Dead", robust=True)
             stats.append(cph.summary)
         except ll.exceptions.ConvergenceError:
+            # If the regression failed to converge assume HR=1.0 and p = 1.0
             dummyDF = pd.DataFrame(data=[[0.0,1.0,0.0,0.0,0.0,1.0,1.0,0.0,1.0,0.0]], 
                                    columns=['coef', 'exp(coef)', 'se(coef)', 'coef lower 95%', 'coef upper 95%', 'exp(coef) lower 95%', 'exp(coef) upper 95%', 'z', 'p', '-log2(p)'], 
                                    index=[i])
@@ -155,22 +158,23 @@ for case in allAnnots["project_id"].unique():
     consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
     topLocs = consensuses[nz][top].iloc[(qvals < 0.05).nonzero()[0]]
     topLocs.to_csv(paths.tempDir + f"topLocs{case}_prog.bed", sep="\t", header=None, index=None)
-    studiedConsensusesCase[case] = top.nonzero()[0]
+    studiedConsensusesCase[case] = nz.nonzero()[0][top]
     progCase[case] = nz.nonzero()[0][top][qvals < 0.05]
 # %%
+# Retrieve which consensuses are prognostic
 hasProg = pd.DataFrame()
 consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
 for case in progCase:
     arr = np.zeros(len(consensuses), dtype=bool)
     arr[progCase[case]] = True
     hasProg[case] = arr
-# %%
+# Establish a threshold for a consensus peak to be globally prognostic.
+# Perform random permutation of the choosen consensus and select n such as fpr < 0.05
 countsRnd = np.zeros(hasProg.shape[1])
 for i in range(100):
     shuffledDF = np.apply_along_axis(np.random.permutation, 0, hasProg)
     counts = np.bincount(np.sum(shuffledDF, axis=1))/100
     countsRnd[:counts.shape[0]] += counts
-# %% 
 countsObs = np.bincount(np.sum(hasProg, axis=1))
 for threshold in range(len(countsObs)):
     randomSum = np.sum(countsRnd[threshold:])
@@ -178,7 +182,37 @@ for threshold in range(len(countsObs)):
     print(threshold, fpr)
     if fpr < 0.05:
         break
-# %%
 globallyProg = consensuses[hasProg.sum(axis=1) >= threshold]
 globallyProg.to_csv(paths.tempDir + f"globallyProg.bed", sep="\t", header=None, index=None)
+# %%
+from lib.pyGREAT import pyGREAT
+enricher = pyGREAT(oboFile=paths.GOfolder + "/go_eq.obo", geneFile=paths.gencode, 
+                   geneGoFile=paths.GOfolder + "/goa_human.gaf")
+import pyranges as pr
+from lib.utils import overlap_utils
+remap_catalog = pr.read_bed(paths.remapFile)
+# %%
+from lib.utils import matrix_utils 
+goClass = "molecular_function"
+goEnrich = enricher.findEnriched(globallyProg, consensuses)
+print(goEnrich[goClass][2][(goEnrich[goClass][2] < 0.05) & (goEnrich[goClass][1] > 2)].sort_values()[:25])
+hasEnrich = goEnrich[goClass][2][(goEnrich[goClass][2] < 0.05) & (goEnrich[goClass][3] >= 2)]
+clustered = matrix_utils.graphClustering(enricher.matrices[goClass].loc[hasEnrich.index], "dice", 
+                                        disconnection_distance=1.0, r=1.0, k=3, restarts=10)
+topK = 5
+maxP = []
+for c in np.arange(clustered.max()+1):
+    inClust = hasEnrich.index[clustered == c]
+    maxP.append(hasEnrich[inClust].min())
+orderedP = np.argsort(maxP)
+for c in orderedP:
+    inClust = hasEnrich.index[clustered == c]
+    strongest = hasEnrich[inClust].sort_values()[:topK]
+    if len(strongest) > 0:
+        print("-"*20)
+        print(strongest)
+# %%
+enrichments = overlap_utils.computeEnrichVsBg(remap_catalog, consensuses, globallyProg)
+orderedP = np.argsort(enrichments[1])[::-1]
+enrichments[1][orderedP][enrichments[2][orderedP] < 0.05][:25]
 # %%

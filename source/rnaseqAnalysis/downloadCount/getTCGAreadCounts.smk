@@ -44,7 +44,7 @@ rule dlCount:
         countDirBg+"/{fileIDs}.counts.summary",
         countDirAll+"/{fileIDs}.counts.summary",
     threads:
-        1
+        2
     params:
         nameID = lambda wildcard : idNameMap[wildcard[0]]
     shell:

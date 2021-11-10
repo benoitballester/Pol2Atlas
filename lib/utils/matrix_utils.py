@@ -6,7 +6,10 @@ from sklearn.metrics import balanced_accuracy_score
 from kneed import KneeLocator
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
-
+import umap
+from sklearn.cluster import MiniBatchKMeans
+from fastcluster import linkage_vector
+import scipy.cluster.hierarchy as hierarchy
 
 def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, disconnection_distance=None, restarts=1):
     """
@@ -128,8 +131,28 @@ def autoRankPCA(mat, whiten=False, plot=True, maxRank=None):
         plt.show()
     return decomp[:, :bestR]
 
-def pseudoHC(matrix, consensusOrdering, sampleOrdering):
-    pass
+def threeStagesHC(matrix, metric, kMetaSamples=50000, method="ward"):
+    # First perform dimensionnality reduction
+    lowMem = len(matrix) < 100000
+    embedding = umap.UMAP(n_components=20, min_dist=0.0, n_neighbors=30, 
+                          low_memory=lowMem, random_state=42, metric=metric).fit_transform(matrix)
+    embedding = np.nan_to_num(embedding, nan=1e5)
+    # Aggregrate samples via K-means in order to scale to large datasets
+    if len(embedding) > kMetaSamples:
+        clustering = MiniBatchKMeans(n_clusters=kMetaSamples, init="random", random_state=42, 
+                                    n_init=1)
+        assignedClusters = clustering.fit_predict(embedding)
+        Kx = clustering.cluster_centers_
+        # Perform HC
+        link = linkage_vector(Kx, method=method)
+        Korder = hierarchy.leaves_list(link)
+        order = np.array([], dtype="int")
+        for c in Korder:
+            order = np.append(order, np.where(c == assignedClusters)[0])
+        return order
+    else:
+        link = linkage_vector(embedding, method=method)
+        return hierarchy.leaves_list(link)
 
 def looKnnCV(X, Y, metric, k):
     index = pynndescent.NNDescent(X, n_neighbors=min(30+k, len(X)-1), 
