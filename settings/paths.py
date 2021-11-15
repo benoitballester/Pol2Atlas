@@ -12,14 +12,12 @@ GOfolder = "/scratch/pdelangen/projet_these/data_clean/GO_annotations"
 gencode = "/scratch/pdelangen/projet_these/data/annotation/gencode.v38.annotation.gtf"
 # ---------- Required for GWAS LDSC ---------- 
 ldscFilesPath = "/scratch/pdelangen/projet_these/data_clean/ldsc/"
-liftoverPath = ""
+ldscSingularity = "/scratch/pdelangen/projet_these/data/singularity/s-ldsc/envSingularityLDSC.img"
+liftoverPath = "/scratch/pdelangen/projet_these/data/liftover/"
 # ---------- Pol II specific ---------- 
 # You will likely not need this for your analyses
 bedtoolsPath = "/home/pdelangen/bedtools"
 encodeBlacklist = "/scratch/pdelangen/projet_these/data_clean/hg38-blacklist.v2.bed"
-# ---------- Required for GWAS analysis ---------- 
-
-
 # ---------- Required to download counts from TCGA ---------- 
 tokenPath = "/scratch/pdelangen/projet_these/data/tcga/token.txt"
 manifest = "/scratch/pdelangen/projet_these/data_clean/gdc_manifest.2021-09-22.txt"

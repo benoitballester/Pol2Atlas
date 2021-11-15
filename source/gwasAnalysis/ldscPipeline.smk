@@ -1,26 +1,27 @@
 import pandas
 import re
+import os
 import urllib.request
-from config.params import *
-import os 
+import sys
+sys.path.append("./")
 from settings import params, paths
 
 try:
-    os.mkdir(parameters.tempDir + "liftedClusters/")
-    os.mkdir(parameters.tempDir + "noLift/")
-    os.mkdir(parameters.outputDir + "cluster_analysis/ldsc/")
+    os.mkdir(paths.tempDir + "liftedClusters/")
+    os.mkdir(paths.tempDir + "noLift/")
+    os.mkdir(paths.outputDir + "/ldsc/")
 except:
     pass
 
 
-sumstatsFolder = parameters.dataPath + "GWAS/ldsc_sumstats/"
+sumstatsFolder = paths.ldscFilesPath + "ldsc_sumstats/"
 sumstatsFilesAll = os.listdir(sumstatsFolder)
 sumstatsFiles = []
 for i in sumstatsFilesAll:
     if i.endswith(".tsv.bgz"):
         sumstatsFiles.append(i)
 
-tfFolder = parameters.outputDir + "cluster_analysis/clusterbed_matPOLR2A_Inter/"
+tfFolder = paths.outputDir + "clusters_bed/"
 tfClusts = os.listdir(tfFolder)
 tfPaths = [tfFolder + f for f in tfClusts]
 
@@ -30,9 +31,9 @@ chroms = list(range(1,23))
 
 rule all:
     input:
-        expand(parameters.outputDir + "cluster_analysis/ldsc/{sumstatsFiles}.results", sumstatsFiles=sumstatsFiles)
+        expand(paths.outputDir + "ldsc/{sumstatsFiles}.results", sumstatsFiles=sumstatsFiles)
 
-annotFiles = [parameters.tempDir + f"ld.{c}.annot.gz" for c in chroms]
+annotFiles = [paths.tempDir + f"ld.{c}.annot.gz" for c in chroms]
 
 rule liftover:
     threads:
@@ -40,62 +41,62 @@ rule liftover:
     input:
         expand("{abc}", abc=tfPaths)
     output:
-        parameters.tempDir + "liftedClusters/{tfClusts}"
+        paths.tempDir + "liftedClusters/{tfClusts}"
     shell:
         """
-            {parameters.dataPath}liftover/liftOver  \
-            {parameters.outputDir}cluster_analysis/clusterbed_matPOLR2A_Inter/{wildcards.tfClusts} \
-            {parameters.dataPath}liftover/hg38ToHg19.over.chain \
-            {parameters.tempDir}liftedClusters/{wildcards.tfClusts} \
-            {parameters.tempDir}noLift/{wildcards.tfClusts}
+            {paths.liftoverPath}liftOver  \
+            {paths.outputDir}clusters_bed/{wildcards.tfClusts} \
+            {paths.liftoverPath}hg38ToHg19.over.chain \
+            {paths.tempDir}liftedClusters/{wildcards.tfClusts} \
+            {paths.tempDir}noLift/{wildcards.tfClusts}
         """
 
 
 rule makeAnnot:
     input:
-        expand(parameters.tempDir + "liftedClusters/{tfClusts}", tfClusts=tfClusts)
+        expand(paths.tempDir + "liftedClusters/{tfClusts}", tfClusts=tfClusts)
     output:
-        parameters.tempDir + "ld.22.annot.gz"
+        paths.tempDir + "ld.22.annot.gz"
     shell:
         """
-        python source/analysePol2Matrix/ldsc/makeCustomAnnot.py
+        python lib/ldsc/makeCustomAnnot.py
         """
 
 rule baselineLD:
     input:
-        parameters.tempDir + "ld.22.annot.gz"
+        paths.tempDir + "ld.22.annot.gz"
     threads:
         2
     singularity:
-        parameters.dataPath + "singularity/s-ldsc/envSingularityLDSC.img"
+        paths.ldscSingularity
     output:
-        parameters.tempDir + "ld.{chroms}.l2.M_5_50"
+        paths.tempDir + "ld.{chroms}.l2.M_5_50"
     shell:
        """
-       python source/analysePol2Matrix/ldsc/ldsc.py --l2 \
-       --bfile {parameters.dataPath}ldsc/1000G_EUR_Phase3_plink/1000G.EUR.QC.{wildcards.chroms} \
+       python lib/ldsc/ldsc.py --l2 \
+       --bfile {paths.ldscFilesPath}/ldsc_files/1000G_EUR_Phase3_plink/1000G.EUR.QC.{wildcards.chroms} \
        --ld-wind-cm 1 \
-       --annot {parameters.tempDir}ld.{wildcards.chroms}.annot.gz  \
-       --out {parameters.tempDir}ld.{wildcards.chroms}
+       --annot {paths.tempDir}ld.{wildcards.chroms}.annot.gz  \
+       --out {paths.tempDir}ld.{wildcards.chroms}
        """
 
 rule computeSLDSC:
     input:
-        expand(parameters.tempDir + "ld.{chroms}.l2.M_5_50", chroms=chroms)
+        expand(paths.tempDir + "ld.{chroms}.l2.M_5_50", chroms=chroms)
     threads:
         3
     singularity:
-        parameters.dataPath + "singularity/s-ldsc/envSingularityLDSC.img"
+        paths.ldscSingularity
     output:
-        parameters.outputDir + "cluster_analysis/ldsc/{sumstatsFiles}.results"
+        paths.outputDir + "ldsc/{sumstatsFiles}.results"
     shell:
         """
-        python source/analysePol2Matrix/ldsc/ldsc.py --h2 {sumstatsFolder}{wildcards.sumstatsFiles} \
-        --ref-ld-chr {parameters.tempDir}ld. \
-        --w-ld-chr {parameters.dataPath}ldsc/weights_hm3_no_hla/weights. \
-        --annot {parameters.tempDir}ld. \
-        --frqfile-chr {parameters.dataPath}ldsc/1000G_Phase3_frq/1000G.EUR.QC. \
-        --out {parameters.outputDir}cluster_analysis/ldsc/{wildcards.sumstatsFiles} \
+        python lib/ldsc/ldsc.py --h2 {sumstatsFolder}{wildcards.sumstatsFiles} \
+        --ref-ld-chr {paths.tempDir}ld. \
+        --w-ld-chr {paths.ldscFilesPath}ldsc_files/weights_hm3_no_hla/weights. \
+        --annot {paths.tempDir}ld. \
+        --frqfile-chr {paths.ldscFilesPath}ldsc_files/1000G_Phase3_frq/1000G.EUR.QC. \
+        --out {paths.outputDir}ldsc/{wildcards.sumstatsFiles} \
         --overlap-annot \
         --n-blocks 100000
         """
