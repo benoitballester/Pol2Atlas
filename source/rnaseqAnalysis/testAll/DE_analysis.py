@@ -114,7 +114,7 @@ for case in allAnnots["project_id"].unique():
     stat, pvals = mannwhitneyu(countsNormal, countsTumor)
     pvals = np.nan_to_num(pvals, nan=1.0)
     qvals = fdrcorrection(pvals)[1]
-    meanFC = np.log2(np.percentile(countsTumor, 95, axis=0)/np.percentile(countsNormal, 95, axis=0)) 
+    meanFC = np.log2(np.mean(countsTumor, axis=0)/np.mean(countsNormal, axis=0)) 
     meanFC = np.nan_to_num(meanFC, nan=0.0)
     consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
     topLocs = consensuses.iloc[((qvals < 0.05)).nonzero()[0]]

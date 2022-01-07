@@ -3,6 +3,8 @@ import pandas as pd
 import pyranges as pr
 from scipy.stats import hypergeom
 from statsmodels.stats.multitest import fdrcorrection
+import matplotlib.pyplot as plt
+from lib.utils import plot_utils
 from rpy2.robjects.packages import importr
 from rpy2.robjects import numpy2ri
 numpy2ri.activate()
@@ -11,6 +13,8 @@ rs = importr("stats")
 def dfToPrWorkaround(df, useSummit=True):
     # There is an issue when converting a dataframe to a pyrange
     # Convert to separate np array beforehand
+    if type(df) == pr.pyranges.PyRanges:
+        return df
     if useSummit:
         return pr.PyRanges(chromosomes=df.iloc[:,0].values.ravel(), 
                             starts=df.iloc[:,6].values.ravel(), 
@@ -34,7 +38,7 @@ def getHits(query, catalog):
     query.Name = np.arange(len(query))
     return query.intersect(catalog)
 
-def computeEnrichVsBg(catalog, universe, query):
+def computeEnrichVsBg(catalog, universe, query, useSummit=True):
     """
     Computes an hypergeometric enrichment test on the number of intersections
     for different classes of genomic elements (catalog).
@@ -58,6 +62,8 @@ def computeEnrichVsBg(catalog, universe, query):
         Fold change for each lass of genomic element
     qvalues: pandas Series
         Benjamini-Hochberg qvalues for each class of genomic element
+    k: pandas series
+        Number of intersections for each class of genomic element
     """
     # Compute intersections for universe
     refCounts = countOverlapPerCategory(catalog, dfToPrWorkaround(universe))
@@ -74,6 +80,7 @@ def computeEnrichVsBg(catalog, universe, query):
     k[allCats[isFound]] = obsCounts
     n = pd.Series(np.zeros(len(allCats), dtype="int"), allCats)
     n[allCats] = refCounts
+    # Scipy hyper 
     pvals = np.array(rs.phyper(k.values-1,n.values,M-n.values,N, lower_tail=False))
     pvals = np.nan_to_num(pvals, nan=1.0)
     fc = (k/np.maximum(N, 1e-7))/np.maximum(n/np.maximum(M, 1e-7), 1e-7)
@@ -84,7 +91,32 @@ def computeEnrichVsBg(catalog, universe, query):
     qvals.index = allCats
     fc = pd.Series(fc)
     fc.index = allCats
-    return pvals, fc, qvals, k
+    return pvals, fc, qvals, k, n
+
+
+def computeEnrichForLabels(catalog, universe, labels, savePathPrefix=None, useSummit=True):
+    enrichmentsP = []
+    enrichmentsFC = []
+    for i in np.unique(labels):
+        enrichClust = computeEnrichVsBg(catalog, universe, 
+                                        universe[labels == i], useSummit)
+        enrichmentsP.append(enrichClust[0])
+        enrichmentsFC.append(enrichClust[1])
+    enrichmentsP = pd.concat(enrichmentsP, axis=1)
+    enrichmentsP.columns = np.unique(labels)
+    enrichmentsQ = enrichmentsP.copy()
+    enrichmentsQ.iloc[:] = fdrcorrection(enrichmentsQ.values.ravel())[1].reshape(enrichmentsQ.shape)
+    enrichmentsFC = pd.concat(enrichmentsFC, axis=1)
+    enrichmentsFC.columns = np.unique(labels)
+    if savePathPrefix is not None:
+        enrichmentsFC.to_csv(f"{savePathPrefix}_fc.tsv", sep="\t")
+        enrichmentsQ.to_csv(f"{savePathPrefix}_Q.tsv", sep="\t")
+    for i in np.unique(labels):
+        fig, ax = plt.subplots(figsize=(2,2), dpi=500)
+        plot_utils.enrichBarplot(ax, enrichmentsFC[i], enrichmentsQ[i], fcMin=2.0, order_by="qval")
+        if savePathPrefix is not None:
+            fig.savefig(f"{savePathPrefix}_fc_{i}.png", bbox_inches="tight")
+        fig.show()
 
 
 def computeEnrichNoBg(catalog, universe, genome):

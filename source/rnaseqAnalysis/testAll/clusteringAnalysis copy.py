@@ -1,17 +1,16 @@
 # %%
 import numpy as np
 import pandas as pd
-import os
-import matplotlib.pyplot as plt
 from settings import params, paths
-from lib import rnaseqFuncs
-from lib.utils import plot_utils, matrix_utils
-from matplotlib.patches import Patch
-from scipy.stats import rankdata, chi2
-from scipy.stats import chi2
-import seaborn as sns
-import umap
-from statsmodels.stats.multitest import fdrcorrection
+from scipy.io import mmread
+import os
+from scipy.stats.mstats import gmean
+import matplotlib.pyplot as plt
+from kneed import KneeLocator
+from settings import params, paths
+from lib import normRNAseq
+from scipy.special import expit
+from sklearn.preprocessing import StandardScaler, RobustScaler, power_transform
 
 # %%
 annotation = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnotation.tsv", 
@@ -35,37 +34,97 @@ for f in dlFiles:
     except:
         continue
 allReads = np.array(allReads)
-allCounts = np.concatenate(counts, axis=1).T
+# %%
+allCounts = np.concatenate(counts, axis=1)
 # bgCounts = np.concatenate(countsBG, axis=1)
 # %%
 # Keep tumoral samples
 kept = np.isin(order, annotation.index)
-allCounts = allCounts[kept]
+allCounts = allCounts[:, kept]
 # bgCounts = bgCounts[:, kept]
 allReads = allReads[kept]
 annotation = annotation.loc[np.array(order)[kept]]
 kept = np.logical_not(annotation["Sample Type"] == "Solid Tissue Normal")
 annotation = annotation[kept]
-allCounts = allCounts[kept]
-# bgCounts = bgCounts[kept]
+allCounts = allCounts[:, kept]
+# bgCounts = bgCounts[:, kept]
 allReads = allReads[kept]
 # %%
-# Remove undected Pol II probes
-nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=3)
-counts = allCounts[:, nzCounts] 
-# Convert reads to ranks
-ranks = rankdata(counts, axis=1)
-# Rescale ranks to unit Variance for numerical stability (assuming uniform distribution for ranks)
-rgs = (ranks / ranks.shape[1] - 0.5) * np.sqrt(12)
+from rpy2.robjects.packages import importr
+from rpy2.robjects import numpy2ri
+numpy2ri.activate()
+scran = importr("scran")
 # %%
-# Feature selection based on rank variability
-selected = rnaseqFuncs.variableSelection(rgs)
+# Remove low counts + scran deconvolution normalization
+scale = normRNAseq.deseqNorm(allCounts.T)
+countsNorm = allCounts.T / scale
+countsNorm = countsNorm / np.min(countsNorm[countsNorm.nonzero()])
+
+dec = scran.modelGeneVar(np.log2(1+countsNorm.T))
+mean = np.array(dec.slots["listData"].rx("mean")).ravel()
+var = np.array(dec.slots["listData"].rx("total")).ravel()
+fdr = np.array(dec.slots["listData"].rx["FDR"]).ravel()
+pval = np.array(dec.slots["listData"].rx["p.value"]).ravel()
+# %%
+top = pval < 0.05
+c = np.zeros((len(fdr), 3)) + np.array([0.0,0.0,1.0])
+c[top] = [1.0,0.0,0.0]
+plt.figure(dpi=500)
+plt.scatter(mean, var, c=c, s=0.5, linewidths=0.0)
+plt.show()
+# %%
+from sklearn.preprocessing import PowerTransformer, QuantileTransformer
+# Yeo-johnson transform and scale to unit variance
+tf1 = QuantileTransformer(output_distribution="normal")
+tf2 = StandardScaler()
+tf3 = StandardScaler()
+countsScaled = tf1.fit_transform(countsNorm[:, top])
+countsScaledLog = tf2.fit_transform(np.log2(1+countsNorm[:, top]))
+countsScaledRaw = tf3.fit_transform(countsNorm[:, top])
+plt.figure()
+plt.hist(countsScaled.ravel(), 20)
+plt.yscale("log")
+plt.xlabel("Z-scores")
+plt.show()
+# %%
+exIdx = 0
+f501 = tf1.transform(np.ones((1, top.sum()))+49)
+f501 = tf2.transform(np.zeros((1, top.sum())) + np.log2(51))
+f501 = tf3.transform(np.ones((1, top.sum()))+49)
+f11 = tf1.transform(np.ones((1, top.sum())))
+f21 = tf2.transform(np.zeros((1, top.sum())) + np.log2(2))
+f31 = tf3.transform(np.ones((1, top.sum())))
+plt.figure(dpi=500)
+plt.hist(countsScaled[:, exIdx], 20)
+plt.vlines(f1[:,exIdx].ravel(), plt.ylim()[0], plt.ylim()[1], color="red")
+plt.vlines(f501[:,exIdx].ravel(), plt.ylim()[0], plt.ylim()[1], color="red")
+plt.show()
+plt.figure(dpi=500)
+plt.hist(countsScaledYeo[:, exIdx], 20)
+plt.vlines(f2[:,exIdx].ravel(), plt.ylim()[0], plt.ylim()[1], color="red")
+plt.show()
+plt.figure(dpi=500)
+plt.hist(countsScaledRaw[:, exIdx], 20)
+plt.vlines(f3[:,exIdx].ravel(), plt.ylim()[0], plt.ylim()[1], color="red")
+plt.show()
+# %%
+# Outliers :/
+plt.figure(dpi=500)
+plt.boxplot(countsScaled[np.random.choice(len(countsScaled), 100, replace=False)].T,showfliers=False)
+plt.xlabel("100 samples")
+plt.ylabel("Distribution of expression z-scores per sample")
+plt.tick_params(
+    axis='x',          # changes apply to the x-axis
+    which='both',      # both major and minor ticks are affected
+    bottom=False,      # ticks along the bottom edge are off
+    top=False,         # ticks along the top edge are off
+    labelbottom=False) # labels along the bottom edge are off
+plt.show()
 # %%
 import umap
 from lib.utils.plot_utils import plotUmap, getPalette
 from matplotlib.patches import Patch
-embedding = umap.UMAP(min_dist=0.5, random_state=0, low_memory=False, 
-                      metric="correlation").fit_transform(rgs[:, selected])
+embedding = umap.UMAP(metric="correlation", low_memory=False).fit_transform(countsScaled)
 # %%
 from lib.utils.plot_utils import plotUmap, getPalette
 from matplotlib.patches import Patch

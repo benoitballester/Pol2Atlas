@@ -18,10 +18,10 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, disconnection_dis
     Parameters
     ----------
     metric: "auto" or string (optional, default "auto")
-        Metric used by umap. If set to "auto", it will use the jaccard index 
+        Metric used for nn query. If set to "auto", it will use the jaccard index 
         on the experiments and the hamming distance on the consensuses
         if the peak scoring is set to binary, or pearson correlation otherwise. 
-        See the UMAP documentation for a list of available metrics.
+        See the pynndescent documentation for a list of available metrics.
 
     r: float (optional, default 0.4)
         Resolution parameter of the graph partitionning algorithm. Lower values = less clusters.
@@ -132,6 +132,26 @@ def autoRankPCA(mat, whiten=False, plot=True, maxRank=None):
     return decomp[:, :bestR]
 
 def threeStagesHC(matrix, metric, kMetaSamples=50000, method="ward"):
+    """
+    Three steps Hierachical clustering. UMAP -> K-Means -> Ward HC on clusters
+    centroids.
+
+    Parameters
+    ----------
+    matrix : array-like
+        Data matrix
+    
+    metric : string
+        Metric used for nn query. It is recommended to use Pearson correlation
+        for float values and Dice similarity for binary data.
+        See the pynndescent documentation for a list of available metrics.
+    
+    kMetaSamples : int, optional (default 50000)
+        Number of K-Means clusters, or groups of samples used by HC.
+
+    method : string, optional (default "ward")
+        HC method
+    """
     # First perform dimensionnality reduction
     lowMem = len(matrix) < 100000
     embedding = umap.UMAP(n_components=20, min_dist=0.0, n_neighbors=30, 
@@ -154,9 +174,10 @@ def threeStagesHC(matrix, metric, kMetaSamples=50000, method="ward"):
         link = linkage_vector(embedding, method=method)
         return hierarchy.leaves_list(link)
 
+
 def looKnnCV(X, Y, metric, k):
     index = pynndescent.NNDescent(X, n_neighbors=min(30+k, len(X)-1), 
-                                metric=metric, diversify_prob=0.0, pruning_degree_multiplier=9.0)
+                                metric=metric, low_memory=False, random_state=42)
     # Exclude itself and select NNs (equivalent to leave-one-out cross-validation)
     # Pynndescent is ran with a few extra neighbors for a better accuracy on ANNs
     nnGraph = index.neighbor_graph[0][:, 1:k+1]

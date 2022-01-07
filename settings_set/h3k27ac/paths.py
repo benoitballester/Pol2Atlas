@@ -1,11 +1,11 @@
 # ---------- Common ---------- 
-outputDir = "/scratch/pdelangen/projet_these/outputPol2/"   # Main results
-tempDir = "/scratch/pdelangen/projet_these/tempPol2/"       # Mostly temporary/unimportant
+outputDir = "/scratch/pdelangen/projet_these/outputH3K27Ac/"   # Main results
+tempDir = "/scratch/pdelangen/projet_these/tempH3K27Ac/"       # Mostly temporary/unimportant
 genomeFile = "/scratch/pdelangen/projet_these/data_clean/hg38.chrom.sizes.sorted"
-annotationFile = "/scratch/pdelangen/projet_these/data_clean/annotPol2.tsv"
+annotationFile = "/home/pdelangen/peakmerge/experiments/h3k27ac_data/h3k27ac_annot.csv"
 
 # ---------- Required for peak integrative analysis ---------- 
-peaksFolder = "/scratch/pdelangen/projet_these/data_clean/peaksInterg/"
+peaksFolder = "/home/pdelangen/peakmerge/experiments/h3k27ac_data/peaks"
 remapFile = "/scratch/pdelangen/projet_these/data_clean/remap2020_nr.bed"
 repeatFile = "/scratch/pdelangen/projet_these/oldBackup/temp_POL2_lenient/repeatBedType.bed"
 GOfolder = "/scratch/pdelangen/projet_these/data_clean/GO_annotations"

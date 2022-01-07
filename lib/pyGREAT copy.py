@@ -4,22 +4,7 @@ import pyranges as pr
 from statsmodels.stats.multitest import fdrcorrection
 from scipy.sparse import coo_matrix, csr_matrix
 from .utils import overlap_utils
-from gprofiler import GProfiler
 
-def permutationFdrCriticalValue(p_exp, p_perm, alpha=0.05):
-    sortedPexp = np.sort(p_exp)
-    lenRatio = len(p_perm)/len(p_exp)
-    for i in range(sortedPexp.shape[0]):
-        pExp_i = sortedPexp[i]
-        # Correct fp counts with the number of permutations
-        fp = np.sum(p_perm <= pExp_i)/ lenRatio
-        tp = i + 1
-        fdr_i = fp / (tp + fp)
-        print(fdr_i, pExp_i)
-        if fdr_i > alpha:
-            return pExp_i
-
-            
 class regLogicGREAT:
     def __init__(self, upstream, downstream, distal):
         self.upstream = upstream
@@ -125,7 +110,6 @@ class pyGREAT:
             self.matrices[c] = pd.DataFrame(mat)
             self.matrices[c].columns = genes
             self.matrices[c].index = gos
-
     
 
     def __getClusters__(self, enrichedGOs, enrichCat):
@@ -134,16 +118,14 @@ class pyGREAT:
 
     def findEnriched(self, query, background=None, clusterize=False):
         enrichs = {}
-        regPR = pr.PyRanges(self.geneRegulatory.rename({self.gtfGeneCol:"Name"}, axis=1))
+        for c in self.goClasses:
+            regPR = pr.PyRanges(self.fused[c].rename({"name":"Name"}, axis=1))
+            if background is not None:
+                enrichs[c] = overlap_utils.computeEnrichVsBg(regPR, background, query)
+        regPR = pr.PyRanges(self.fused[c].rename({self.gtfGeneCol:"Name"}, axis=1))
         if background is not None:
                 enrichs["genes"] = overlap_utils.computeEnrichVsBg(regPR, background, query)
-        res = enrichs["genes"][0].sort_values()
-        resRank = res[enrichs["genes"][3] > 0.5].copy()
-        resRank.loc[:] = fdrcorrection(resRank)[1]
-        rankedGenes = resRank.index
-        gp = GProfiler(return_dataframe=True)
-        return gp.profile(organism='hsapiens',sources=["GO:BP"],
-                          query=list(rankedGenes[resRank < 0.25]), ordered=True)
+        return enrichs
 
 
 

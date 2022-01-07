@@ -7,7 +7,6 @@ import os
 from scipy.stats.mstats import gmean
 import matplotlib.pyplot as plt
 from kneed import KneeLocator
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
 counts = np.asarray(mmread(paths.outputDir + "rnaseq/" + "counts.mtx").todense())
 annotation = pd.read_csv(paths.outputDir + "rnaseq/annotation.tsv", sep="\t")
 # %%
@@ -35,56 +34,6 @@ consensuses[5] = pct95.astype(int)
 consensuses.iloc[order].to_csv("ranked_95pct.bed", sep="\t", header=None, index=None)
 
 # %%
-'''
-# Gene outlier removal (extreme max read counts > 2 * non-zero 99th percentile)
-perc99 = np.percentile(countsRLE[countsRLE.nonzero()].ravel(), 99)
-
-nonOutliers = np.max(countsRLE, axis=0) < perc99*10
-countsRLE = countsRLE[:,  nonOutliers]
-plt.figure()
-plt.hist(countsRLE.ravel(), 20)
-plt.yscale("log")
-plt.xlabel("RLE counts")
-plt.show()
-'''
-# %%
-# Log transform, scale to unit variance and zero mean
-from sklearn.preprocessing import StandardScaler
-scaler = StandardScaler()
-countsScaled = np.log10(1+countsRLE)
-countsScaled = scaler.fit_transform(countsScaled)
-plt.figure()
-plt.hist(countsScaled.ravel(), 20)
-plt.yscale("log")
-plt.xlabel("Z-scores")
-plt.show()
-# %%
-# Outliers :/
-plt.figure(dpi=500)
-plt.boxplot(countsScaled[:100].T,showfliers=False)
-plt.tick_params(
-    axis='x',          # changes apply to the x-axis
-    which='both',      # both major and minor ticks are affected
-    bottom=False,      # ticks along the bottom edge are off
-    top=False,         # ticks along the top edge are off
-    labelbottom=False) # labels along the bottom edge are off
-plt.show()
-# %%
-# Remove experiments with abnormal median Z-score
-IQRs = np.percentile(countsScaled, 75, axis=1)-np.percentile(countsScaled, 25, axis=1)
-IQRmed = np.median(IQRs)
-medians = np.median(countsScaled, axis=1)
-nonOutliers = IQRmed/2 > np.abs(medians-np.median(medians))
-countsScaled = countsScaled[nonOutliers]
-plt.figure(dpi=500)
-plt.boxplot(countsScaled[:100].T,showfliers=False)
-plt.tick_params(
-    axis='x',          # changes apply to the x-axis
-    which='both',      # both major and minor ticks are affected
-    bottom=False,      # ticks along the bottom edge are off
-    top=False,         # ticks along the top edge are off
-    labelbottom=False) # labels along the bottom edge are off
-plt.show()
 
 # %%
 # PCA, determine optimal number of K using the elbow method

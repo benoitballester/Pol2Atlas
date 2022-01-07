@@ -27,7 +27,7 @@ allAnnots = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnot
                         sep="\t", index_col=0)
 DE_Idx = pd.DataFrame()
 wAccs = pd.DataFrame()
-for case in allAnnots["project_id"].unique()[19:]:
+for case in allAnnots["project_id"].unique():
     case = "TCGA-PRAD"
     # Select only relevant files and annotations
     annotation = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnotation.tsv", 
@@ -72,7 +72,7 @@ for case in allAnnots["project_id"].unique()[19:]:
     scale = np.mean(allCounts, axis=0)
     countsNorm = allCounts.T / allReads[:, None]
     countsNorm = countsNorm / np.min(countsNorm[countsNorm.nonzero()])
-    nz = np.sum(countsNorm > 5, axis=0) > 2
+    nz = np.sum(countsNorm >= 1, axis=0) >= 3
     countsNorm = countsNorm[:, nz]
     # Predictive model
     labels = []

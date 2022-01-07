@@ -7,6 +7,7 @@ import pandas as pd
 import umap
 from matplotlib.patches import Patch
 from skimage.transform import rescale, resize, downscale_local_mean
+import matplotlib.patches as mpatch
 
 def applyPalette(annot, avail, palettePath):
     annotPalette = pd.read_csv("annotation_palette.tsv", sep="\t", index_col=0)
@@ -136,7 +137,8 @@ def plotUmap(points, colors, forceVectorized=False):
         mat = 1.0 - alpha[:, :, None] + alpha[:, :, None] * img / (1e-7+sums[:, :, None])
         plt.imshow(mat, interpolation="lanczos")
     else:
-        plt.scatter(points[:, 0], points[:, 1], s=min(20.0,200/np.sqrt(len(points))),
+        s0 = 3.5*np.linalg.norm(plt.gcf().get_size_inches())
+        plt.scatter(points[:, 0], points[:, 1], s=s0*min(1.0,10/np.sqrt(len(points))),
                     linewidths=0.0, c=np.clip(colors,0.0,1.0))
         xScale = plt.xlim()[1] - plt.xlim()[0]
         yScale = plt.ylim()[1] - plt.ylim()[0]
@@ -184,8 +186,8 @@ def plotHC(matrix, labels, annotationFile=None, annotationPalette=None, rowOrder
     rasterRes = (min(4000, matrix.shape[0]), min(4000, matrix.shape[1]))
     rasterMat = resize(matrix[consensuses1D][:, samples1D].astype(float), rasterRes, anti_aliasing=True)
     rasterMat = (rasterMat - np.min(rasterMat)) / (np.max(rasterMat) - np.min(rasterMat))
-    rasterMat = sns.color_palette("viridis", as_cmap=True)(rasterMat.T)[:,:,:3]
-    #rasterMat = np.repeat(1-rasterMat.T[:,:,None], 3, 2)
+    # rasterMat = sns.color_palette("viridis", as_cmap=True)(rasterMat.T)[:,:,:3]
+    rasterMat = np.repeat(1-rasterMat.T[:,:,None], 3, 2)
     # Add sample annotation
     annotations = np.zeros(matrix.shape[1], "int64")
     eq = ["Non annotated"]
@@ -252,7 +254,44 @@ def plotHC(matrix, labels, annotationFile=None, annotationPalette=None, rowOrder
         patches.append(legend)
     plt.legend(handles=patches, prop={'size': 7}, bbox_to_anchor=(0,1.02,1,0.2),
                 loc="lower left", mode="expand", ncol=6)
-    
+
+
+def capTxtLen(txt, maxlen):
+    try:
+        if len(txt) < maxlen:
+            return txt
+        else:
+            return txt[:maxlen] + '...'
+    except:
+        return "N/A"
+
+def enrichBarplot(ax, enrichFC, enrichQval, title="", order_by="fc", alpha=0.05, fcMin = 1.0, topK=10):
+    selected = (enrichQval < alpha) & (enrichFC > fcMin)
+    if order_by == "fc":
+        ordered = enrichFC[selected].sort_values(ascending=False)[:topK]
+    elif order_by == "qval":
+        ordered = -np.log10(enrichQval[selected]).sort_values(ascending=True)[:topK]
+    else:
+        print("Wrong order_by")
+        return None
+    terms = ordered.index
+    t = [capTxtLen(term, 50) for term in terms]
+    ax.tick_params(axis="x", labelsize=8)
+    ax.tick_params(length=3, width=1.2)
+    ax.barh(range(len(terms)), np.minimum(ordered[::-1],324.0))
+    ax.set_yticks(range(len(terms)))
+    ax.set_yticklabels(t[::-1], fontsize=5)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    if order_by == "fc":
+        ax.set_xlabel("Fold Change", fontsize=8)
+    elif order_by == "qval":
+        ax.set_xlabel("-log10(Corrected P-value)", fontsize=8)
+    ax.set_title(title, fontsize=10)
+
+
+
 
 
 def labelsOnCond(labels, pcts, threshold):
@@ -337,3 +376,26 @@ def stackedBarplot(counts, labels, plotTitle="",showPct=True, showNinPct=True, s
         plt.savefig(parameters.outputDir + "figures/descrPlots/%s.pdf"%plotTitle)
         plt.savefig(parameters.outputDir + "figures/descrPlots/%s.png"%plotTitle, dpi=300)
     plt.show()
+
+
+def plotDeHM(matrix, labels, isDE, resHM=(4096,4096)):
+    plt.figure(figsize=(10,90/16), dpi=300)
+    reordered = matrix
+    resized = resize(reordered, (4096, reordered.shape[1]), anti_aliasing=False)
+    resized = resize(reordered, resHM, anti_aliasing=True)
+    resized = resized - np.min(resized)
+    coloredResized = sns.color_palette("coolwarm", as_cmap=True)(resized/np.max(resized))[:,:,:3]
+    deBar = resize(isDE[None, :], (200/(resHM[0]/4096), resHM[1]), anti_aliasing=True)
+    deBar = np.repeat(deBar[:,:,None], 3, 2)
+    blackBar = np.zeros((15,resHM[1],3))
+    coloredResized = np.concatenate([coloredResized, blackBar, deBar], axis=0)
+    plt.imshow(coloredResized)
+    plt.yticks([resHM[1] * np.mean(1-labels) + resHM[1]*0.5*np.mean(labels), resHM[1] * np.mean(1-labels) * 0.5, resHM[0] + 15 + 100/(resHM[0]/4096)], 
+                [f"{np.sum(labels)} Cancer samples", f"{np.sum(1-labels)} Normal samples", "DE"],
+            fontsize=8, rotation=90, va="center")
+    plt.xticks([resHM[0]*0.5], 
+                [f"{matrix.shape[1]} Consensus Peaks, ranked by mean difference"],
+                fontsize=8, ha="center")
+    plt.title("Transcriptionnal activity (rank in sample)")
+    plt.gca().set_aspect(9/16)
+    palette = sns.color_palette()

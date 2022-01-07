@@ -26,7 +26,7 @@ for ch in range(1,23):
     snpPr = pr.PyRanges(df=snpBed)
     for i, tf in enumerate(files):
         print(tf, ch)
-        intersection = snpPr.overlap(bedfiles[i]).as_df()
+        intersection = snpPr.overlap(bedfiles[i], how=None).as_df()
         hasIntersect[i] += len(intersection)
 
 
@@ -49,7 +49,7 @@ for ch in range(1,23):
             snpAnnotFmt[annotName] = 0
             snpAnnotFmt[annotName].astype('int8')
             try:
-                intersection = snpPr.overlap(bedfiles[i]).as_df()["Name"]
+                intersection = snpPr.overlap(bedfiles[i], how=None).as_df()["Name"]
                 snpAnnotFmt[annotName].loc[intersection] = 1
             except KeyError:
                 pass
