@@ -145,7 +145,7 @@ def plotUmap(points, colors, forceVectorized=False):
         plt.gca().set_aspect(xScale/yScale)
 
 def recursiveDownsample(mat, resX, resY):
-    matDS = resize(mat.astype(float), (resX, resY), anti_aliasing=True)
+    matDS = resize(mat.astype(float), (resX, resY), anti_aliasing=False)
     return matDS
         
 
@@ -184,34 +184,29 @@ def plotHC(matrix, labels, annotationFile=None, annotationPalette=None, rowOrder
             raise TypeError("rowOrder must be 'umap' or array-like")
     # Draw pattern-ordered matrix 
     rasterRes = (min(4000, matrix.shape[0]), min(4000, matrix.shape[1]))
-    rasterMat = resize(matrix[consensuses1D][:, samples1D].astype(float), rasterRes, anti_aliasing=True)
+    rasterMat = resize(matrix[consensuses1D][:, samples1D].astype(float), rasterRes, anti_aliasing=False)
     rasterMat = (rasterMat - np.min(rasterMat)) / (np.max(rasterMat) - np.min(rasterMat))
     # rasterMat = sns.color_palette("viridis", as_cmap=True)(rasterMat.T)[:,:,:3]
     rasterMat = np.repeat(1-rasterMat.T[:,:,None], 3, 2)
     # Add sample annotation
     annotations = np.zeros(matrix.shape[1], "int64")
     eq = ["Non annotated"]
-    if not annotationFile == None:
-        annotationDf = pd.read_csv(annotationFile, sep="\t", index_col=0)
-        annotations, eq = pd.factorize(annotationDf.loc[labels]["Annotation"],
-                                        sort=True)
-        if np.max(annotations) >= 18 and annotationPalette is None:
-            print("Warning : Over 18 annotations, using random colors instead of a palette")
+    annotations, eq = pd.factorize(labels,
+                                    sort=True)
+    if np.max(annotations) >= 18 and annotationPalette is None:
+        print("Warning : Over 18 annotations, using random colors instead of a palette")
     annotationPalette = None
     if annotationPalette is None:
         palette, colors = getPalette(annotations)
     else:
-        palette, colors = applyPalette(annotationDf.loc[self.labels]["Annotation"], 
+        palette, colors = applyPalette(labels, 
                                                     eq, annotationPalette)
     # Add sample labels
     sampleLabelCol = np.zeros((matrix.shape[1], 1, 3))
-    counts = np.zeros(rasterRes[1], dtype=int)
     for i in range(len(palette)):
         hasAnnot = (annotations[samples1D] == i).nonzero()[0]
         np.add.at(sampleLabelCol, hasAnnot, palette[i])
-        np.add.at(counts, hasAnnot, 1)
-    sampleLabelCol /= counts[:, None, None]
-    sampleLabelCol = resize(sampleLabelCol, (rasterRes[1], int(rasterRes[0]/33.3)), anti_aliasing=True)
+    sampleLabelCol = resize(sampleLabelCol, (rasterRes[1], int(rasterRes[0]/33.3)), anti_aliasing=False)
     # Big stacked barplot
     signalPerCategory = np.zeros((np.max(annotations)+1, len(matrix)))
     for i in range(np.max(annotations)+1):
@@ -389,7 +384,7 @@ def plotDeHM(matrix, labels, isDE, resHM=(4096,4096)):
     deBar = np.repeat(deBar[:,:,None], 3, 2)
     blackBar = np.zeros((15,resHM[1],3))
     coloredResized = np.concatenate([coloredResized, blackBar, deBar], axis=0)
-    plt.imshow(coloredResized)
+    plt.imshow(coloredResized, interpolation="lanczos")
     plt.yticks([resHM[1] * np.mean(1-labels) + resHM[1]*0.5*np.mean(labels), resHM[1] * np.mean(1-labels) * 0.5, resHM[0] + 15 + 100/(resHM[0]/4096)], 
                 [f"{np.sum(labels)} Cancer samples", f"{np.sum(1-labels)} Normal samples", "DE"],
             fontsize=8, rotation=90, va="center")

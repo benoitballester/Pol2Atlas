@@ -126,24 +126,23 @@ class pyGREAT:
             self.matrices[c].columns = genes
             self.matrices[c].index = gos
 
-    
 
     def __getClusters__(self, enrichedGOs, enrichCat):
         pass
     
 
-    def findEnriched(self, query, background=None, clusterize=False):
+    def findEnriched(self, query, background=None, clusterize=False, sources=[]):
         enrichs = {}
         regPR = pr.PyRanges(self.geneRegulatory.rename({self.gtfGeneCol:"Name"}, axis=1))
         if background is not None:
                 enrichs["genes"] = overlap_utils.computeEnrichVsBg(regPR, background, query)
         res = enrichs["genes"][0].sort_values()
         resRank = res[enrichs["genes"][3] > 0.5].copy()
-        resRank.loc[:] = fdrcorrection(resRank)[1]
+        # resRank.loc[:] = fdrcorrection(resRank)[1]
         rankedGenes = resRank.index
         gp = GProfiler(return_dataframe=True)
-        return gp.profile(organism='hsapiens',sources=["GO:BP"],
-                          query=list(rankedGenes[resRank < 0.25]), ordered=True)
+        return gp.profile(organism='hsapiens',sources=sources,
+                          query=list(rankedGenes[resRank < 0.05]), ordered=True)
 
 
 

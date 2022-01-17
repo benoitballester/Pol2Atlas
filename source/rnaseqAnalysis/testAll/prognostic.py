@@ -139,7 +139,7 @@ for case in allAnnots["project_id"].unique():
     # and detectable reads in > 5 % experiments
     for i in range(top.sum()):
         try:
-            cph = ll.CoxPHFitter()
+            cph = ll.CoxPHFitter(penalizer=1e-6)
             cph.fit(df[[i, "TTE", "Dead"]], duration_col="TTE", event_col="Dead", robust=True)
             stats.append(cph.summary)
         except ll.exceptions.ConvergenceError:

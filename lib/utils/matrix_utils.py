@@ -91,7 +91,7 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, disconnection_dis
         clustered[p] = i
     return clustered
 
-def autoRankPCA(mat, whiten=False, plot=True, maxRank=None):
+def autoRankPCA(mat, whiten=True, plot=True, minRank=0, maxRank=None):
     '''
     Performs PCA and select the adequate PCA dimensionnality using the elbow
     method.
@@ -121,7 +121,7 @@ def autoRankPCA(mat, whiten=False, plot=True, maxRank=None):
     model = PCA(maxRank, whiten=whiten)
     decomp = model.fit_transform(mat)
     kneedl = KneeLocator(np.arange(maxRank), model.explained_variance_, 
-                         S=1.0, direction="decreasing", curve="convex")
+                         direction="decreasing", curve="convex", online=True)
     bestR = kneedl.knee
     if plot:
         plt.figure(dpi=300)
@@ -129,7 +129,7 @@ def autoRankPCA(mat, whiten=False, plot=True, maxRank=None):
         plt.xlabel("Principal component")
         plt.ylabel("Explained variance")
         plt.show()
-    return decomp[:, :bestR]
+    return decomp[:, :max(bestR,minRank)]
 
 def threeStagesHC(matrix, metric, kMetaSamples=50000, method="ward"):
     """
@@ -174,6 +174,12 @@ def threeStagesHC(matrix, metric, kMetaSamples=50000, method="ward"):
         link = linkage_vector(embedding, method=method)
         return hierarchy.leaves_list(link)
 
+def HcOrder(mat, method="ward", metric="euclidean"):
+    link = linkage_vector(mat, method=method, metric=metric)
+    rowOrder = hierarchy.leaves_list(link)
+    link = linkage_vector(mat.T, method=method, metric=metric)
+    colOrder = hierarchy.leaves_list(link)
+    return rowOrder, colOrder
 
 def looKnnCV(X, Y, metric, k):
     index = pynndescent.NNDescent(X, n_neighbors=min(30+k, len(X)-1), 

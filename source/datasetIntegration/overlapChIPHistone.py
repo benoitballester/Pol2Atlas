@@ -52,9 +52,9 @@ cmdPlot = f"""plotProfile -m {paths.tempDir}cardiovascularVsNotCard.mat \
              -z \
              --numPlotsPerRow 3 \
              --refPointLabel \
-             -o {paths.tempDir}cardHistvsOthers_median.png"""
+             -o {paths.outputDir}/epigenetic/clusters_vs_histoneATAC.pdf"""
 cmdSplit = cmdPlot.split()
-cmdSplit.insert(6, "Median fold change over input")
+cmdSplit.insert(6, "Mean fold change over input")
 cmdSplit.insert(8, "H3K27Ac Heart")
 cmdSplit.insert(9, "H3K27Ac Liver")
 cmdSplit.insert(10, "H3K27Ac T Cells")
@@ -84,7 +84,7 @@ cmdPlot = f"""plotProfile -m {paths.tempDir}dnase.mat \
              -z \
              --numPlotsPerRow 3 \
              --refPointLabel \
-             -o {paths.tempDir}cardHistvsOthers_median.png"""
+             -o {paths.tempDir}cardHistvsOthers_median.pdf"""
 cmdSplit = cmdPlot.split()
 cmdSplit.insert(6, "Median fold change over input")
 cmdSplit.insert(8, "ATAC-seq Heart")
@@ -111,8 +111,7 @@ subprocess.run(cmd.split())
 cmdPlot = f"""plotHeatmap -m {paths.tempDir}polII.mat \
              --averageType mean \
              --perGroup \
-             --kmeans 3 \
-             -o {paths.tempDir}consNoClust.png"""
+             -o {paths.outputDir}/epigenetic/consNoClust.pdf"""
 subprocess.run(cmdPlot.split())
 # %%
 consFile = "/scratch/pdelangen/projet_these/data_clean/cons/hg38.phyloP100way.bw"
@@ -126,7 +125,6 @@ subprocess.run(cmd.split())
 cmdPlot = f"""plotHeatmap -m {paths.tempDir}random.mat \
              --averageType mean \
              --perGroup \
-             --kmeans 3 \
-             -o {paths.tempDir}consRandom.png"""
+             -o {paths.outputDir}/epigenetic/consRandom.pdf"""
 subprocess.run(cmdPlot.split())
 # %%
