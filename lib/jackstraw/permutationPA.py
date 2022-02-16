@@ -1,8 +1,8 @@
 import numpy as np
 
-from jackstraw.utils import pca, svd_wrapper
+from .utils import pca, svd_wrapper
 
-def permutationPA(X, B=100, alpha=0.05, method='pca', max_rank=None):
+def permutationPA(X, B=10, alpha=0.05, method='pca', max_rank=None):
     """
     Estimates the number of significant principal components using a permutation test.
     Adapted from https://github.com/ncchung/jackstraw and Buja and Eyuboglu (1992).
@@ -40,6 +40,7 @@ def permutationPA(X, B=100, alpha=0.05, method='pca', max_rank=None):
     # compute premutation eigenvalues
     dstat_null = np.zeros((B, len(D)))
     for b in range(B):
+        print(b)
         X_perm = np.apply_along_axis(np.random.permutation, 0, X)
         U_perm, D_perm, V_perm = decomp(X_perm, rank=max_rank)
         dstat_null[b, :] = np.square(D_perm)/frob_sq

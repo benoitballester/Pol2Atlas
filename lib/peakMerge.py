@@ -622,11 +622,14 @@ class peakMerger:
                 # Order clusters by similarity using ward hierarchical clustering
                 link = linkage_vector(allProportions, method="ward")
                 rowOrder = hierarchy.leaves_list(link)
+                np.savetxt(self.outputPath  + "clusterBarplotOrder.txt", rowOrder)
                 for i, o in enumerate(rowOrder):
                     pcts = allProportions[o]
                     runningSum = 0
-                    for j, p in enumerate(pcts):
-                        plt.barh(i, p, left=runningSum, color=palette[j])
+                    reOrdered = np.argsort(pcts)[::-1]
+                    orderedPalette = palette[reOrdered]
+                    for j, p in enumerate(pcts[reOrdered]):
+                        plt.barh(i, p, left=runningSum, color=orderedPalette[j])
                         runningSum += p
                 plt.ylabel(f"{self.clustered[int(transpose)].max()+1} Clusters", fontsize=8)
                 plt.xlabel("Origin of peaks (Fraction of cluster)", fontsize=8)

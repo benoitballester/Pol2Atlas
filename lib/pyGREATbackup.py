@@ -122,6 +122,7 @@ class pyGREAT:
             regPR = pr.PyRanges(self.fused[c].rename({"name":"Name"}, axis=1))
             if background is not None:
                 enrichs[c] = overlap_utils.computeEnrichVsBg(regPR, background, query)
+                
         regPR = pr.PyRanges(self.fused[c].rename({self.gtfGeneCol:"Name"}, axis=1))
         if background is not None:
                 enrichs["genes"] = overlap_utils.computeEnrichVsBg(regPR, background, query)

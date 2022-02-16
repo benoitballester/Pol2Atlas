@@ -11,7 +11,12 @@ import seaborn as sns
 import umap
 from statsmodels.stats.multitest import fdrcorrection
 import scipy.interpolate as si
-
+from rpy2.robjects.packages import importr
+from rpy2.robjects import numpy2ri
+from sklearn.preprocessing import StandardScaler
+numpy2ri.activate()
+scran = importr("scran")
+deseq = importr("DESeq2")
 
 def filterDetectableGenes(counts, readMin, expMin):
     return np.sum(counts >= readMin, axis=0) >= expMin
@@ -44,7 +49,7 @@ def variableSelection(matrix, alpha=0.05, percentile=5, plot=False):
     # Deviance follows a chi square distribution under null hypothesis
     pvals = chi2.sf(deviance, len(matrix)+1)
     # Select significantly poorly fitted features 
-    selected = fdrcorrection(pvals, method="negcorr")[1] < alpha
+    selected = fdrcorrection(pvals)[1] < alpha
     if plot:
         pct = rankdata(deviance)/len(deviance)
         color = sns.color_palette("magma", as_cmap=True)(pct)
@@ -63,27 +68,14 @@ def variableSelection(matrix, alpha=0.05, percentile=5, plot=False):
         plt.gca().set_facecolor((0.5,0.5,0.5))
         plt.xlabel("Mean rank")
         plt.ylabel("Mean rank variance")
-    return selected
-
-
-def binomDevianceSelection(counts, alpha=0.05, plot=False):
-    # Deviance based feature selection
-    from kneed import KneeLocator
-    n_i = np.sum(counts, axis=1)[:, None]
-    countsProp = counts/n_i
-    pi_j = np.mean(countsProp, axis=0)
-    v = counts * np.log(1e-15 + counts / (n_i*pi_j)) + (n_i - counts) * np.log(1e-15 + (n_i - counts)/(n_i * (1-pi_j)))
-    deviance = np.sum(v, axis=0)
-    orderedDev = np.argsort(deviance)[::-1]
-    kneedl = KneeLocator(np.arange(len(deviance)), deviance[orderedDev],
-                        direction="decreasing", curve="convex", online=True)
-    bestR = kneedl.knee
-    kneedl.plot_knee()
-    selected = orderedDev[:bestR]
+        plt.show()
     return selected
 
 
 def quantileTransform(counts):
     rg = ((rankdata(counts, axis=0)-0.5)/counts.shape[0])*2.0 - 1.0
-    return erfinv(rg)
+    return StandardScaler().fit_transform(erfinv(rg))
 
+
+def DESeq2_wald(matrix, labels):
+    pass

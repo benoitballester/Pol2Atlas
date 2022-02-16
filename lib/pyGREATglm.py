@@ -1,10 +1,16 @@
 import pandas as pd
 import numpy as np
 import pyranges as pr
+from statsmodels.discrete.discrete_model import NegativeBinomial, Poisson
+from statsmodels.genmod.families.family import Binomial, NegativeBinomial
+from statsmodels.discrete.count_model import ZeroInflatedPoisson, ZeroInflatedNegativeBinomialP
 from statsmodels.stats.multitest import fdrcorrection
+import statsmodels.api as sm
 from scipy.sparse import coo_matrix, csr_matrix
 from .utils import overlap_utils
 from gprofiler import GProfiler
+from scipy.stats import  t
+import matplotlib.pyplot as plt
 
 def permutationFdrCriticalValue(p_exp, p_perm, alpha=0.05):
     sortedPexp = np.sort(p_exp)
@@ -132,18 +138,38 @@ class pyGREAT:
     
 
     def findEnriched(self, query, background=None, clusterize=False, sources=[]):
-        print("lol")
         enrichs = {}
         regPR = pr.PyRanges(self.geneRegulatory.rename({self.gtfGeneCol:"Name"}, axis=1))
-        if background is not None:
-                enrichs["genes"] = overlap_utils.computeEnrichVsBg(regPR, background, query)
-        res = enrichs["genes"][0]
-        resRank = res[enrichs["genes"][0] < 0.05].copy()
-        rankedGenes = resRank.sort_values().index
-        print(rankedGenes)
-        gp = GProfiler(return_dataframe=True)
-        return gp.profile(organism='hsapiens',sources=sources,
-                          query=list(rankedGenes), ordered=True)
+        intersectBg = overlap_utils.countOverlapPerCategory(regPR, overlap_utils.dfToPrWorkaround(background, useSummit=False))
+        intersectQuery = overlap_utils.countOverlapPerCategory(regPR, overlap_utils.dfToPrWorkaround(query, useSummit=False))
+        queryCounts = intersectBg.copy() * 0
+        queryCounts.loc[intersectQuery.index] = intersectQuery
+        obsGenes = np.isin(queryCounts.index, self.matrices["biological_process"].columns)
+        queryGenes = np.isin(intersectQuery.index, self.matrices["biological_process"].columns)
+        obsMatrix = self.matrices["biological_process"][queryCounts.index[obsGenes]]
+        ratios = pd.DataFrame(queryCounts.loc[queryCounts.index[obsGenes]])
+        r2 = pd.DataFrame(queryCounts.loc[queryCounts.index[obsGenes]]/intersectBg.loc[queryCounts.index[obsGenes]])
+        expected = intersectBg.loc[queryCounts.index[obsGenes]]
+        pvals = pd.Series()
+        alpha = (np.var(intersectBg.values) - np.mean(intersectBg.values))/np.square(np.mean(intersectBg.values))
+        i = 0
+        for gos, hasAnnot in (obsMatrix.iterrows()):
+            i += 1
+            if hasAnnot.loc[intersectQuery.index[queryGenes]].sum() >= 3:
+                try:
+                    df = pd.DataFrame(np.array([hasAnnot.T.astype(float)*2.0-1.0, np.ones_like(expected)]).T, 
+                                    columns=["GS", "Intercept"], index=queryCounts.index[obsGenes])
+                    model = sm.GLM(ratios, df, family=NegativeBinomial(alpha=alpha)).fit(disp=0)
+                    # Get one sided pvalues
+                    pvals[gos] = t(model.df_resid).sf(model.tvalues["GS"])
+                except: 
+                    print("Failed regression for : ", gos)
+                    continue
+        qvals = pvals.copy()
+        qvals.loc[:] = fdrcorrection(qvals)[1]
+        return qvals.sort_values()[qvals < 0.05]
+
+        
 
 
 

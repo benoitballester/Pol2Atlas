@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import sys
 sys.path.append("./")
 from settings import params, paths
-from lib import rnaseqFuncs
+from lib import rnaseqFuncs, normRNAseq
 from lib.utils import plot_utils, matrix_utils
 from matplotlib.patches import Patch
 from scipy.stats import rankdata, chi2, mannwhitneyu, ttest_ind
@@ -16,6 +16,18 @@ from sklearn.preprocessing import StandardScaler
 import lifelines as ll
 from joblib import Parallel, delayed
 import warnings
+from rpy2.robjects.packages import importr
+from rpy2.robjects import numpy2ri
+numpy2ri.activate()
+scran = importr("scran")
+np.random.seed(42)
+# %%
+from lib.pyGREATglm import pyGREAT
+enricher = pyGREAT(oboFile=paths.GOfolder + "/go_eq.obo", geneFile=paths.gencode, 
+                   geneGoFile=paths.GOfolder + "/goa_human.gaf")
+import pyranges as pr
+from lib.utils import overlap_utils
+remap_catalog = pr.read_bed(paths.remapFile)
 # %%
 allAnnots = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnotation.tsv", 
                         sep="\t", index_col=0)
@@ -83,16 +95,19 @@ for case in cases:
         pass
     allReads = np.array(allReads)
     allCounts = np.concatenate(counts, axis=1).T
-    # Convert reads to ranks
-    ranks = rankdata(allCounts, "average", axis=1)
+    
+    # Normalize
+    counts = allCounts
+    sf = scran.calculateSumFactors(counts.T, scaling=allReads[:, None])
+    rgs = counts/np.array(sf)[:, None]
     # Remove undected Pol II probes
-    nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=3)
-    # Rescale ranks to unit Variance for numerical stability
-    rgs = ranks[:, nzCounts]
-    rgs = StandardScaler().fit_transform(rgs)
+    nzCounts = rnaseqFuncs.filterDetectableGenes(rgs, readMin=1, 
+                                                expMin=3)
+    rgs = rgs[:, nzCounts]
+    rgs = rnaseqFuncs.quantileTransform(rgs)
     df = pd.DataFrame()
     df["Dead"] = np.logical_not(survived[np.isin(timeToEvent.index, order)])
-    df["TTE"] = timeToEvent.loc[order].values + 1e-5
+    df["TTE"] = timeToEvent.loc[order].values
     df.index = order
     df = df.copy()
 
@@ -102,14 +117,20 @@ for case in cases:
     print(f"Cox regression on {rgs.shape[1]} peaks")
     # Compute univariate cox proportionnal hazards p value 
     def computeCoxReg(expr, survDF, i):
-        warnings.filterwarnings("ignore")
+        # Regression fails when lifelines throws a warning due to low variance
+        # We assume the Pol II consensus is not prognostic in that case
+        # And give it a p-value of 1 and HR of 1.0
+        warnings.filterwarnings("error")
         try:
             dfI = survDF.copy()
             dfI[i] = expr[:, i]
             cph = ll.CoxPHFitter()
             cph.fit(dfI[[i, "TTE", "Dead"]], duration_col="TTE", event_col="Dead", robust=True)
+            stats = cph.summary
+            if np.isnan(stats["p"].values[0]):
+                raise ValueError('Pval is NaN')
             return cph.summary
-        except ll.exceptions.ConvergenceError:
+        except:
             # If the regression failed to converge assume HR=1.0 and p = 1.0
             dummyDF = pd.DataFrame(data=[[0.0,1.0,0.0,0.0,0.0,1.0,1.0,0.0,1.0,0.0]], 
                                     columns=['coef', 'exp(coef)', 'se(coef)', 'coef lower 95%', 'coef upper 95%', 'exp(coef) lower 95%', 'exp(coef) upper 95%', 'z', 'p', '-log2(p)'], 
@@ -117,18 +138,22 @@ for case in cases:
             dummyDF.index.name = "covariate"
             return dummyDF
     # Parallelize Cox regression across available cores using joblib
-    batchSize = min(1024, int(rgs.shape[1]/len(os.sched_getaffinity(0))))
+    batchSize = min(512, int(rgs.shape[1]/len(os.sched_getaffinity(0))))
     stats = Parallel(n_jobs=-1, verbose=1, batch_size=batchSize)(delayed(computeCoxReg)(rgs, df, i) for i in range(rgs.shape[1]))
     stats = pd.concat(stats)
+    stats.index = nzCounts.nonzero()[0]
     pvals = np.array(stats["p"])
-    pvals.min()
     statsCase[case] = stats
     qvals = fdrcorrection(pvals)[1]
     consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
-    consensuses[nzCounts][qvals < 0.05].to_csv(paths.outputDir + "rnaseq/Survival/" + case + "/prognostic.bed", sep="\t", header=None, index=None)
+    progConsensuses = consensuses[nzCounts][qvals < 0.05]
+    progConsensuses.to_csv(paths.outputDir + "rnaseq/Survival/" + case + "/prognostic.bed", sep="\t", header=None, index=None)
+    stats.to_csv(paths.outputDir + "rnaseq/Survival/" + case + "/stats.csv", sep="\t")
+    enrichedGREAT = enricher.findEnriched(progConsensuses, consensuses[nzCounts])
+    enrichedGREAT.to_csv(paths.outputDir + "rnaseq/Survival/" + case + "/GREATenriched.csv", sep="\t")
     studiedConsensusesCase[case] = nzCounts.nonzero()[0]
     progPerCancer[case] = np.zeros(allCounts.shape[1])
-    progPerCancer[case][nzCounts] = np.where(qvals > 0.05, 0.0, 1.0)
+    progPerCancer[case][nzCounts] = np.where(qvals > 0.05, 0.0, np.sign(stats["coef"].ravel()))
 # %%
 # Plot # of DE Pol II Cancer vs Normal
 DEperCancer = pd.DataFrame(np.sum(np.abs(progPerCancer), axis=0)).T
@@ -143,13 +168,7 @@ plt.gca().spines['top'].set_visible(False)
 plt.savefig(paths.outputDir + "rnaseq/Survival/prog_countPerCancer.pdf", bbox_inches="tight")
 plt.show()
 plt.close()
-# %%
-from lib.pyGREAT import pyGREAT
-enricher = pyGREAT(oboFile=paths.GOfolder + "/go_eq.obo", geneFile=paths.gencode, 
-                   geneGoFile=paths.GOfolder + "/goa_human.gaf")
-import pyranges as pr
-from lib.utils import overlap_utils
-remap_catalog = pr.read_bed(paths.remapFile)
+
 # %%
 mat = np.abs(progPerCancer).astype("int32")
 consensusDECount = np.sum(mat, axis=1).astype("int32")
@@ -157,7 +176,10 @@ consensusDECount = np.sum(mat, axis=1).astype("int32")
 countsRnd = np.zeros(mat.shape[1])
 nPerm = 100
 for i in range(nPerm):
-    shuffledDF = np.apply_along_axis(np.random.permutation, 0, mat)
+    shuffledDF = np.zeros_like(mat)
+    for j, cancer in enumerate(mat.columns):
+        # Permute only on detected Pol II
+        shuffledDF[studiedConsensusesCase[cancer], j] = np.random.permutation(mat.iloc[studiedConsensusesCase[cancer], j])
     s = np.sum(shuffledDF, axis=1)
     counts = np.bincount(s)/nPerm
     countsRnd[:counts.shape[0]] += counts

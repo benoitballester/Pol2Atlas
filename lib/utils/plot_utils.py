@@ -10,7 +10,7 @@ from skimage.transform import rescale, resize, downscale_local_mean
 import matplotlib.patches as mpatch
 
 def applyPalette(annot, avail, palettePath):
-    annotPalette = pd.read_csv("annotation_palette.tsv", sep="\t", index_col=0)
+    annotPalette = pd.read_csv(palettePath, sep="\t", index_col=0)
     palette = annotPalette.loc[avail][["r","g","b"]].values
     colors = annotPalette.loc[annot][["r","g","b"]].values
     return palette, colors
@@ -145,7 +145,7 @@ def plotUmap(points, colors, forceVectorized=False):
         plt.gca().set_aspect(xScale/yScale)
 
 def recursiveDownsample(mat, resX, resY):
-    matDS = resize(mat.astype(float), (resX, resY), anti_aliasing=False)
+    matDS = resize(mat.astype(float), (resX, resY), anti_aliasing=True)
     return matDS
         
 
@@ -184,7 +184,7 @@ def plotHC(matrix, labels, annotationFile=None, annotationPalette=None, rowOrder
             raise TypeError("rowOrder must be 'umap' or array-like")
     # Draw pattern-ordered matrix 
     rasterRes = (min(4000, matrix.shape[0]), min(4000, matrix.shape[1]))
-    rasterMat = resize(matrix[consensuses1D][:, samples1D].astype(float), rasterRes, anti_aliasing=False)
+    rasterMat = resize(matrix[consensuses1D][:, samples1D].astype(float), rasterRes, anti_aliasing=True)
     rasterMat = (rasterMat - np.min(rasterMat)) / (np.max(rasterMat) - np.min(rasterMat))
     # rasterMat = sns.color_palette("viridis", as_cmap=True)(rasterMat.T)[:,:,:3]
     rasterMat = np.repeat(1-rasterMat.T[:,:,None], 3, 2)
@@ -195,18 +195,16 @@ def plotHC(matrix, labels, annotationFile=None, annotationPalette=None, rowOrder
                                     sort=True)
     if np.max(annotations) >= 18 and annotationPalette is None:
         print("Warning : Over 18 annotations, using random colors instead of a palette")
-    annotationPalette = None
     if annotationPalette is None:
         palette, colors = getPalette(annotations)
     else:
-        palette, colors = applyPalette(labels, 
-                                                    eq, annotationPalette)
+        palette, colors = applyPalette(labels, eq, annotationPalette)
     # Add sample labels
     sampleLabelCol = np.zeros((matrix.shape[1], 1, 3))
     for i in range(len(palette)):
         hasAnnot = (annotations[samples1D] == i).nonzero()[0]
         np.add.at(sampleLabelCol, hasAnnot, palette[i])
-    sampleLabelCol = resize(sampleLabelCol, (rasterRes[1], int(rasterRes[0]/33.3)), anti_aliasing=False)
+    sampleLabelCol = resize(sampleLabelCol, (rasterRes[1], int(rasterRes[0]/33.3)), anti_aliasing=True)
     # Big stacked barplot
     signalPerCategory = np.zeros((np.max(annotations)+1, len(matrix)))
     for i in range(np.max(annotations)+1):
@@ -373,13 +371,13 @@ def stackedBarplot(counts, labels, plotTitle="",showPct=True, showNinPct=True, s
     plt.show()
 
 
-def plotDeHM(matrix, labels, isDE, resHM=(4096,4096)):
+def plotDeHM(matrix, labels, isDE, resHM=(4096,4096), zClip=2):
     plt.figure(figsize=(10,90/16), dpi=300)
     reordered = matrix
     resized = resize(reordered, (4096, reordered.shape[1]), anti_aliasing=False)
     resized = resize(reordered, resHM, anti_aliasing=True)
-    resized = resized - np.min(resized)
-    coloredResized = sns.color_palette("coolwarm", as_cmap=True)(resized/np.max(resized))[:,:,:3]
+    resized = resized + zClip
+    coloredResized = sns.color_palette("coolwarm", as_cmap=True)(resized/zClip/2)[:,:,:3]
     deBar = resize(isDE[None, :], (200/(resHM[0]/4096), resHM[1]), anti_aliasing=True)
     deBar = np.repeat(deBar[:,:,None], 3, 2)
     blackBar = np.zeros((15,resHM[1],3))
@@ -391,6 +389,40 @@ def plotDeHM(matrix, labels, isDE, resHM=(4096,4096)):
     plt.xticks([resHM[0]*0.5], 
                 [f"{matrix.shape[1]} Consensus Peaks, ranked by mean difference"],
                 fontsize=8, ha="center")
-    plt.title("Transcriptionnal activity (rank in sample)")
+    plt.title("Z-scores (capped +- 2SD)")
     plt.gca().set_aspect(9/16)
     palette = sns.color_palette()
+
+def ridgePlot(df):
+    sns.set_theme(style="white", rc={"axes.facecolor": (0, 0, 0, 0)})
+    cols = df.columns
+    # Initialize the FacetGrid object
+    pal = sns.color_palette("Paired")
+    g = sns.FacetGrid(df, row=cols[1], hue=cols[1], aspect=15, height=.5, palette=pal)
+    clipVals = np.percentile(df[cols[0]],(0,99))
+    # Draw the densities in a few steps
+    g.map(sns.kdeplot, cols[0],
+        bw_adjust=.5, clip_on=False,
+        fill=True, alpha=1, linewidth=1.5, clip=clipVals)
+    g.map(sns.kdeplot, cols[0], clip_on=False, color="w", lw=2, bw_adjust=.5, clip=clipVals)
+    
+    # passing color=None to refline() uses the hue mapping
+    g.refline(y=0, linewidth=2, linestyle="-", color=None, clip_on=False)
+    
+
+    # Define and use a simple function to label the plot in axes coordinates
+    def label(x, color, label):
+        ax = plt.gca()
+        ax.text(-0.2, 0.2, label, fontweight="bold", color=color,
+                ha="left", va="center", transform=ax.transAxes)
+
+
+    g.map(label, cols[0])
+
+    # Set the subplots to overlap
+    g.figure.subplots_adjust(hspace=-.25)
+
+    # Remove axes details that don't play well with overlap
+    g.set_titles("")
+    g.set(yticks=[], ylabel="")
+    g.despine(bottom=True, left=True)

@@ -12,7 +12,10 @@ from scipy.stats import chi2
 import seaborn as sns
 import umap
 from statsmodels.stats.multitest import fdrcorrection
-
+from rpy2.robjects.packages import importr
+from rpy2.robjects import numpy2ri
+numpy2ri.activate()
+scran = importr("scran")
 # %%
 annotation = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnotation.tsv", 
                         sep="\t", index_col=0)
@@ -22,7 +25,7 @@ counts = []
 countsBG = []
 allReads = []
 order = []
-for f in dlFiles:
+for f in np.array(dlFiles):
     try:
         id = f.split(".")[0]
         # countsBG.append(pd.read_csv(paths.countDirectory + "BG/" + f, header=None, skiprows=2).values)
@@ -51,31 +54,54 @@ allCounts = allCounts[kept]
 allReads = allReads[kept]
 # %%
 # Remove undected Pol II probes
-nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=3)
-counts = allCounts[:, nzCounts] 
-# Convert reads to ranks
-ranks = rankdata(counts, axis=1)
-# Rescale ranks to unit Variance for numerical stability (assuming uniform distribution for ranks)
-rgs = (ranks / ranks.shape[1] - 0.5) * np.sqrt(12)
+counts = allCounts
+extremeExpr = np.mean(counts, axis=0) <= np.percentile(np.mean(counts, axis=0), 99)
+sf = scran.calculateSumFactors(counts.T, scaling=allReads[:, None])
+countsNorm = counts/np.array(sf)[:, None]
+nzCounts = rnaseqFuncs.filterDetectableGenes(countsNorm, readMin=1, expMin=3)
+countsNorm = countsNorm[:, nzCounts]
+# Apply quantile transformation to Pol II probes
+rgs = rnaseqFuncs.quantileTransform(countsNorm)
 # %%
-# Feature selection based on rank variability
-selected = rnaseqFuncs.variableSelection(rgs, plot=True)
+# Feature selection 
+selected = rnaseqFuncs.variableSelection(rankdata(countsNorm, "min", axis=1), plot=False)
+# %%
+from sklearn.decomposition import PCA
+from lib.jackstraw.permutationPA import permutationPA
+bestRank = permutationPA(rgs[:, selected], max_rank=min(500, len(rgs)))
+decomp = PCA(bestRank[0], whiten=True).fit_transform(rgs[:, selected])
 # %%
 import umap
 from lib.utils.plot_utils import plotUmap, getPalette
 from matplotlib.patches import Patch
 embedding = umap.UMAP(n_neighbors=30, min_dist=0.5, random_state=0, low_memory=False, 
-                      metric="euclidean").fit_transform(decomp)
+                      metric="correlation").fit_transform(decomp)
+#%%
+import catboost
+from sklearn.model_selection import train_test_split, StratifiedKFold
+project_id = annotation["project_id"]
+# cancerType, eq = pd.factorize(tcgaProjects["Origin"].loc[project_id])
+cancerType, eq = pd.factorize(annotation["project_id"])
+pred = np.zeros(len(cancerType), dtype=int)
+for train, test in StratifiedKFold(10, shuffle=True, random_state=42).split(decomp, cancerType):
+    # Fit power transform on train data only
+    x_train = decomp[train]
+    # Fit classifier on scaled train data
+    model = catboost.CatBoostClassifier(class_weights=len(cancerType) / (len(np.unique(cancerType)) * np.bincount(cancerType)), random_state=42)
+    model.fit(x_train, cancerType[train], silent=True)
+    # Scale and predict on test data
+    x_test = decomp[test]
+    pred[test] = model.predict(x_test).ravel()
+# %%
+from sklearn.metrics import accuracy_score, recall_score, precision_score, confusion_matrix,balanced_accuracy_score
+acc = balanced_accuracy_score(cancerType, pred)
 # %%
 from lib.utils.plot_utils import plotUmap, getPalette
 from matplotlib.patches import Patch
 
-tcgaProjects = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/tcga_project_annot.csv", 
-                            sep="\t", index_col=0)
-project_id = annotation["project_id"]
-# cancerType, eq = pd.factorize(tcgaProjects["Origin"].loc[project_id])
-cancerType, eq = pd.factorize(annotation["project_id"])
+
 plt.figure(dpi=500)
+
 palette, colors = getPalette(cancerType)
 # allReadsScaled = (allReads - allReads.min()) / (allReads.max()-allReads.min())
 # col = sns.color_palette("rocket_r", as_cmap=True)(allReadsScaled)
@@ -95,32 +121,44 @@ for i in np.unique(cancerType):
     patches.append(legend)
 plt.legend(handles=patches)
 plt.savefig(paths.outputDir + "rnaseq/global/umap_all_tumors_lgd.png", bbox_inches="tight")
+plt.title(f"Balanced accuracy on {len(np.unique(cancerType))} cancers : {acc}")
 plt.show()
-# %%
-orderRows = matrix_utils.threeStagesHC(rgs[:, selected], "correlation")
-orderCols = matrix_utils.threeStagesHC(rgs[:, selected].T, "correlation")
-# %%
-plot_utils.plotHC((rgs/np.max(rgs)).T, project_id, None, rowOrder=orderRows, colOrder=orderCols)
 
 # %%
-print("Rank + selection", matrix_utils.looKnnCV(rgs[:, selected], 
-                            cancerType, "correlation", 1))
-print("Rank", matrix_utils.looKnnCV(rgs, 
-                            cancerType, "correlation", 1))
+clustsPol2 = np.loadtxt(paths.outputDir + "clusterConsensuses_Labels.txt",dtype=int)[nzCounts]
+nClusts = np.max(clustsPol2)+1
+nAnnots = len(eq)
+zScores = np.zeros((nClusts, nAnnots))
+avg1Read = np.mean(countsNorm, axis=0) > 1
+filteredMat = np.log(1+countsNorm)[:, avg1Read]
+for i in range(nAnnots):
+    hasAnnot = cancerType == i
+    sd = np.std(np.percentile(filteredMat[hasAnnot], 95, axis=0))
+    expected = np.mean(np.percentile(filteredMat[hasAnnot], 95, axis=0))
+    for j in range(nClusts):
+        inClust = clustsPol2[avg1Read] == j
+        notInClust = np.logical_not(clustsPol2 == j)
+        observed = np.mean(np.percentile(filteredMat[hasAnnot][:, inClust], 95, axis=0))
+        zScores[j, i] = (observed-expected)/sd
 # %%
-from scipy.special import erfinv
-fpkmCounts = counts / allReads[:, None]
-rgPerGene = (rankdata(fpkmCounts, axis=0)-0.5)/fpkmCounts.shape[0]*2.0-1.0
-quantileNormed = erfinv(rgPerGene)
-# %%
-print("log fpkm", matrix_utils.looKnnCV(np.log(1 + 1e4 * counts / np.sum(counts, axis=1)[:, None])[:, selected], 
-                            cancerType, "correlation", 30))
-selectedFpkm = rnaseqFuncs.variableSelection(fpkmCounts, plot=True)
-print("log fpkm + selection", matrix_utils.looKnnCV(rgs[:, selected],
-                            cancerType, "correlation", 30))
-
-# %%
-decomp = matrix_utils.autoRankPCA(rgs[:, selected])
-print("log fpkm + selection", matrix_utils.looKnnCV(decomp,
-                            cancerType, "correlation", 1))
+import matplotlib as mpl
+rowOrder, colOrder = matrix_utils.HcOrder(zScores)
+rowOrder = np.loadtxt(paths.outputDir + "clusterBarplotOrder.txt").astype(int)
+zClip = np.clip(zScores,0.0,10.0)
+zNorm = np.clip(zClip / np.percentile(zClip, 95),0.0,1.0)
+plt.figure(dpi=300)
+sns.heatmap(zNorm[rowOrder].T[colOrder], cmap="vlag", linewidths=0.1, linecolor='black', cbar=False)
+plt.gca().set_aspect(2.0)
+plt.yticks(np.arange(len(eq))+0.5, eq[colOrder], rotation=0)
+plt.xticks([],[])
+plt.xlabel(f"{len(zNorm)} Pol II clusters")
+plt.savefig(paths.outputDir + "rnaseq/global/signalPerClustPerAnnot.pdf", bbox_inches="tight")
+plt.show()
+plt.figure(figsize=(6, 1), dpi=300)
+norm = mpl.colors.Normalize(vmin=0, vmax=np.percentile(zClip, 95))
+cb = mpl.colorbar.ColorbarBase(plt.gca(), sns.color_palette("vlag", as_cmap=True), norm, orientation='horizontal')
+cb.set_label("95th percentile Z-score")
+plt.tight_layout()
+plt.savefig(paths.outputDir + "rnaseq/global/signalPerClustPerAnnot_colorbar.pdf")
+plt.show()
 # %%

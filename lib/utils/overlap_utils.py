@@ -117,6 +117,7 @@ def computeEnrichForLabels(catalog, universe, labels, savePathPrefix=None, useSu
         if savePathPrefix is not None:
             fig.savefig(f"{savePathPrefix}_fc_{i}.png", bbox_inches="tight")
         fig.show()
+    return enrichmentsFC, enrichmentsQ, enrichmentsP
 
 
 def computeEnrichNoBg(catalog, universe, genome):

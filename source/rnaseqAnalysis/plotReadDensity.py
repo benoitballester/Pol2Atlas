@@ -13,7 +13,13 @@ from scipy.stats import chi2
 import seaborn as sns
 import umap
 from statsmodels.stats.multitest import fdrcorrection
+
 countDir = "/scratch/pdelangen/projet_these/outputPol2/rnaseq/encode_counts/"
+try:
+    os.mkdir(paths.outputDir + "rnaseq/count_distrib/")
+except FileExistsError:
+    pass
+palette = sns.color_palette()
 # %%
 annotation = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/encode_total_rnaseq_annot_0.tsv", 
                         sep="\t", index_col=0)
@@ -46,75 +52,92 @@ allReads = np.array(allReads)
 allCounts = np.concatenate(counts, axis=1).T
 bgCounts = np.concatenate(countsBG, axis=1).T
 ann, eq = pd.factorize(annotation.loc[order]["Annotation"])
+
 # %%
-def ridgePlot(df):
-    sns.set_theme(style="white", rc={"axes.facecolor": (0, 0, 0, 0)})
-    cols = df.columns
-    # Initialize the FacetGrid object
-    pal = sns.color_palette("Paired")
-    g = sns.FacetGrid(df, row=cols[1], hue=cols[1], aspect=15, height=.5, palette=pal)
-    clipVals = np.percentile(df[cols[0]],(0,99))
-    # Draw the densities in a few steps
-    g.map(sns.kdeplot, cols[0],
-        bw_adjust=.5, clip_on=False,
-        fill=True, alpha=1, linewidth=1.5, clip=clipVals)
-    g.map(sns.kdeplot, cols[0], clip_on=False, color="w", lw=2, bw_adjust=.5, clip=clipVals)
-    
-    # passing color=None to refline() uses the hue mapping
-    g.refline(y=0, linewidth=2, linestyle="-", color=None, clip_on=False)
-    
-
-    # Define and use a simple function to label the plot in axes coordinates
-    def label(x, color, label):
-        ax = plt.gca()
-        ax.text(-0.2, 0.2, label, fontweight="bold", color=color,
-                ha="left", va="center", transform=ax.transAxes)
-
-
-    g.map(label, cols[0])
-
-    # Set the subplots to overlap
-    g.figure.subplots_adjust(hspace=-.25)
-
-    # Remove axes details that don't play well with overlap
-    g.set_titles("")
-    g.set(yticks=[], ylabel="")
-    g.despine(bottom=True, left=True)
-# %%
+from scipy.stats import wilcoxon
 # Plot average percentage of total reads per kb
 pctReadsBG_ENCODE = np.mean(bgCounts/allReads[:, None], axis=1)
 pctReadsPol2_ENCODE = np.mean(allCounts/allReads[:, None], axis=1)
 dfPctReads = pd.DataFrame(data=np.concatenate([pctReadsBG_ENCODE, pctReadsPol2_ENCODE])*1e6,
-                         columns=["FPKM per kb"])
+                         columns=["Reads per 10m mapped reads per kb"])
 dfPctReads["Regions"] = ["ENCODE, control"]*len(pctReadsBG_ENCODE) + ["ENCODE, Pol II Interg"]*len(pctReadsPol2_ENCODE)                         
 plt.figure(figsize=(6,4), dpi=500)
-sns.boxplot(x="FPKM per kb", y="Regions", data=dfPctReads)
+sns.boxplot(x="Reads per 10m mapped reads per kb", y="Regions", palette=palette, data=dfPctReads, showfliers=False)
+sns.stripplot(x="Reads per 10m mapped reads per kb", y="Regions", palette=palette, data=dfPctReads, jitter=0.33, dodge=True, 
+                edgecolor="black",alpha=1.0, s=2, linewidth=0.1)
+p = wilcoxon(pctReadsBG_ENCODE, pctReadsPol2_ENCODE)
+supp = np.sum(pctReadsPol2_ENCODE > pctReadsBG_ENCODE)
+medianFC = np.median(pctReadsPol2_ENCODE/pctReadsBG_ENCODE)
+plt.title(f"More signal in {supp} / {len(pctReadsPol2_ENCODE)} samples\nMedian fold change:{medianFC}\np={p[1]}")
+plt.savefig(paths.outputDir + "rnaseq/count_distrib/readsPerMappedreads.pdf", bbox_inches="tight")
+plt.show()
 # %%
 # Plot count sparsity (% of 0 counts)
-sparsityBG_ENCODE = np.mean(bgCounts < 0.5, axis=1)
-sparsityPol2_ENCODE = np.mean(allCounts < 0.5, axis=1)
+normReadsBG = bgCounts/allReads[:, None]
+normReadsPolII = allCounts/allReads[:, None]
+cutoffs = [0.0, 1e-7, 1e-6, 1e-5]
+labels = ["", "per 10 million", "per 1 million", "per 100 000"]
+sparsityBG_ENCODE = np.concatenate([np.mean(normReadsBG > c, axis=1) for c in cutoffs])
+sparsityPol2_ENCODE = np.concatenate([np.mean(normReadsPolII > c, axis=1) for c in cutoffs])
+labelsBG = np.array([[f"1 read {l} mapped reads"] * len(normReadsBG) for l in labels]).ravel()
+labelsPolII = np.array([[f"1 read {l} mapped reads"] * len(normReadsPolII) for l in labels]).ravel()
 dfSparsity = pd.DataFrame(data=np.concatenate([sparsityBG_ENCODE, sparsityPol2_ENCODE]),
-                         columns=["Fraction of zero counts"])
+                         columns=["Fraction of non zero counts"])
+dfSparsity["Threshold"] = np.concatenate([labelsBG, labelsPolII])
 dfSparsity["Regions"] = ["ENCODE, control"]*len(sparsityBG_ENCODE) + ["ENCODE, Pol II Interg"]*len(sparsityPol2_ENCODE)     
-plt.figure(figsize=(6,4), dpi=500)
-sns.boxplot(x="Fraction of zero counts", y="Regions", data=dfSparsity)
-
+plt.figure(dpi=500)
+g = sns.FacetGrid(dfSparsity, col="Threshold", sharex=False, height=4, aspect=4/3, col_wrap=2)
+g.map_dataframe(sns.boxplot,x="Fraction of non zero counts", y="Regions", palette=palette, showfliers=False)
+g.map_dataframe(sns.stripplot,x="Fraction of non zero counts", y="Regions", palette=palette, dodge=True, 
+                edgecolor="black", jitter=1/3, alpha=1.0, s=2, linewidth=0.1)
+p = wilcoxon(sparsityBG_ENCODE, sparsityPol2_ENCODE)
+supp = np.sum(sparsityBG_ENCODE < sparsityPol2_ENCODE)
+medianFC = np.median(sparsityPol2_ENCODE/sparsityBG_ENCODE)
+# plt.title(f"Less sparsity in {supp} / {len(sparsityPol2_ENCODE)} samples\nMedian fold change:{medianFC}\np={p[1]},")
+plt.savefig(paths.outputDir + "rnaseq/count_distrib/sparsity.pdf", bbox_inches="tight")
+plt.show()
 # %%
-# Plot non zero fpkm read distribution
-fpkmBg = (bgCounts/allReads[:, None]*1e6).ravel()
-fpkmPol2 = (allCounts/allReads[:, None]*1e6).ravel()
+from scipy.stats import mannwhitneyu
+# Plot non zero cpm read distribution
+cpmBg = (bgCounts/allReads[:, None]*1e6).ravel()
+cpmPol2 = (allCounts/allReads[:, None]*1e6).ravel()
 
-nzBg = fpkmBg[fpkmBg > 1e-15]
-nzPolII = fpkmPol2[fpkmPol2 > 1e-15]
-# %%
+nzBg = cpmBg[cpmBg > 1e-15]
+nzPolII = cpmPol2[cpmPol2 > 1e-15]
 largestPct = np.maximum(np.max(nzBg), np.max(nzPolII))
 plt.figure(figsize=(6,4), dpi=500)
 bins = np.linspace(0, largestPct, 20)
 plt.hist(nzPolII, bins, density=True)
 plt.hist(nzBg, bins, alpha=0.5, density=True)
 plt.yscale("log")
-plt.xlabel("FPKM count")
+plt.xlabel("CPM")
 plt.ylabel("Density (log)")
-plt.title("Distribution of non-zero counts")
+p = mannwhitneyu(nzBg, nzPolII)
+plt.title(f"Distribution of non-zero counts, \np={p[1]}")
 plt.legend(["Pol II intergenic", "Control"])
+plt.savefig(paths.outputDir + "rnaseq/count_distrib/nonzerocountDistrib.pdf", bbox_inches="tight")
+plt.show()
+# %%
+countsNz = pd.DataFrame()
+countsNz["logCPM"] = np.log10(1+1e6*normReadsPolII).ravel()
+countsNz["CPM"] = 1e6*normReadsPolII.ravel()
+countsNz["Samples"] = np.repeat(np.arange(len(allCounts)), len(allCounts.T))
+# %%
+sns.boxplot(x="logCPM", y="Samples", orient="h", data=countsNz[countsNz["Samples"] < 1], showfliers=False)
+# %%
+nzVals = countsNz[countsNz["CPM"] > 1e-15]
+nzVals.rename(columns={"logCPM": "Non-zero log(1+CPM)"}, inplace=True)
+plt.figure(figsize=(4,35), dpi=500)
+sns.boxplot(x="Non-zero log(1+CPM)", y="Samples", orient="h", data=nzVals, showfliers=False)
+plt.yticks([], [])
+plt.savefig(paths.outputDir + "rnaseq/count_distrib/boxplot_allSamples_no_outliers.pdf", bbox_inches="tight")
+plt.show()
+plt.close()
+# %%
+plt.figure(figsize=(4,35), dpi=500)
+sns.boxplot(x="Non-zero log(1+CPM)", y="Samples", orient="h", data=nzVals)
+plt.yticks([], [])
+plt.savefig(paths.outputDir + "rnaseq/count_distrib/boxplot_allSamples_outliers.pdf", bbox_inches="tight")
+plt.show()
+plt.close()
 # %%

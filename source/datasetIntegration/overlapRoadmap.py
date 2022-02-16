@@ -6,7 +6,7 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.stats import ttest_rel
+from scipy.stats import ttest_rel, wilcoxon, chi2_contingency
 
 try:
     os.mkdir(paths.outputDir + "epigenetic/")
@@ -58,10 +58,14 @@ def computeProps(countsMat, epigenomes, classes, targetCol):
     epigenomesID = np.repeat(epigenomes, proportionsPerEpigenome.shape[1])
     df = pd.DataFrame(np.transpose([props, cat, epigenomesID]), columns=["Proportions", "Category", "Epigenome"])
     df["Targets"] = targetCol
+    df["Overlaps"] = countsPerEpigenome.ravel()
+    df["Total overlaps"] = np.repeat(np.sum(countsPerEpigenome, axis=1), proportionsPerEpigenome.shape[1])
     return df
 
-df = computeProps(consensusEpigenomeMat, epigenomes, chrStateMap.classes_, targetCol="All Pol II and all epigenomes")
+df = computeProps(consensusEpigenomeMat, epigenomes, chrStateMap.classes_, 
+                  targetCol="All Pol II and all epigenomes")
 # %%
+# Case specific, cluster specific
 def enrichForClust(clust, roadmapGroup, name, consensusEpigenomeMat, epigenomeMetadata, chrStateMap):
     usedEpigenomes = (epigenomeMetadata["GROUP"] == roadmapGroup)
     df1 = computeProps(consensusEpigenomeMat[np.logical_not(clusts==clust)][:, (usedEpigenomes)], 
@@ -84,13 +88,22 @@ def enrichForClust(clust, roadmapGroup, name, consensusEpigenomeMat, epigenomeMe
     for k in df1PerCat.keys():
         epigenomes1 = df1PerCat[k]["Proportions"].values.astype("float")
         epigenomes2 = df2PerCat[k]["Proportions"].values.astype("float")
-        stat, p = ttest_rel(epigenomes1, epigenomes2)
+        prop1 = df1PerCat[k]["Proportions"].values.astype("float")
+        prop2 = df2PerCat[k]["Proportions"].values.astype("float")
+        try:
+            # p = chi2_contingency(np.array([epigenomes1, epigenomes2]).T)[1]
+            p = ttest_rel(prop1, prop2)[1]
+        # If full zero counts are detected it raises an error
+        # p is equal to 1 in this case
+        except ValueError:
+            p = 1.0
         pos = order.index(k)
         sig = 0
         if p < 0.05:
-            sig = min(int(-np.log10(p)), 4)
-        medianDiff = np.median(epigenomes2) - np.median(epigenomes1)
-        maxVal = max(epigenomes1.max(), epigenomes2.max())
+            sig = min(int(-np.log10(p+1e-300)), 4)
+        
+        medianDiff = np.mean(maxProp2) - np.mean(maxProp1)
+        maxVal = max(maxProp1.max(), maxProp2.max())
         txt = "- "
         if medianDiff > 0:
             txt = "+"
@@ -106,4 +119,11 @@ enrichForClust(4, "Blood & T-cell", "Lymphoid", consensusEpigenomeMat, epigenome
 enrichForClust(6, "ESC", "Embryonic", consensusEpigenomeMat, epigenomeMetadata, chrStateMap)
 enrichForClust(9, "Heart", "Cardiovascular", consensusEpigenomeMat, epigenomeMetadata, chrStateMap)
 enrichForClust(18, "Brain", "Nervous", consensusEpigenomeMat, epigenomeMetadata, chrStateMap)
+# %%
+usedEpigenomes = epigenomeMetadata["GROUP"] == "ESC"
+df1 = computeProps(consensusEpigenomeMat[np.logical_not(clusts==9)][:, (usedEpigenomes)], 
+                    np.array(epigenomes)[(usedEpigenomes)], chrStateMap.classes_, 
+                    targetCol=f"Not 'embryo' cluster, in 'ESC' epigenomes")
+df2 = computeProps(consensusEpigenomeMat[clusts==9][:, usedEpigenomes], np.array(epigenomes)[usedEpigenomes], 
+                    chrStateMap.classes_, targetCol=f"'Embryo' cluster, in 'ESC' epigenomes")
 # %%
