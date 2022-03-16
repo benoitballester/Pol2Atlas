@@ -429,9 +429,14 @@ class peakMerger:
                     self.embedding[0] = self.embedder.fit_transform(altMatrix)
             # Annotate each point according to strongest mean annotation signal in consensus
             signalPerCategory = np.zeros((np.max(annotations)+1, len(self.embedding[0])))
+            signalPerAnnot = np.array([np.sum(self.matrix[:, i == annotations]) for i in range(np.max(annotations)+1)])
+            print(signalPerAnnot)
             for i in range(np.max(annotations)+1):
-                signalPerCategory[i, :] = np.mean(self.matrix[:, annotations == i], axis=1)
+                signalPerCategory[i, :] = np.sum(self.matrix[:, annotations == i], axis=1) / signalPerAnnot[i]
+            signalPerCategory /= np.sum(signalPerCategory, axis=0)
             maxSignal = np.argmax(signalPerCategory, axis=0)
+            entropy = np.sum(-signalPerCategory*np.log(signalPerCategory+1e-15), axis=0)
+            normEnt = entropy / (-np.log(1.0/signalPerCategory.shape[0]+1e-15))
             gini = (1 - np.sum(np.power(1e-7+signalPerCategory/(1e-7+np.sum(signalPerCategory,axis=0)), 2),axis=0))
             # Retrieve colors based on point annotation
             if annotationPalette is None:
@@ -587,8 +592,9 @@ class peakMerger:
                 for c in range(self.clustered[int(transpose)].max()+1):
                     inClust = self.clustered[int(transpose)] == c
                     signalPerCategory = np.zeros(np.max(annotations)+1)
+                    signalPerAnnot = np.array([np.sum(self.matrix[:, i == annotations]) for i in range(np.max(annotations)+1)])
                     for i in range(np.max(annotations)+1):
-                        signalPerCategory[i] = np.mean(self.matrix[inClust][:, annotations == i])
+                        signalPerCategory[i] = np.sum(self.matrix[inClust][:, annotations == i])/signalPerAnnot[i]
                     maxSignal = np.argmax(signalPerCategory)
                     normSignal = signalPerCategory/signalPerCategory.sum()
                     allProportions.append(normSignal)
@@ -620,6 +626,7 @@ class peakMerger:
                 # All clusters summary barplot
                 plt.figure(dpi=500)
                 # Order clusters by similarity using ward hierarchical clustering
+                # Ordered by largest
                 link = linkage_vector(allProportions, method="ward")
                 rowOrder = hierarchy.leaves_list(link)
                 np.savetxt(self.outputPath  + "clusterBarplotOrder.txt", rowOrder)
@@ -629,6 +636,39 @@ class peakMerger:
                     reOrdered = np.argsort(pcts)[::-1]
                     orderedPalette = palette[reOrdered]
                     for j, p in enumerate(pcts[reOrdered]):
+                        plt.barh(i, p, left=runningSum, color=orderedPalette[j])
+                        runningSum += p
+                plt.ylabel(f"{self.clustered[int(transpose)].max()+1} Clusters", fontsize=8)
+                plt.xlabel("Origin of peaks (Fraction of cluster)", fontsize=8)
+                plt.gca().spines['right'].set_visible(False)
+                plt.gca().spines['left'].set_visible(False)
+                plt.gca().spines['top'].set_visible(False)
+                patches = []
+                for i in range(0, min(len(palette), len(eq))):
+                    legend = Patch(color=palette[i], label=eq[i])
+                    patches.append(legend)
+                plt.gca().tick_params(
+                        axis='y',          # changes apply to the x-axis
+                        which='both',      # both major and minor ticks are affected
+                        left=False,      # ticks along the bottom edge are off
+                        top=False,         # ticks along the top edge are off
+                        labelleft=False,
+                        labelbottom=False) # labels along the bottom edge are off
+                plt.legend(handles=patches, prop={'size': 7}, bbox_to_anchor=(0,1.02,1,0.2),
+                    loc="lower left", mode="expand", ncol=4)
+                plt.savefig(self.outputPath + f"consensuses_summary_ordered.{figureFmt}", bbox_inches='tight')
+                plt.show()
+                plt.close()
+                # Same order
+                plt.figure(dpi=500)
+                link = linkage_vector(allProportions, method="ward")
+                rowOrder = hierarchy.leaves_list(link)
+                np.savetxt(self.outputPath  + "clusterBarplotOrder.txt", rowOrder)
+                for i, o in enumerate(rowOrder):
+                    pcts = allProportions[o]
+                    runningSum = 0
+                    orderedPalette = palette
+                    for j, p in enumerate(pcts):
                         plt.barh(i, p, left=runningSum, color=orderedPalette[j])
                         runningSum += p
                 plt.ylabel(f"{self.clustered[int(transpose)].max()+1} Clusters", fontsize=8)

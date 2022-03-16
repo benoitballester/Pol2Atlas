@@ -28,7 +28,7 @@ def svd_wrapper(X, rank=None):
         U, D, V = full_svd(X, full_matrices=False)
         V = V.T
     else:
-        scipy_svds = randomized_svd(X, rank)
+        scipy_svds = randomized_svd(X, rank, random_state=42)
         U, D, V = fix_scipy_svds(scipy_svds)
 
     return U, D, V

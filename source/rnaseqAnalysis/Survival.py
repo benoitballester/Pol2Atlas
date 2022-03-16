@@ -12,12 +12,12 @@ from matplotlib.patches import Patch
 from scipy.stats import rankdata, chi2, mannwhitneyu, ttest_ind
 import seaborn as sns
 from statsmodels.stats.multitest import fdrcorrection
-from sklearn.preprocessing import StandardScaler
 import lifelines as ll
 from joblib import Parallel, delayed
 import warnings
 from rpy2.robjects.packages import importr
 from rpy2.robjects import numpy2ri
+from matplotlib.ticker import FormatStrFormatter
 numpy2ri.activate()
 scran = importr("scran")
 np.random.seed(42)
@@ -117,7 +117,7 @@ for case in cases:
     print(f"Cox regression on {rgs.shape[1]} peaks")
     # Compute univariate cox proportionnal hazards p value 
     def computeCoxReg(expr, survDF, i):
-        # Regression fails when lifelines throws a warning due to low variance
+        # Regression fails when lifelines throws a warning due to low variance / high colinearity
         # We assume the Pol II consensus is not prognostic in that case
         # And give it a p-value of 1 and HR of 1.0
         warnings.filterwarnings("error")
@@ -147,10 +147,12 @@ for case in cases:
     qvals = fdrcorrection(pvals)[1]
     consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
     progConsensuses = consensuses[nzCounts][qvals < 0.05]
+    progConsensuses[4] = stats["exp(coef)"].loc[progConsensuses[3]]
     progConsensuses.to_csv(paths.outputDir + "rnaseq/Survival/" + case + "/prognostic.bed", sep="\t", header=None, index=None)
     stats.to_csv(paths.outputDir + "rnaseq/Survival/" + case + "/stats.csv", sep="\t")
     enrichedGREAT = enricher.findEnriched(progConsensuses, consensuses[nzCounts])
     enrichedGREAT.to_csv(paths.outputDir + "rnaseq/Survival/" + case + "/GREATenriched.csv", sep="\t")
+    enricher.plotEnrichs(enrichedGREAT, savePath=paths.outputDir + "rnaseq/Survival/" + case + "/GREATenriched.pdf")
     studiedConsensusesCase[case] = nzCounts.nonzero()[0]
     progPerCancer[case] = np.zeros(allCounts.shape[1])
     progPerCancer[case][nzCounts] = np.where(qvals > 0.05, 0.0, np.sign(stats["coef"].ravel()))
@@ -160,7 +162,7 @@ DEperCancer = pd.DataFrame(np.sum(np.abs(progPerCancer), axis=0)).T
 plt.figure(figsize=(6,4), dpi=500)
 order = np.argsort(DEperCancer).values[0]
 plt.barh(np.arange(len(DEperCancer.T)),DEperCancer.values[0][order])
-plt.yticks(np.arange(len(DEperCancer.columns)), DEperCancer.columns[order])
+plt.yticks(np.arange(len(DEperCancer.columns)), DEperCancer.columns[order], fontsize=8)
 plt.xlabel("# of Prognostic Pol II Cancer vs Normal")
 plt.ylabel("Cancer type")
 plt.gca().spines['right'].set_visible(False)
@@ -169,6 +171,19 @@ plt.savefig(paths.outputDir + "rnaseq/Survival/prog_countPerCancer.pdf", bbox_in
 plt.show()
 plt.close()
 
+plt.figure(figsize=(6,4), dpi=500)
+order = np.argsort(DEperCancer).values[0]
+plt.xscale("symlog")
+plt.barh(np.arange(len(DEperCancer.T)),DEperCancer.values[0][order])
+plt.yticks(np.arange(len(DEperCancer.columns)), DEperCancer.columns[order], fontsize=8)
+plt.xlabel("# of Prognostic Pol II Cancer vs Normal")
+plt.ylabel("Cancer type")
+plt.gca().spines['right'].set_visible(False)
+plt.gca().spines['top'].set_visible(False)
+plt.gca().xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+plt.savefig(paths.outputDir + "rnaseq/Survival/prog_countPerCancer_log.pdf", bbox_inches="tight")
+plt.show()
+plt.close()
 # %%
 mat = np.abs(progPerCancer).astype("int32")
 consensusDECount = np.sum(mat, axis=1).astype("int32")
@@ -203,7 +218,64 @@ plt.xticks(np.arange(0,consensusDECount.max()+1)+0.5, np.arange(0,consensusDECou
 plt.savefig(paths.outputDir + f"rnaseq/Survival/multiple_prognostic.pdf", bbox_inches="tight")
 plt.show()
 globallyDEs = consensuses[studied]
+globallyDEs[4] = np.sum(mat, axis=1)
 globallyDEs.to_csv(paths.outputDir + f"rnaseq/Survival/globally_prognostic.bed", sep="\t", header=None, index=None)
-enrichs = enricher.findEnriched(consensuses[studied], consensuses, sources=["GO:BP", "GO:MF"])
+enrichs = enricher.findEnriched(consensuses[studied], consensuses)
+enricher.plotEnrichs(enrichs, savePath=paths.outputDir + "rnaseq/Survival/globally_prognostic_GREAT.pdf")
 enrichs.to_csv(paths.outputDir + f"rnaseq/Survival/globally_prognostic_GREAT.csv", sep="\t")
+# %%
+# Forest Plots
+try:
+    os.mkdir(paths.outputDir + "rnaseq/Survival/global_forestPlots/")
+except FileExistsError:
+    pass
+globallyDEs = pd.read_csv(paths.outputDir + f"rnaseq/Survival/globally_prognostic.bed", sep="\t", header=None)
+for i, cons in globallyDEs.iterrows():
+    df = pd.DataFrame()
+    for c in statsCase:
+        try:
+            stats = statsCase[c]
+        except KeyError:
+            continue
+        queryCons = cons[3]
+        try:
+            stats = stats.loc[queryCons]
+        except KeyError:
+            continue
+        stats.name = c
+        df = pd.concat([df,pd.DataFrame(stats).T])
+    coord = "_".join(cons[[0,1,2,3,4]].astype("str"))
+    plt.figure()
+    plot_utils.forestPlot(df)
+    plt.savefig(paths.outputDir + f"rnaseq/Survival/global_forestPlots/{coord}.pdf", bbox_inches="tight")
+    plt.show()
+    plt.close()
+# %%
+globallyDEs = pd.read_csv(paths.outputDir + f"rnaseq/Survival/globally_prognostic.bed", sep="\t", header=None)
+ids = globallyDEs[3]
+coefPerCancer = []
+obsCases = []
+for i, c in enumerate(cases):
+    try:
+        stats = pd.read_csv(paths.outputDir + f"rnaseq/Survival/{c}/stats.csv", sep="\t", index_col=0)
+    except FileNotFoundError:
+        continue
+    idsInCase = np.isin(ids, stats.index)
+    progStats = np.zeros(len(globallyDEs))
+    progStats[idsInCase] = stats.loc[ids[idsInCase]]["coef"]
+    coefPerCancer.append(progStats)
+    obsCases.append(c)
+coefPerCancer = np.array(coefPerCancer).T
+# %%
+coefPerCancer = pd.DataFrame(coefPerCancer.T, index=obsCases)
+# %%
+plt.figure(dpi=500)
+orderCol = np.argsort(coefPerCancer.mean(axis=0))[::-1]
+orderRow = np.argsort(np.abs(coefPerCancer).mean(axis=1))[::-1]
+sns.heatmap(coefPerCancer[orderCol].iloc[orderRow]/np.log(2), vmin=-1.0, vmax=1.0, cmap="vlag", 
+            linecolor="k", linewidths=0.25, cbar_kws={'label': 'log2(HR)'})
+plt.xticks([])
+plt.yticks(np.arange(len(obsCases))+0.5, np.array(obsCases)[orderRow], fontsize=8)
+plt.xlabel(f"{len(globallyDEs)} \"Globally prognostic\" Pol II probes")
+plt.savefig(paths.outputDir + "rnaseq/Survival/globally_prognostic_heatmap.pdf", bbox_inches="tight")
 # %%

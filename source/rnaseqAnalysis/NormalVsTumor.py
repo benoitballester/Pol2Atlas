@@ -18,6 +18,7 @@ from sklearn.metrics import accuracy_score, recall_score, precision_score, confu
 import catboost
 from rpy2.robjects.packages import importr
 from rpy2.robjects import numpy2ri
+from matplotlib.ticker import FormatStrFormatter
 numpy2ri.activate()
 scran = importr("scran")
 # %%
@@ -42,6 +43,7 @@ cases = allAnnots["project_id"].unique()
 # %%
 # Compute DE, UMAP, and predictive model CV per cancer
 for case in cases:
+    case = "TCGA-KICH"
     print(case)
     # Select only relevant files and annotations
     annotation = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnotation.tsv", 
@@ -112,8 +114,11 @@ for case in cases:
     stats, pvals = mannwhitneyu(countsNormal, countsTumor)
     pvals = np.nan_to_num(pvals, nan=1.0)
     qvals = fdrcorrection(pvals)[1]
-    consensuses[nzCounts][qvals < 0.05].to_csv(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/all_DE.bed", sep="\t", header=None, index=None)
+    allDE = consensuses[nzCounts][qvals < 0.05]
+    allDE[4] = -np.log10(qvals[qvals < 0.05])
+    allDE.to_csv(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/all_DE.bed", sep="\t", header=None, index=None)
     enrichedBP = enricher.findEnriched(consensuses[nzCounts][qvals < 0.05], consensuses[nzCounts])
+    enricher.plotEnrichs(enrichedBP, savePath=paths.outputDir + f"rnaseq/TumorVsNormal/{case}/DE_greatglm.pdf")
     enrichedBP.to_csv(paths.outputDir + f"rnaseq/TumorVsNormal/" + case + "/DE_greatglm.tsv", sep="\t")
     # Plot DE signal
     orderCol = np.argsort(labels)
@@ -140,8 +145,12 @@ for case in cases:
     plt.close()
     perCancerDE[case] = np.zeros(allCounts.shape[1])
     perCancerDE[case][nzCounts] = np.where(qvals > 0.05, 0.0, np.sign(diff))
-    consensuses[nzCounts][(qvals < 0.05) & (diff > 0)].to_csv(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/DE_upreg.bed", sep="\t", header=None, index=None)
-    consensuses[nzCounts][(qvals < 0.05) & (diff < 0)].to_csv(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/DE_downreg.bed", sep="\t", header=None, index=None)
+    upreg = consensuses[nzCounts][(qvals < 0.05) & (diff > 0)]
+    upreg[4] = -np.log10(qvals[(qvals < 0.05) & (diff > 0)])
+    upreg.to_csv(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/DE_upreg.bed", sep="\t", header=None, index=None)
+    downreg = consensuses[nzCounts][(qvals < 0.05) & (diff < 0)]
+    downreg[4] = -np.log10(qvals[(qvals < 0.05) & (diff < 0)])
+    downreg.to_csv(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/DE_downreg.bed", sep="\t", header=None, index=None)
 
     # UMAP plot
     # Plot UMAP of samples for visualization
@@ -163,7 +172,7 @@ for case in cases:
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/UMAP_samples.pdf")
     plt.show()
     plt.close()
-
+    ere
     # Predictive model on DE Pol II
     predictions = np.zeros(len(labels), dtype=int)
     for train, test in StratifiedKFold(10, shuffle=True, random_state=42).split(rgs[:, qvals < 0.05], labels):
@@ -211,6 +220,7 @@ plt.close()
 # %%
 # Plot # of DE Pol II Cancer vs Normal
 DEperCancer = pd.DataFrame(np.sum(np.abs(perCancerDE), axis=0)).T
+# Normal scale
 plt.figure(figsize=(6,4), dpi=500)
 order = np.argsort(DEperCancer).values[0]
 plt.barh(np.arange(len(DEperCancer.T)),DEperCancer.values[0][order])
@@ -220,6 +230,21 @@ plt.ylabel("Cancer type")
 plt.gca().spines['right'].set_visible(False)
 plt.gca().spines['top'].set_visible(False)
 plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/DE_countPerCancer.pdf", bbox_inches="tight")
+plt.show()
+plt.close()
+# Log Scale
+plt.figure(figsize=(6,4), dpi=500)
+order = np.argsort(DEperCancer).values[0]
+plt.xscale("symlog")
+plt.gca().minorticks_off()
+plt.barh(np.arange(len(DEperCancer.T)),DEperCancer.values[0][order])
+plt.yticks(np.arange(len(DEperCancer.columns)), DEperCancer.columns[order])
+plt.xlabel("# of DE Pol II Cancer vs Normal")
+plt.ylabel("Cancer type")
+plt.gca().spines['right'].set_visible(False)
+plt.gca().spines['top'].set_visible(False)
+plt.gca().xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/DE_countPerCancer_log.pdf", bbox_inches="tight")
 plt.show()
 plt.close()
 
@@ -292,8 +317,10 @@ for c in cases:
     plt.show()
     plt.close()
     globallyDEs = consensuses[studied]
+    globallyDEs[4] = np.sum(mat, axis=1)
     globallyDEs.to_csv(paths.outputDir + f"rnaseq/TumorVsNormal/globally_{c}.bed", sep="\t", header=None, index=None)
-    enrichs = enricher.findEnriched(consensuses[studied], consensuses, sources=["GO:BP", "GO:MF"])
+    enrichs = enricher.findEnriched(consensuses[studied], consensuses)
+    enricher.plotEnrichs(enrichs, savePath=paths.outputDir + "rnaseq/TumorVsNormal/globally_{c}_GREAT.pdf")
     enrichs.to_csv(paths.outputDir + f"rnaseq/TumorVsNormal/globally_{c}_GREAT.csv", sep="\t")
 # %%
 

@@ -1,5 +1,5 @@
 {
-    "python.pythonPath": "/home/pdelangen/miniconda3/envs/newEnv/bin/python",
+    "python.pythonPath": "/home/pdelangen/miniconda3/envs/baseEnv/bin/python",
     "jupyter.notebookFileRoot": "${workspaceFolder}",
     "jupyter.jupyterServerType": "local",
 }

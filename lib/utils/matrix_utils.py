@@ -11,7 +11,7 @@ from sklearn.cluster import MiniBatchKMeans
 from fastcluster import linkage_vector
 import scipy.cluster.hierarchy as hierarchy
 
-def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, disconnection_distance=None, restarts=1):
+def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, disconnection_distance=None, method="approx", restarts=1):
     """
     Performs graph based clustering on the matrix.
 
@@ -54,7 +54,7 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, disconnection_dis
     extraNN = 10
     lowMem = len(matrix) > 100000
     index = pynndescent.NNDescent(matrix, n_neighbors=k+extraNN+1, metric=metric, 
-                                 low_memory=lowMem, random_state=42)
+                                low_memory=lowMem, random_state=42)
     nnGraph = index.neighbor_graph[0][:, 1:k+1]
     dists = index.neighbor_graph[1][:, 1:k+1]
     edges = np.zeros((nnGraph.shape[0]*nnGraph.shape[1], 2), dtype='int64')
@@ -71,6 +71,7 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, disconnection_dis
                 if snn:
                     # Weight the edges based on the number of shared nearest neighbors between two nodes
                     weights[i*nnGraph.shape[1]+j] = len(np.intersect1d(nnGraph[i], nnGraph[link]))
+    
     graph = igraph.Graph(n=len(nnGraph), edges=edges, directed=True)
     # Restart clustering multiple times and keep the best partition
     best = -np.inf
@@ -173,6 +174,51 @@ def threeStagesHC(matrix, metric, kMetaSamples=50000, method="ward"):
     else:
         link = linkage_vector(embedding, method=method)
         return hierarchy.leaves_list(link)
+
+
+def threeStagesHClinkage(matrix, metric, kMetaSamples=50000, method="ward"):
+    """
+    Three steps Hierachical clustering. UMAP -> K-Means -> Ward HC on clusters
+    centroids.
+
+    Parameters
+    ----------
+    matrix : array-like
+        Data matrix
+    
+    metric : string
+        Metric used for nn query. It is recommended to use Pearson correlation
+        for float values and Dice similarity for binary data.
+        See the pynndescent documentation for a list of available metrics.
+    
+    kMetaSamples : int, optional (default 50000)
+        Number of K-Means clusters, or groups of samples used by HC.
+
+    method : string, optional (default "ward")
+        HC method
+    """
+    # First perform dimensionnality reduction
+    lowMem = len(matrix) < 100000
+    embedding = umap.UMAP(n_components=20, min_dist=0.0, n_neighbors=30, 
+                          low_memory=lowMem, random_state=42, metric=metric).fit_transform(matrix)
+    embedding = np.nan_to_num(embedding, nan=1e5)
+    # Aggregrate samples via K-means in order to scale to large datasets
+    if len(embedding) > kMetaSamples:
+        clustering = MiniBatchKMeans(n_clusters=kMetaSamples, init="random", random_state=42, 
+                                    n_init=1)
+        assignedClusters = clustering.fit_predict(embedding)
+        Kx = clustering.cluster_centers_
+        # Perform HC
+        link = linkage_vector(Kx, method=method)
+        Korder = hierarchy.leaves_list(link)
+        order = np.array([], dtype="int")
+        for c in Korder:
+            order = np.append(order, np.where(c == assignedClusters)[0])
+        return order, link
+    else:
+        link = linkage_vector(embedding, method=method)
+        return hierarchy.leaves_list(link), link
+
 
 def HcOrder(mat, method="ward", metric="euclidean"):
     link = linkage_vector(mat, method=method, metric=metric)

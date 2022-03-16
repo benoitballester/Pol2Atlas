@@ -16,7 +16,6 @@ from rpy2.robjects import numpy2ri
 from sklearn.preprocessing import StandardScaler
 numpy2ri.activate()
 scran = importr("scran")
-deseq = importr("DESeq2")
 
 def filterDetectableGenes(counts, readMin, expMin):
     return np.sum(counts >= readMin, axis=0) >= expMin

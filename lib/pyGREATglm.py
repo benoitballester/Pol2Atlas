@@ -1,31 +1,17 @@
 import pandas as pd
 import numpy as np
 import pyranges as pr
-from statsmodels.discrete.discrete_model import NegativeBinomial, Poisson
-from statsmodels.genmod.families.family import Binomial, NegativeBinomial
-from statsmodels.discrete.count_model import ZeroInflatedPoisson, ZeroInflatedNegativeBinomialP
+import statsmodels.discrete.discrete_model as discrete_model
+from statsmodels.genmod.families.family import Binomial, Poisson
 from statsmodels.stats.multitest import fdrcorrection
 import statsmodels.api as sm
 from scipy.sparse import coo_matrix, csr_matrix
-from .utils import overlap_utils
-from gprofiler import GProfiler
+from .utils import overlap_utils, matrix_utils
 from scipy.stats import  t
 import matplotlib.pyplot as plt
+import warnings
 
-def permutationFdrCriticalValue(p_exp, p_perm, alpha=0.05):
-    sortedPexp = np.sort(p_exp)
-    lenRatio = len(p_perm)/len(p_exp)
-    for i in range(sortedPexp.shape[0]):
-        pExp_i = sortedPexp[i]
-        # Correct fp counts with the number of permutations
-        fp = np.sum(p_perm <= pExp_i)/ lenRatio
-        tp = i + 1
-        fdr_i = fp / (tp + fp)
-        print(fdr_i, pExp_i)
-        if fdr_i > alpha:
-            return pExp_i
 
-            
 class regLogicGREAT:
     def __init__(self, upstream, downstream, distal):
         self.upstream = upstream
@@ -52,17 +38,15 @@ class regLogicGREAT:
             txDF.loc[txDF["Chromosome"] == c, "End"] = extendedP
         return txDF
 
-class regLogic1MB:
-    def __init__(self, upstream, downstream, distal):
-        self.upstream = upstream
-        self.downstream = downstream
-        self.distal = distal
 
-    def __call__(self, txDF):
-        # Infered regulatory domain logic
-        txDF["Start"] = np.minimum(txDF["Start"] - self.distal, 0)
-        txDF["End"] = txDF["End"] + self.distal
-        return txDF
+def capTxtLen(txt, maxlen):
+    try:
+        if len(txt) < maxlen:
+            return txt
+        else:
+            return txt[:maxlen] + '...'
+    except:
+        return "N/A"
 
 class pyGREAT:
     """
@@ -110,6 +94,8 @@ class pyGREAT:
         transcripts = gencode[gencode["Feature"] == "gene"].copy()
         del gencode
         transcripts = transcripts[["Chromosome", "Start", "End", gtfGeneCol, "Strand"]]
+        print("a")
+        transcripts.to_csv("gencode_tx.bed", sep="\t", header=None, index=None)
         # Reverse positions on opposite strand for convenience
         geneInList = np.isin(transcripts[self.gtfGeneCol], np.unique(goAnnotation[2]), assume_unique=True)
         reversedTx = transcripts.copy()[["Chromosome", "Start", "End", self.gtfGeneCol]][geneInList]
@@ -131,43 +117,120 @@ class pyGREAT:
             self.matrices[c] = pd.DataFrame(mat)
             self.matrices[c].columns = genes
             self.matrices[c].index = gos
-
-
-    def __getClusters__(self, enrichedGOs, enrichCat):
-        pass
     
 
-    def findEnriched(self, query, background=None, clusterize=False, sources=[]):
+    def findEnriched(self, query, background=None, clusterize=False, minGenes=3):
+        """
+        Find enriched terms in genes near query.
+
+        Parameters
+        ----------
+        query: pandas dataframe in bed-like format or PyRanges
+            Set of genomic regions to compute enrichment on.
+        background: None, pandas dataframe in bed-like format, or PyRanges (default: None)
+            If set to None considers the whole genome as the possible locations of the query.
+            Otherwise it supposes the query is a subset of these background regions.
+        clusterize: bool (default: False)
+            If set to True, groups gene annotations that appears in similar genes to avoid
+            redundancy in the annotation.
+        
+        Returns
+        -------
+        results: pandas dataframe or tuple of pandas dataframes
+            Three columns pandas dataframe, with for each gene annotation its p-value,
+            FDR corrected p-value, and regression coefficient.
+            If clusterize was set to True, returns a dataframe for each cluster, stored inside a tuple.
+        """
         enrichs = {}
         regPR = pr.PyRanges(self.geneRegulatory.rename({self.gtfGeneCol:"Name"}, axis=1))
-        intersectBg = overlap_utils.countOverlapPerCategory(regPR, overlap_utils.dfToPrWorkaround(background, useSummit=False))
+        if background is not None:
+            intersectBg = overlap_utils.countOverlapPerCategory(regPR, overlap_utils.dfToPrWorkaround(background, useSummit=False))
+        else:
+            intersectBg = (self.geneRegulatory["End"]-self.geneRegulatory["Start"])/3e9 * len(query)
+            intersectBg = np.maximum(intersectBg, 1/(3e9))
+            intersectBg.index = self.geneRegulatory["gene_name"]
+            intersectBg = intersectBg.groupby(intersectBg.index).sum()
         intersectQuery = overlap_utils.countOverlapPerCategory(regPR, overlap_utils.dfToPrWorkaround(query, useSummit=False))
         queryCounts = intersectBg.copy() * 0
         queryCounts.loc[intersectQuery.index] = intersectQuery
         obsGenes = np.isin(queryCounts.index, self.matrices["biological_process"].columns)
         queryGenes = np.isin(intersectQuery.index, self.matrices["biological_process"].columns)
         obsMatrix = self.matrices["biological_process"][queryCounts.index[obsGenes]]
-        ratios = pd.DataFrame(queryCounts.loc[queryCounts.index[obsGenes]])
-        r2 = pd.DataFrame(queryCounts.loc[queryCounts.index[obsGenes]]/intersectBg.loc[queryCounts.index[obsGenes]])
-        expected = intersectBg.loc[queryCounts.index[obsGenes]]
+        if background is not None:
+            expected = intersectBg.loc[obsMatrix.columns]
+            ratios = pd.DataFrame(queryCounts.loc[queryCounts.index[obsGenes]])
+        else:
+            expected = intersectBg.loc[obsMatrix.columns]
+            ratios = pd.DataFrame(queryCounts.loc[queryCounts.index[obsGenes]])
         pvals = pd.Series()
-        alpha = (np.var(intersectBg.values) - np.mean(intersectBg.values))/np.square(np.mean(intersectBg.values))
-        i = 0
+        beta = pd.Series()
         for gos, hasAnnot in (obsMatrix.iterrows()):
-            i += 1
-            if hasAnnot.loc[intersectQuery.index[queryGenes]].sum() >= 3:
-                try:
-                    df = pd.DataFrame(np.array([hasAnnot.T.astype(float)*2.0-1.0, np.ones_like(expected)]).T, 
-                                    columns=["GS", "Intercept"], index=queryCounts.index[obsGenes])
-                    model = sm.GLM(ratios, df, family=NegativeBinomial(alpha=alpha)).fit(disp=0)
-                    # Get one sided pvalues
-                    pvals[gos] = t(model.df_resid).sf(model.tvalues["GS"])
-                except: 
-                    print("Failed regression for : ", gos)
-                    continue
+            if hasAnnot.loc[intersectQuery.index[queryGenes]].sum() >= minGenes:
+                df = pd.DataFrame(np.array([hasAnnot.T.astype(float), np.ones_like(expected)]).T, 
+                                columns=["GS", "Intercept"], index=queryCounts.index[obsGenes])
+                # For some reason only the regularized solver does not have a lot of convergence issues
+                model = discrete_model.NegativeBinomial(ratios, df, "nb1", exposure=expected).fit_regularized(disp=0, method="l1", alpha=0.0, trim_mode="off")
+                beta[gos] = model.params["GS"]
+                # Get one sided pvalues
+                if model.params["GS"] >= 0:
+                    pvals[gos] = model.pvalues["GS"]/2.0
+                else:
+                    pvals[gos] = (1.0-model.pvalues["GS"]/2.0)
         qvals = pvals.copy()
+        qvals.dropna(inplace=True)
         qvals.loc[:] = fdrcorrection(qvals)[1]
-        return qvals.sort_values()[qvals < 0.05]
+        results = pd.concat([pvals, qvals, beta], axis=1)
+        results.columns = ["P(Beta > 0)", "BH corrected p-value", "Beta"]
+        results.sort_values(by="P(Beta > 0)", inplace=True)
+        if clusterize:
+            mat = self.matrices["biological_process"]
+            grps = matrix_utils.graphClustering(mat.values.astype(bool), "dice", 30, r=900.0, snn=True, restarts=10, disconnection_distance=1.0)
+            dfs = []
+            obsAnnots = np.isin(mat.index, results.index)
+            subClusts = grps[obsAnnots]
+            subMat = mat.index[obsAnnots]
+            for i in np.unique(subClusts):
+                idx = subMat[i == subClusts]
+                dfs.append(results.loc[idx])
+            results = tuple(dfs)
+        return results
+
+    def plotEnrichs(self, enrichDF, title="", alpha=0.05, topK=10, savePath=None):
+        """
+        Draw Enrichment barplots
+
+        Parameters
+        ----------
+        enrichDF: pandas dataframe or tuple of pandas dataframes
+            
+        savePath: string (optional)
+            If set to None, does not save the figure.
+        """
+        fig, ax = plt.subplots(figsize=(2,2),dpi=500)
+        if type(enrichDF) is tuple:
+            newDF = pd.DataFrame(columns=["P(Beta > 0)", "BH corrected p-value", "Beta"])
+            for df in enrichDF:
+                imax = df["P(Beta > 0)"].idxmax(axis=0)
+                newDF.loc[imax] = df.loc[imax]
+        else:
+            newDF = enrichDF
+        selected = (newDF["BH corrected p-value"] < alpha)
+        ordered = -np.log10(newDF["BH corrected p-value"][selected]).sort_values(ascending=True)[:topK]
+        terms = ordered.index
+        t = [capTxtLen(term, 50) for term in terms]
+        ax.tick_params(axis="x", labelsize=8)
+        ax.tick_params(length=3, width=1.2)
+        ax.barh(range(len(terms)), np.minimum(ordered[::-1],324.0))
+        ax.set_yticks(range(len(terms)))
+        ax.set_yticklabels(t[::-1], fontsize=5)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.set_xlabel("-log10(Corrected P-value)", fontsize=8)
+        ax.set_title(title, fontsize=10)
+        if savePath is not None:
+            fig.savefig(savePath, bbox_inches="tight")
+        return fig, ax
 
         
 

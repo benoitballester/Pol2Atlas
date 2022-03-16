@@ -39,6 +39,7 @@ def permutationPA(X, B=10, alpha=0.05, method='pca', max_rank=None):
 
     # compute premutation eigenvalues
     dstat_null = np.zeros((B, len(D)))
+    np.random.seed(42)
     for b in range(B):
         print(b)
         X_perm = np.apply_along_axis(np.random.permutation, 0, X)

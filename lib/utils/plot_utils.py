@@ -8,12 +8,17 @@ import umap
 from matplotlib.patches import Patch
 from skimage.transform import rescale, resize, downscale_local_mean
 import matplotlib.patches as mpatch
+import zepid
+from zepid.graphics import EffectMeasurePlot
+import matplotlib
 
-def applyPalette(annot, avail, palettePath):
-    annotPalette = pd.read_csv(palettePath, sep="\t", index_col=0)
-    palette = annotPalette.loc[avail][["r","g","b"]].values
+def applyPalette(annot, avail, palettePath, ret_labels=False):
+    annotPalette = pd.read_csv(palettePath, sep=",", index_col=0)
+    palette = annotPalette.loc[avail][["r","g","b"]]
     colors = annotPalette.loc[annot][["r","g","b"]].values
-    return palette, colors
+    if ret_labels:
+        return palette.index, palette.values, colors
+    return palette.values, colors
     
 
 def getPalette(labels, palette=None):
@@ -144,12 +149,8 @@ def plotUmap(points, colors, forceVectorized=False):
         yScale = plt.ylim()[1] - plt.ylim()[0]
         plt.gca().set_aspect(xScale/yScale)
 
-def recursiveDownsample(mat, resX, resY):
-    matDS = resize(mat.astype(float), (resX, resY), anti_aliasing=True)
-    return matDS
-        
 
-def plotHC(matrix, labels, annotationFile=None, annotationPalette=None, rowOrder="umap", colOrder="umap"):
+def plotHC(matrix, labels, matPct=None, annotationPalette=None, rowOrder="umap", colOrder="umap", cmap=None, hq=True):
     """
     Plot ordered matrix with sample and consensus annotation
 
@@ -166,6 +167,8 @@ def plotHC(matrix, labels, annotationFile=None, annotationPalette=None, rowOrder
         Otherwise uses the supplied order.
 
     """
+    if matPct is None:
+        matPct = matrix
     if colOrder == "umap":
         consensuses1D = np.argsort(umap.UMAP(n_components=1, n_neighbors=50, min_dist=0.0, 
                                    low_memory=False, metric="dice").fit_transform(matrix).flatten())
@@ -183,11 +186,15 @@ def plotHC(matrix, labels, annotationFile=None, annotationPalette=None, rowOrder
         except:
             raise TypeError("rowOrder must be 'umap' or array-like")
     # Draw pattern-ordered matrix 
-    rasterRes = (min(4000, matrix.shape[0]), min(4000, matrix.shape[1]))
-    rasterMat = resize(matrix[consensuses1D][:, samples1D].astype(float), rasterRes, anti_aliasing=True)
-    rasterMat = (rasterMat - np.min(rasterMat)) / (np.max(rasterMat) - np.min(rasterMat))
+    rasterRes = (4000, 2000)
+    rasterMat = resize(matrix[consensuses1D][:, samples1D].astype(float), (matrix.shape[0], 2000), anti_aliasing=False, order=int(matrix.shape[1]>2000))
+    rasterMat = resize(rasterMat, rasterRes, anti_aliasing=hq, order=1)
+    rasterMat = (rasterMat - np.percentile(rasterMat, 0.5)) / (np.percentile(rasterMat, 99.5) - np.percentile(rasterMat, 0.5))
     # rasterMat = sns.color_palette("viridis", as_cmap=True)(rasterMat.T)[:,:,:3]
-    rasterMat = np.repeat(1-rasterMat.T[:,:,None], 3, 2)
+    if cmap is None:
+        rasterMat = np.repeat(1-rasterMat.T[:,:,None], 3, 2)
+    else:
+        rasterMat = sns.color_palette(cmap, as_cmap=True)(rasterMat.T)[:,:,:3]
     # Add sample annotation
     annotations = np.zeros(matrix.shape[1], "int64")
     eq = ["Non annotated"]
@@ -204,11 +211,11 @@ def plotHC(matrix, labels, annotationFile=None, annotationPalette=None, rowOrder
     for i in range(len(palette)):
         hasAnnot = (annotations[samples1D] == i).nonzero()[0]
         np.add.at(sampleLabelCol, hasAnnot, palette[i])
-    sampleLabelCol = resize(sampleLabelCol, (rasterRes[1], int(rasterRes[0]/33.3)), anti_aliasing=True)
+    sampleLabelCol = resize(sampleLabelCol, (rasterRes[1], int(rasterRes[0]/33.3)), anti_aliasing=hq, order=0)
     # Big stacked barplot
     signalPerCategory = np.zeros((np.max(annotations)+1, len(matrix)))
     for i in range(np.max(annotations)+1):
-        signalPerCategory[i, :] = np.mean(matrix[:, annotations == i], axis=1)
+        signalPerCategory[i, :] = np.mean(matPct[:, annotations == i], axis=1)
     runningSum = np.zeros(signalPerCategory.shape[1])
     barPlot = np.zeros((matrix.shape[1], signalPerCategory.shape[1],3))
     fractCount = signalPerCategory/np.sum(signalPerCategory, axis=0)*matrix.shape[1]
@@ -221,7 +228,7 @@ def plotHC(matrix, labels, annotationFile=None, annotationPalette=None, rowOrder
     # Downsample the bar plot
     barPlotScale = 0.25
     # barPlotBlur = cv2.GaussianBlur(barPlot, ksize=(0,0), sigmaX=1.0*barPlot.shape[1]/rasterRes[0], sigmaY=1.0/barPlotScale)
-    resized = recursiveDownsample(barPlot, int(rasterRes[1]*barPlotScale), rasterRes[0])
+    resized = resize(barPlot, (int(rasterRes[1]*barPlotScale), rasterRes[0]), anti_aliasing=hq)
     # Combine everything
     blackPx = 5
     blackOutline = np.zeros((rasterRes[1], blackPx, 3))
@@ -234,7 +241,6 @@ def plotHC(matrix, labels, annotationFile=None, annotationPalette=None, rowOrder
     # Plot
     plt.figure(figsize=(10,90/16), dpi=500)
     plt.imshow(figure, interpolation="lanczos")
-    plt.gca().set_aspect(16/9)
     plt.yticks([rasterRes[1]*0.5], 
                 [f"{matrix.shape[1]} Experiments"],
             fontsize=8, rotation=90, va="center")
@@ -426,3 +432,23 @@ def ridgePlot(df):
     g.set_titles("")
     g.set(yticks=[], ylabel="")
     g.despine(bottom=True, left=True)
+
+def forestPlot(regDF):
+    order = np.argsort(np.abs(regDF["coef"]))[::-1]
+    smallDF = regDF.iloc[order]
+    p = EffectMeasurePlot(label=list(smallDF.index), effect_measure=smallDF["exp(coef)"].values, 
+                        lcl=smallDF["exp(coef) lower 95%"].values, ucl=smallDF["exp(coef) upper 95%"].values)
+    p.labels(effectmeasure='HR')
+    p.colors(pointshape="D")
+    ax=p.plot(figsize=(10,10), min_value=smallDF["exp(coef) lower 95%"].values.min(), 
+              max_value=smallDF["exp(coef) upper 95%"].values.max())
+    plt.title("Cox regression model",loc="right",x=1, y=1.045)
+    ax.set_xscale("log")
+    ax.minorticks_off()
+    ax.set_xticks(np.round(100*np.array([ax.get_xlim()[0], 1.0, ax.get_xlim()[1]]))/100)
+    ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+    ax.set_xlabel("Hazard Ratio (log scale)", fontsize=8)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(True)
+    ax.spines['left'].set_visible(False)

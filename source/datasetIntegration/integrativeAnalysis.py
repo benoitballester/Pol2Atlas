@@ -85,19 +85,14 @@ plt.savefig(f"{paths.outputDir}/cluster_enrichments/dnaseHeatmap.pdf", bbox_inch
 plt.show()
 # %%
 # GO terms
-from lib.pyGREAT import pyGREAT
+from lib.pyGREATglm import pyGREAT
 enricher = pyGREAT(oboFile=paths.GOfolder + "/go_eq.obo", geneFile=paths.gencode, 
                    geneGoFile=paths.GOfolder + "/goa_human.gaf")
 # %%
 # testReg = pd.read_csv(paths.tempDir + "globallyProg.bed", sep="\t", header=None)
 for i in range(np.max(merger.clustered[0])+1):
     testReg = merger.consensuses[merger.clustered[0]==i]
-    goEnrich = enricher.findEnriched(testReg, merger.consensuses, sources=["GO:BP", "GO:MF"])
-    goEnrich.set_index("name", inplace=True)
-    fig, ax = plt.subplots(figsize=(2,2),dpi=500)
-    plot_utils.enrichBarplot(ax, goEnrich["p_value"], goEnrich["p_value"], fcMin=0.0, order_by="qval")
-    fig.savefig(f"{paths.outputDir}/cluster_enrichments/GO_fc_{i}.png", bbox_inches="tight")
-    plt.show()
-    plt.close()
+    goEnrich = enricher.findEnriched(testReg, merger.consensuses)
+    enricher.plotEnrichs(enrichDF)
 # %%
 # %%

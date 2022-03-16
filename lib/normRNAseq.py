@@ -3,10 +3,7 @@ from scipy.stats.mstats import gmean
 from . import rnaseqFuncs
 from scipy.stats import rankdata
 from scipy.special import erfinv
-from rpy2.robjects.packages import importr
-from rpy2.robjects import numpy2ri
-numpy2ri.activate()
-scran = importr("scran")
+
 
 def deseqNorm(counts):
     m = gmean(counts, axis=0)
