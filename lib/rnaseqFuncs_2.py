@@ -3,27 +3,38 @@ import statsmodels.discrete.discrete_model as discrete_model
 from statsmodels.genmod.families import family
 import warnings
 import matplotlib.pyplot as plt
-from scipy.stats import rankdata
+from matplotlib.patches import Patch
+from scipy.stats import rankdata, chi2
 from scipy.special import erfinv
+import seaborn as sns
+import umap
 from statsmodels.stats.multitest import fdrcorrection
 import scipy.interpolate as si
 from rpy2.robjects.packages import importr
 from rpy2.robjects import numpy2ri
 from sklearn.preprocessing import StandardScaler
+numpy2ri.activate()
 import KDEpy
-from sklearn.preprocessing import RobustScaler
+from sklearn.preprocessing import StandardScaler
 from scipy.stats import rankdata
 import scipy.interpolate as si
 from joblib import Parallel, delayed
 import scipy.stats as ss
 scran = importr("scran")
+deseq = importr("DESeq2")
+import rpy2.robjects as ro
+from rpy2.robjects.packages import importr
+from rpy2.robjects import pandas2ri
+from rpy2.robjects.conversion import localconverter
+import pandas as pd
+
 
 def findMode(arr):
     # Finds the modal value of a continuous sample
     # Scale to unit variance for numerical stability
-    scaler = RobustScaler()
+    scaler = StandardScaler()
     values = scaler.fit_transform(arr.reshape(-1,1)).ravel()
-    pos, fitted = KDEpy.FFTKDE(bw="silverman", kernel="gaussian").fit(values).evaluate(100000)
+    pos, fitted = KDEpy.FFTKDE(bw="silverman", kernel="gaussian").fit(values).evaluate(10000)
     return scaler.inverse_transform(pos[np.argmax(fitted)].reshape(-1,1)).ravel()
 
 
@@ -60,7 +71,7 @@ class RnaSeqModeler:
         '''
         pass
     
-    def fit(self, counts, sf, subSampleEst=20000, plot=True, verbose=True):
+    def fit(self, counts, sf, subSampleEst=10000, plot=True, verbose=True):
         '''
         Fit the model
         '''
@@ -77,7 +88,7 @@ class RnaSeqModeler:
         warnings.filterwarnings("error")
         for i in shuffled:
             try:
-                model = discrete_model.NegativeBinomial(counts[:, i], params, exposure=self.scaled_sf)
+                model = discrete_model.NegativeBinomial(counts[:, i], params, exposure=sf)
                 fit = model.fit(disp=0, method="nm", ftol=1e-9, maxiter=500)
                 if np.abs(np.log10(fit.params[1])) > 3:
                     continue
@@ -87,7 +98,6 @@ class RnaSeqModeler:
                 continue
         warnings.filterwarnings("default")
         fittedParams = np.array(fittedParams)
-        print(fittedParams)
         alphas = np.array(fittedParams[:, 1])
         # Estimate NB overdispersion in function of mean expression
         # Overdispersion can be caused by biological variation as well as technical variation
@@ -95,7 +105,7 @@ class RnaSeqModeler:
         # The modal value of overdispersion is tracked for each decile of mean expression using a kernel density estimate
         # The median value would overestimate overdispersion as the % of DE probes is unknown
         means = np.mean(self.normed[:, worked], axis=0)
-        nQuantiles = 10
+        nQuantiles = 25
         pcts = np.linspace(0,100,nQuantiles+1)
         centers = (pcts * 0.5 + np.roll(pcts,1)*0.5)[1:]/100
         quantiles = np.percentile(means, pcts)
@@ -117,11 +127,11 @@ class RnaSeqModeler:
             plt.ylabel("Alpha (overdispersion)")
         # Dispatch accross multiple processes
         with Parallel(n_jobs=-1, verbose=verbose, batch_size=512) as pool:
-            stats = pool(delayed(statsProcess)(self.regAlpha[i], self.scaled_sf, counts[:, i], self.means[i]) for i in range(counts.shape[1]))
+            stats = pool(delayed(statsProcess)(self.regAlpha[i], self.scaled_sf, self.normed[:, i], self.means[i]) for i in range(counts.shape[1]))
         # Unpack results
         self.anscombeResiduals = np.array([i[0] for i in stats]).T
         self.deviances = np.array([i[1] for i in stats])
-        self.res_dev = np.array([i[2] for i in stats]).T
+        self.res_dev = np.array([i[2] for i in stats])
         return self
 
     
@@ -158,7 +168,7 @@ class RnaSeqModeler:
         # But we do not have large means, so use monte-carlo instead and sample from a NB(mu, alpha) distribution
         # It is too time consuming to compute monte-carlo deviance cdfs with a sufficient sample count for each probe
         # Instead compute it at fixed percentiles of the mean and interpolate p-value estimates
-        rankedMeans = (rankdata(self.means)-0.5)/len(self.means)*100
+        rankedMeans = (np.argsort(np.argsort(self.means))-0.5)/len(self.means)*100
         centers = (np.linspace(0,100,evalsPts+1)+0.5/evalsPts)[:-1]
         assigned = [np.where(np.abs(rankedMeans-c) < 100.0/evalsPts)[0] for c in centers]
         pvals = np.zeros(len(rankedMeans))
@@ -166,7 +176,7 @@ class RnaSeqModeler:
         expectedDeviances = np.zeros(len(rankedMeans))
         for i in range(len(assigned)):
             bucket = assigned[i]
-            interpFactor = np.maximum(0, np.abs(rankedMeans[bucket] - centers[i])*evalsPts/100)
+            interpFactor = np.maximum(0, np.abs(rankedMeans[bucket] - centers[i])*100/evalsPts)
             m = np.sum(self.means[bucket] * interpFactor)/np.sum(interpFactor)
             a = np.sum(self.regAlpha[bucket] * interpFactor)/np.sum(interpFactor)
             devBucket = self.deviances[bucket]
@@ -178,7 +188,7 @@ class RnaSeqModeler:
         pvals /= weights
         # Filter probes whose excess deviance (observed-expected) is mostly driven (75%+) by a single outlier
         deltaDev = self.deviances-expectedDeviances
-        filteredOutliers = np.sum(np.square(self.res_dev.T) > maxOutlierDeviance*deltaDev[:, None], axis=1) != 1
+        filteredOutliers = np.sum(np.square(self.res_dev) > maxOutlierDeviance*deltaDev[:, None], axis=1) < 0.5
         hv = fdrcorrection(pvals)[0] & filteredOutliers
         if plot:
             # Plot mean/variance relationship and selected probes

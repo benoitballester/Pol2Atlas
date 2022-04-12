@@ -32,7 +32,7 @@ orderCols = matrix_utils.threeStagesHC(merger.matrix, "dice")
 # %%
 annotationFile = pd.read_csv(paths.annotationFile, sep="\t", index_col="Sample")
 labels = annotationFile.loc[merger.labels]["Annotation"]
-plot_utils.plotHC(merger.matrix, labels, paths.annotationFile, annotationPalette=paths.polIIannotationPalette, rowOrder=orderRows, colOrder=orderCols)
+plot_utils.plotHC(merger.matrix, labels, merger.matrix, annotationPalette=paths.polIIannotationPalette, rowOrder=orderRows, colOrder=orderCols)
 plt.savefig(paths.outputDir + "pseudoHC.pdf")
 # %%
 # UMAP of samples

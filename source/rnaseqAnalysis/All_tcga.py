@@ -50,22 +50,36 @@ annotation = annotation.loc[np.array(order)[kept]]
 tumor = np.logical_not(annotation["Sample Type"] == "Solid Tissue Normal")
 # %%
 # Remove undected Pol II probes
-counts = allCounts
-extremeExpr = np.mean(counts, axis=0) <= np.percentile(np.mean(counts, axis=0), 99)
-sf = scran.calculateSumFactors(counts.T, scaling=allReads[:, None])
-countsNorm = counts/np.array(sf)[:, None]
-nzCounts = rnaseqFuncs.filterDetectableGenes(countsNorm, readMin=1, expMin=3)
-countsNorm = countsNorm[:, nzCounts]
-# Apply quantile transformation to Pol II probes
-rgs = rnaseqFuncs.quantileTransform(countsNorm)
 # %%
-# Feature selection 
-selected = rnaseqFuncs.variableSelection(rankdata(countsNorm, "min", axis=1), plot=False)
+nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=2)
+counts = allCounts[:, nzCounts]
+
+# %%
+import rpy2.robjects as ro
+from rpy2.robjects.packages import importr
+from rpy2.robjects import pandas2ri, numpy2ri
+from rpy2.robjects.conversion import localconverter
+scran = importr("scran")
+deseq = importr("DESeq2")
+base = importr("base")
+detected = [np.sum(counts >= i, axis=0) for i in range(20)][::-1]
+topMeans = np.lexsort(detected)[::-1][:int(counts.shape[1]*0.05+1)]
+with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
+    sf = scran.calculateSumFactors(counts.T[topMeans])
+# %%
+countModel = rnaseqFuncs.RnaSeqModeler().fit(counts, sf)
+pDev, outliers = countModel.hv_selection()
+hv = fdrcorrection(pDev)[0]
+lv = fdrcorrection(1-pDev)[0]
+
 # %%
 from sklearn.decomposition import PCA
-from lib.jackstraw.permutationPA import permutationPA
-bestRank = permutationPA(rgs[:, selected], max_rank=min(500, len(rgs)))
-decomp = PCA(bestRank[0], whiten=True).fit_transform(rgs[:, selected])
+from lib.jackstraw.permutationPA import permutationPA_PCA
+from sklearn.preprocessing import StandardScaler
+
+feat = countModel.anscombeResiduals[:, hv & outliers]
+decomp = permutationPA_PCA(feat, 10, max_rank=min(500, len(feat)))
+print(decomp.shape)
 # %%
 import umap
 from lib.utils.plot_utils import plotUmap, getPalette
@@ -121,12 +135,13 @@ plt.title(f"Balanced accuracy on {len(np.unique(cancerType))} cancers : {acc}")
 plt.show()
 
 # %%
+
 clustsPol2 = np.loadtxt(paths.outputDir + "clusterConsensuses_Labels.txt",dtype=int)[nzCounts]
 nClusts = np.max(clustsPol2)+1
 nAnnots = len(eq)
 zScores = np.zeros((nClusts, nAnnots))
-avg1Read = np.mean(countsNorm, axis=0) > 1
-filteredMat = np.log(1+countsNorm)[:, avg1Read]
+avg1Read = np.mean(countModel.anscombeResiduals, axis=0) > 1
+filteredMat = np.log(1+countModel.anscombeResiduals)[:, avg1Read]
 for i in range(nAnnots):
     hasAnnot = cancerType == i
     sd = np.std(np.percentile(filteredMat[hasAnnot], 95, axis=0))

@@ -4,26 +4,19 @@ import pandas as pd
 import os
 import matplotlib.pyplot as plt
 from settings import params, paths
-from lib import rnaseqFuncs, normRNAseq
+from lib import normRNAseq, rnaseqFuncs
 from lib.utils import plot_utils, matrix_utils
 from matplotlib.patches import Patch
 from scipy.stats import rankdata, chi2
 from scipy.stats import chi2
-import scipy.stats as ss
 import seaborn as sns
 import umap
 from statsmodels.stats.multitest import fdrcorrection
 from scipy.spatial.distance import dice
 import matplotlib as mpl
+import fastcluster
 import sklearn.metrics as metrics
-import rpy2.robjects as ro
-from rpy2.robjects.packages import importr
-from rpy2.robjects import pandas2ri, numpy2ri
-from rpy2.robjects.conversion import localconverter
-scran = importr("scran")
-deseq = importr("DESeq2")
-base = importr("base")
-s4 = importr("S4Vectors")
+import scipy.stats as ss
 countDir = "/scratch/pdelangen/projet_these/outputPol2/rnaseq/encode_counts/"
 try:
     os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/")
@@ -65,62 +58,40 @@ sns.stripplot(data=df, x="Percentage of mapped reads", y="Annotation", palette=p
                 edgecolor="black", jitter=1/3, alpha=1.0, s=2, linewidth=0.1)
 plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/pctmapped_per_annot.pdf", bbox_inches="tight")
 # %%
-# Remove undected Pol II probes
-counts = allCounts
-nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=5, expMin=2)
-countsNz = allCounts[:, nzCounts]
-means = np.mean(countsNz/np.mean(countsNz, axis=1)[:, None], axis=0)
+nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=2)
+counts = allCounts[:, nzCounts]
+
+# %%
+import rpy2.robjects as ro
+from rpy2.robjects.packages import importr
+from rpy2.robjects import pandas2ri, numpy2ri
+from rpy2.robjects.conversion import localconverter
+scran = importr("scran")
+deseq = importr("DESeq2")
+base = importr("base")
+detected = [np.sum(counts >= i, axis=0) for i in range(20)][::-1]
+topMeans = np.lexsort(detected)[::-1][:int(counts.shape[1]*0.05+1)]
 with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
-    sf = scran.calculateSumFactors(countsNz.T)
-countModel = rnaseqFuncs.RnaSeqModeler().fit(countsNz, sf)
-anscombe = countModel.anscombeResiduals
-countsNorm = countModel.normed
-anscombeResiduals = anscombe
+    sf = scran.calculateSumFactors(counts.T[topMeans])
+# %%
+countModel = rnaseqFuncs.RnaSeqModeler().fit(counts, sf)
 pDev, outliers = countModel.hv_selection()
-hv = fdrcorrection(pDev)[0] & outliers
+hv = fdrcorrection(pDev)[0]
+lv = fdrcorrection(1-pDev)[0]
+
 # %%
-from statsmodels.genmod.families import family
-import scipy.stats as ss
-from sklearn.preprocessing import PowerTransformer, StandardScaler
-rankMeans = np.argsort(np.argsort(countModel.means))
-alphas = countModel.regAlpha
-res_devs = countModel.res_dev
-fitParams = []
-scaledDev = []
-for i in range(len(rankMeans)):
-    if i%1000 == 0:
-        print(i)
-    nbMean = countModel.means[i] * countModel.scaled_sf
-    n = 1 / alphas[i]
-    p = nbMean / (nbMean + alphas[i] * (nbMean**2))
-    subset = ss.nbinom.rvs(n,p,size=(3,len(p))).ravel()
-    func = family.NegativeBinomial(alpha=alphas[i])
-    dev = func.resid_dev(subset, np.tile(nbMean[:, None],3).T.ravel())
-    scaler = PowerTransformer().fit(dev.reshape(-1,1))
-    scaledDev.append(scaler.transform(res_devs[:, i].reshape(-1,1)).ravel())
-    fitParams.append([scaler.lambdas_[0], scaler._scaler.mean_[0], scaler._scaler.scale_[0]])
-fitParams = np.array(fitParams)
-scaledDev = np.array(scaledDev).T
-# %%
-dev = np.sum(np.square(scaledDev), axis=0)
-pVar = chi2.sf(dev, 509)
-hv = pVar < 0.05
-# %%
-# Compute PCA on the anscombe residuals
-# Anscombe residuals have asymptotic convergence to a normal distribution with a null NB distribution
-# Pearson and raw residuals are skewed for non-normal models like the NB or Poisson
-# The number of components is selected with a permutation test
 from sklearn.decomposition import PCA
 from lib.jackstraw.permutationPA import permutationPA
 from sklearn.preprocessing import StandardScaler
-feat = StandardScaler().fit_transform(anscombeResiduals)
-bestRank = permutationPA(feat[:, hv], max_rank=min(100, len(anscombeResiduals)))
-decomp = PCA(bestRank[0]).fit_transform(feat[:, hv])
+
+feat = countModel.anscombeResiduals[:, hv & outliers]
+bestRank = permutationPA(feat, 10, max_rank=min(500, len(feat)))
+modelPCA = PCA(bestRank[0], whiten=True, svd_solver="arpack")
+decomp = modelPCA.fit_transform(feat)
 matrix_utils.looKnnCV(decomp, ann, "correlation",1)
 # %%
 # Plot UMAP of samples for visualization
-embedding = umap.UMAP(n_neighbors=30, min_dist=0.5,
-                     random_state=42, low_memory=False, metric="correlation").fit_transform(decomp)
+embedding = umap.UMAP(n_neighbors=30, min_dist=0.5, random_state=42, low_memory=False, metric="correlation").fit_transform(decomp)
 plt.figure(figsize=(10,10), dpi=500)
 annot, palette, colors = plot_utils.applyPalette(annotation.loc[order]["Annotation"],
                                                 np.unique(annotation.loc[order]["Annotation"]),
@@ -132,12 +103,12 @@ for i, a in enumerate(annot):
     patches.append(legend)
 plt.legend(handles=patches, prop={'size': 7}, bbox_to_anchor=(0,1.02,1,0.2),
                     loc="lower left", mode="expand", ncol=6)
-plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/umap_samples.pdf")
+# plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/umap_samples.pdf")
 plt.show()
-
-# %% 
+plt.close()
+# %%
 rowOrder, rowLink = matrix_utils.twoStagesHClinkage(decomp, "euclidean")
-colOrder, colLink = matrix_utils.threeStagesHClinkage(scaledDev[:, hv].T, "correlation")
+colOrder, colLink = matrix_utils.threeStagesHClinkage(feat.T, "correlation")
 # %%
 # Plot dendrograms
 from scipy.cluster import hierarchy
@@ -153,23 +124,23 @@ hierarchy.dendrogram(rowLink, p=10, truncate_mode="level", color_threshold=-1, o
 plt.axis('off')
 plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_row_dendrogram.pdf")
 plt.show()
+plt.close()
 # %%
-meanNormed = countsNorm/np.mean(countsNorm, axis=0)
-epsilon = 1/np.nanmax(np.log(meanNormed), axis=0)
-clippedSQ= np.log(1+countsNorm)
-plot_utils.plotHC(clippedSQ.T[hv], annotation.loc[order]["Annotation"], countsNorm.T[hv],  
+clippedSQ= np.log(1+countModel.normed)
+plot_utils.plotHC(clippedSQ.T[hv & outliers], annotation.loc[order]["Annotation"], (countModel.normed).T[hv & outliers],  
                   paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder)
 plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_hvg.pdf")
 # %%
-colOrderAll, colLinkAll = matrix_utils.threeStagesHClinkage(anscombeResiduals, "correlation")
+colOrderAll, colLinkAll = matrix_utils.threeStagesHClinkage(countModel.anscombeResiduals.T, "correlation")
 # Plot dendrograms
 plt.figure(dpi=500)
 hierarchy.dendrogram(colLinkAll, p=10, truncate_mode="level", color_threshold=-1)
 plt.axis('off')
 plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_col_dendrogram.pdf")
 plt.show()
-clippedSQ= np.log(1+countsNorm)
-plot_utils.plotHC(clippedSQ.T, annotation.loc[order]["Annotation"], countsNorm.T,  
+clippedSQ= np.log(1+countModel.normed)
+plt.figure(dpi=500)
+plot_utils.plotHC(clippedSQ.T, annotation.loc[order]["Annotation"], (countModel.normed).T,  
                   paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrderAll)
 plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM.pdf")
 # %%
@@ -186,9 +157,11 @@ for i in range(np.max(annotationsP2)+1):
     signalPerCategory[i, :] = np.sum(polIIMerger.matrix[:, annotationsP2 == i], axis=1) / signalPerAnnot[i]
 signalPerCategory /= np.sum(signalPerCategory, axis=0)
 # %%
-rnaseqPerCategory = np.zeros((np.max(ann)+1, len(countsNorm[1])))
+rnaseqPerCategory = np.zeros((np.max(ann)+1, len(countModel.normed[1])))
 for i in range(np.max(ann)+1):
-    rnaseqPerCategory[i, :] = np.mean(countsNorm.T[:, ann == i], axis=1)
+    rnaseqPerCategory[i, :] = np.mean(countModel.normed.T[:, ann == i], axis=1)
+rnaseqPerCategory /= np.sum(rnaseqPerCategory, axis=0)
+rnaseqPerCategory /= np.sum(rnaseqPerCategory, axis=1)[:, None]
 rnaseqPerCategory /= np.sum(rnaseqPerCategory, axis=0)
 signalPerCategory = signalPerCategory[:, nzCounts]
 # %%
@@ -255,67 +228,28 @@ plt.title("log2(Reads on probe > 50% Pol Biotype / Reads on probe < 50% Pol Biot
 plt.savefig(paths.outputDir + f"rnaseq/encode_rnaseq/polII_vs_rnaseq/heatmap_fc.pdf", bbox_inches="tight")
 plt.close()
 # %%
-rowOrder = np.argsort(ann)
-topCat = rnaseqPerCategory.argmax(axis=0)
-signalTopCat = -rnaseqPerCategory[(topCat,range(len(topCat)))]
-colOrder = np.lexsort((signalTopCat, topCat))
-meanNormed = countsNorm/np.mean(countsNorm, axis=0)
-epsilon = 1/np.nanmax(np.log(meanNormed), axis=0)
-clippedSQ= np.log(1+countsNorm)
-plt.figure(dpi=500)
-plot_utils.plotHC(clippedSQ.T, annotation.loc[order]["Annotation"], countsNorm.T,  
-                  paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder)
-plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_autorank.pdf")
-plt.close()
-# %%
-'''
-import statsmodels.discrete.discrete_model as discrete_model
-from statsmodels.discrete.count_model import ZeroInflatedNegativeBinomialP, ZeroInflatedGeneralizedPoisson
-from statsmodels.genmod.generalized_linear_model import GLM
-from statsmodels.genmod.families.family import NegativeBinomial
-sig = np.percentile(countsNorm, 99, axis=0) > 10
-matSig = countsNorm[:, sig]
-clustsPol2 = np.loadtxt(paths.outputDir + "clusterConsensuses_Labels.txt",dtype=int)[nzCounts][sig]
-nClusts = np.max(clustsPol2)+1
-nAnnots = len(eq)
-np.random.seed(42)
-zScores = np.zeros((nClusts, nAnnots))
-for i in range(nClusts):
-    print(i)
-    inClust = clustsPol2 == i
-    countsClust = matSig[:, inClust].T
-    subSample = np.random.choice(len(countsClust), min(len(countsClust), 100), replace=False)
-    countsClust = countsClust[subSample]
-    meanExpr = np.repeat(countsClust.mean(axis=1), len(annotOHE))
-    flattenedCounts = countsClust.ravel()
-    annotOHETiled = np.tile(annotOHE.T, len(countsClust)).T
-    model = discrete_model.NegativeBinomial(flattenedCounts, annotOHETiled, exposure=meanExpr)
-    res = model.fit_regularized(disp=0, method="l1", alpha=0.0, trim_mode="off")
-    zScores[i] = res.params[:-1]
-'''
-# %%
 import scipy.stats as ss
 clustsPol2 = np.loadtxt(paths.outputDir + "clusterConsensuses_Labels.txt",dtype=int)[nzCounts]
 nClusts = np.max(clustsPol2)+1
 nAnnots = len(eq)
 zScores = np.zeros((nClusts, nAnnots))
-filteredMat = (countsNorm / np.mean(countsNorm, axis=0))
+filteredMat = (countModel.normed / np.mean(countModel.normed, axis=0))
 for i in range(nAnnots):
     hasAnnot = ann == i
     subset = np.copy(filteredMat[hasAnnot])
     subset2 = np.copy(filteredMat[np.logical_not(hasAnnot)])
-    
+    print(i)
     for j in range(nClusts):
         inClust = clustsPol2 == j
         expected = np.mean(subset2[:, inClust], axis=0)+1
         observed = np.mean(subset[:, inClust], axis=0)+1
         zScores[j, i] = np.log2(observed/expected)
-
 # %%
 rowOrder, colOrder = matrix_utils.HcOrder(np.nan_to_num(zScores))
 rowOrder = np.loadtxt(paths.outputDir + "clusterBarplotOrder.txt").astype(int)
 zClip = np.clip(zScores,0.0,10.0)
 zNorm = np.clip(zClip,0.0,1.0)
+
 plt.figure(dpi=300)
 sns.heatmap(zNorm[rowOrder].T[colOrder], cmap="vlag", linewidths=0.1, linecolor='black', cbar=False)
 plt.gca().set_aspect(2.0)
@@ -332,56 +266,15 @@ plt.tight_layout()
 # plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/signalPerClustPerAnnot_colorbar.pdf")
 plt.show()
 # %%
-clusteredEncode = matrix_utils.graphClustering(rankQT.T, "correlation", k=50, restarts=10)
-ami = metrics.adjusted_mutual_info_score(clusteredEncode, clustsPol2)
-# %%
-agreementMatrix = np.zeros((np.max(clusteredEncode)+1, np.max(clustsPol2)+1))
-for i in range(np.max(clusteredEncode)+1):
-    for j in range(np.max(clustsPol2)+1):
-        inEncodeClust = clusteredEncode == i
-        inPol2Clust = clustsPol2 == j
-        agreementMatrix[i,j] = 1-dice(inEncodeClust, inPol2Clust)
-colorMat = sns.color_palette("vlag", as_cmap=True)(agreementMatrix/np.max(agreementMatrix))
-plt.figure(dpi=300)
-plt.imshow(colorMat)
-plt.ylabel("ENCODE clusters")
-plt.xlabel("Pol II clusters")
-plt.title(f"Dice similarity between clusters\nClustering AMI : {np.round(ami*1000)/1000}")
-plt.gca().set_aspect(1)
-plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/clusteringAgreement.pdf", bbox_inches="tight")
-plt.show()
-plt.figure(figsize=(6, 1), dpi=300)
-norm = mpl.colors.Normalize(vmin=0, vmax=np.max(agreementMatrix))
-cb = mpl.colorbar.ColorbarBase(plt.gca(), sns.color_palette("vlag", as_cmap=True), norm, orientation='horizontal')
-cb.set_label("Dice similarity")
-plt.tight_layout()
-plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/clusteringAgreement_colorbar.pdf", bbox_inches="tight")
-plt.show()
-# %%
-# Plot UMAP of samples for visualization
-embedding = umap.UMAP(n_neighbors=30, min_dist=0.0,
-                     random_state=42, low_memory=False, metric="correlation").fit_transform(rankQT.T)
-# %%
-from scipy.special import erf
-mat = countsNorm > np.percentile(countsNorm, 95, axis=0)
-signalPerCategory = np.zeros((np.max(ann)+1, embedding.shape[0]))
-for i in range(np.max(ann)+1):
-    signalPerCategory[i, :] = np.mean(logCounts.T[:, ann == i], axis=1)
-signalPerCategory /= np.sum(signalPerCategory, axis=0) + 1e-15
-maxSignal = np.argmax(signalPerCategory, axis=0)
-entropy = np.sum(-signalPerCategory*np.log(signalPerCategory+1e-15), axis=0)
-normEnt = entropy / (-np.log(1.0/signalPerCategory.shape[0]+1e-15))
-# gini = (1 - np.sum(np.power(1e-7+signalPerCategory/(1e-7+np.sum(signalPerCategory,axis=0)), 2),axis=0))
-# Retrieve colors based on point annotation
-palette, colors = plot_utils.getPalette(maxSignal)
-colors = (1.0 - normEnt[:,None]) * colors + normEnt[:,None] * 0.5
-plt.figure(figsize=(10,10), dpi=500)
-plot_utils.plotUmap(embedding, colors)
-patches = []
-for i in np.unique(ann):
-    legend = Patch(color=palette[i], label=eq[i])
-    patches.append(legend)
-plt.legend(handles=patches, prop={'size': 7}, bbox_to_anchor=(0,1.02,1,0.2),
-                    loc="lower left", mode="expand", ncol=6)
-plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/umap_consensuses.pdf", bbox_inches="tight")
-plt.show()
+rowOrder = np.argsort(ann)
+topCat = rnaseqPerCategory.argmax(axis=0)
+signalTopCat = -rnaseqPerCategory[(topCat,range(len(topCat)))]
+colOrder = np.lexsort((signalTopCat, topCat))
+meanNormed = countModel.normed/np.mean(countModel.normed, axis=0)
+epsilon = 1/np.nanmax(np.log(meanNormed), axis=0)
+clippedSQ= np.log(1+countModel.normed)
+plt.figure(dpi=500)
+plot_utils.plotHC(clippedSQ.T, annotation.loc[order]["Annotation"], countModel.normed.T,  
+                  paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder)
+plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_autorank.pdf")
+plt.close()

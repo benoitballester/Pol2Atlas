@@ -430,7 +430,6 @@ class peakMerger:
             # Annotate each point according to strongest mean annotation signal in consensus
             signalPerCategory = np.zeros((np.max(annotations)+1, len(self.embedding[0])))
             signalPerAnnot = np.array([np.sum(self.matrix[:, i == annotations]) for i in range(np.max(annotations)+1)])
-            print(signalPerAnnot)
             for i in range(np.max(annotations)+1):
                 signalPerCategory[i, :] = np.sum(self.matrix[:, annotations == i], axis=1) / signalPerAnnot[i]
             signalPerCategory /= np.sum(signalPerCategory, axis=0)

@@ -67,9 +67,8 @@ rgs = rnaseqFuncs.quantileTransform(countsNorm)
 selected = rnaseqFuncs.variableSelection(rankdata(countsNorm, "min", axis=1), plot=False)
 # %%
 from sklearn.decomposition import PCA
-from lib.jackstraw.permutationPA import permutationPA
-bestRank = permutationPA(rgs[:, selected], max_rank=min(500, len(rgs)))
-decomp = PCA(bestRank[0], whiten=True).fit_transform(rgs[:, selected])
+from lib.jackstraw.permutationPA import permutationPA_PCA
+decomp = permutationPA_PCA(rgs[:, selected],3, max_rank=min(500, len(rgs)))
 # %%
 import umap
 from lib.utils.plot_utils import plotUmap, getPalette

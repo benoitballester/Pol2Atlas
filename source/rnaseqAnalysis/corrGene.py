@@ -6,7 +6,7 @@ import sys
 sys.path.append("./")
 import matplotlib.pyplot as plt
 from settings import params, paths
-from lib import rnaseqFuncs, normRNAseq, glm
+from lib import normRNAseq, glm, rnaseqFuncs
 from lib.utils import plot_utils, matrix_utils
 from matplotlib.patches import Patch
 from scipy.stats import rankdata, chi2, mannwhitneyu, ttest_ind

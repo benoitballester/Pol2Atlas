@@ -21,11 +21,14 @@ def addAnnotation(summits, tab, colName, inputBed, showCol="Name"):
     annotBed = pr.read_bed(inputBed)
     joined = summits.join(annotBed).as_df()
     if showCol is not None:
-        intersectTab.loc[:, colName] = None
-        intersectTab.loc[joined["Name"].values, colName] = joined[showCol + "_b"].values
+        tab.loc[:, colName] = None
+        try:
+            tab.loc[joined["Name"].values, colName] = joined[showCol + "_b"].values
+        except KeyError:
+            tab.loc[joined["Name"].values, colName] = joined[showCol].values
     else:
-        intersectTab.loc[:, colName] = 0
-        intersectTab.loc[joined["Name"].values, colName] = 1
+        tab.loc[:, colName] = 0
+        tab.loc[joined["Name"].values, colName] = 1
 # %%
 # Encode CCREs
 addAnnotation(consensusesPr, intersectTab, "Encode CCREs", 
@@ -58,6 +61,10 @@ addAnnotation(consensusesPr, intersectTab, "Fantom 5 TSSs", showCol=None,
 # Dnase meuleman
 addAnnotation(consensusesPr, intersectTab, "DNase meuleman", 
               inputBed="/scratch/pdelangen/projet_these/data/annotation/dnaseMeuleman.bed")
+# %%
+# CRM remap
+addAnnotation(consensusesPr, intersectTab, "ReMap CRM", showCol="Score",
+              inputBed="/scratch/pdelangen/projet_these/data/annotation/crm.bed")
 # %%
 intersectTab.to_csv(paths.tempDir + "intersectIntergPol2.tsv", sep="\t", index=None)
 

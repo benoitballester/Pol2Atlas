@@ -175,6 +175,43 @@ def threeStagesHC(matrix, metric, kMetaSamples=50000, method="ward"):
         link = linkage_vector(embedding, method=method)
         return hierarchy.leaves_list(link)
 
+def twoStagesHClinkage(matrix, metric="euclidean", kMetaSamples=50000, method="ward"):
+    """
+    Three steps Hierachical clustering. UMAP -> K-Means -> Ward HC on clusters
+    centroids.
+
+    Parameters
+    ----------
+    matrix : array-like
+        Data matrix
+    
+    metric : string
+        Metric used for nn query. It is recommended to use Pearson correlation
+        for float values and Dice similarity for binary data.
+        See the pynndescent documentation for a list of available metrics.
+    
+    kMetaSamples : int, optional (default 50000)
+        Number of K-Means clusters, or groups of samples used by HC.
+
+    method : string, optional (default "ward")
+        HC method
+    """
+    # Aggregrate samples via K-means in order to scale to large datasets
+    if len(matrix) > kMetaSamples:
+        clustering = MiniBatchKMeans(n_clusters=kMetaSamples, init="random", random_state=42, 
+                                    n_init=1)
+        assignedClusters = clustering.fit_predict(matrix)
+        Kx = clustering.cluster_centers_
+        # Perform HC
+        link = linkage_vector(Kx, method=method, metric=metric)
+        Korder = hierarchy.leaves_list(link)
+        order = np.array([], dtype="int")
+        for c in Korder:
+            order = np.append(order, np.where(c == assignedClusters)[0])
+        return order, link
+    else:
+        link = linkage_vector(matrix, method=method, metric=metric)
+        return hierarchy.leaves_list(link), link
 
 def threeStagesHClinkage(matrix, metric, kMetaSamples=50000, method="ward"):
     """
@@ -234,8 +271,10 @@ def looKnnCV(X, Y, metric, k):
     # Pynndescent is ran with a few extra neighbors for a better accuracy on ANNs
     nnGraph = index.neighbor_graph[0][:, 1:k+1]
     pred = []
+    annProp = np.bincount(Y)
     for nns in Y[nnGraph]:
-        # Find the most represented annotation in the k nearest neighbors
-        pred.append(np.argmax(np.bincount(nns)))
+        # Find the most represented label in the k nearest neighbors,
+        # Weighted by the proportion of the labels
+        pred.append(np.argmax(np.bincount(nns, minlength=len(annProp))/annProp))
     score = balanced_accuracy_score(Y, pred)
     return balanced_accuracy_score(Y, pred)
