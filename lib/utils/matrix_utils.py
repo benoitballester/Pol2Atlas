@@ -155,7 +155,7 @@ def threeStagesHC(matrix, metric, kMetaSamples=50000, method="ward"):
     """
     # First perform dimensionnality reduction
     lowMem = len(matrix) < 100000
-    embedding = umap.UMAP(n_components=20, min_dist=0.0, n_neighbors=30, 
+    embedding = umap.UMAP(n_components=20, min_dist=0.0, n_neighbors=50, 
                           low_memory=lowMem, random_state=42, metric=metric).fit_transform(matrix)
     embedding = np.nan_to_num(embedding, nan=1e5)
     # Aggregrate samples via K-means in order to scale to large datasets

@@ -134,7 +134,7 @@ for case in cases:
     # Pearson and raw residuals are skewed for non-normal models like the NB or Poisson
     # The number of components is selected with a permutation test
     from lib.jackstraw.permutationPA import permutationPA_PCA
-    decomp = permutationPA_PCA(anscombe[:, hv])
+    decomp = permutationPA_PCA(anscombe[:, hv], max_rank=min(500, len(countsNorm)), mincomp=2)
     # Plot PC 1 and 2
     plt.figure(dpi=500)
     plt.scatter(decomp[:, 0], decomp[:, 1], c=labels)
@@ -252,7 +252,7 @@ for case in cases:
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/UMAP_samples.pdf")
     plt.show()
     plt.close()
-    # Predictive model on DE Pol II
+    # Predictive model on PCA space
     predictions = np.zeros(len(labels), dtype=int)
     for train, test in StratifiedKFold(10, shuffle=True, random_state=42).split(decomp, labels):
         # Fit power transform on train data only

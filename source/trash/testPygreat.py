@@ -19,48 +19,18 @@ consensusesPr = pr.PyRanges(consensuses)
 clusts = np.loadtxt(paths.outputDir + "clusterConsensuses_Labels.txt").astype(int)
 
 # %%
-from lib.pyGREATglm import pyGREAT as pyGREATglm
-enricherglm = pyGREATglm(oboFile=paths.GOfolder + "/go_eq.obo", geneFile=paths.gencode, 
-                   geneGoFile=paths.GOfolder + "/goa_human.gaf")
+from lib.pyGREATnewInput import pyGREAT as pyGREATglm
+enricherglm = pyGREATglm("/scratch/pdelangen/projet_these/data_clean/GO_files/hsapiens.GO:BP.name.gmt",
+                          geneFile=paths.gencode)
+# %%
+
 # %%
 inclust = clusts == 4
 queryClust = pr.PyRanges(consensuses[inclust])
-# queryClust = pr.read_bed(paths.outputDir + "rnaseq/TumorVsNormal/globally_DE.bed")
-pvals = enricherglm.findEnriched(queryClust, background=consensusesPr, clusterize=False)
+# queryClust = pr.read_bed(paths.outputDir + "rnaseq/Survival2/globally_prognostic.bed")
+pvals = enricherglm.findEnriched(queryClust, background=consensusesPr)
 enricherglm.plotEnrichs(pvals)
-# %%
-from rpy2.robjects.packages import importr
-from rpy2.robjects import ListVector, StrVector, FloatVector
-revigo = importr("rrvgo")
-base = importr("base")
-
-gos = pvals.index
-tab = enricherglm.goClasses["biological_process"][["id", "name"]]
-tab.drop_duplicates("id", inplace=True)
-tab.set_index("name",inplace=True)
-gos = tab.loc[gos].values.ravel()
-scores = -np.log10(pvals["P(Beta > 0)"][pvals["BH corrected p-value"] < 0.05])
-scores.index = gos[pvals["BH corrected p-value"] < 0.05]
-
-from rpy2.robjects import numpy2ri
-numpy2ri.deactivate()
-simMatrix = revigo.calculateSimMatrix(StrVector(scores.index),
-                                    orgdb="org.Hs.eg.db",
-                                    ont="BP",
-                                    method="Rel")
-v = FloatVector(scores.values)
-v.names = list(scores.index)
-reducedTerms = revigo.reduceSimMatrix(simMatrix,
-                                v,
-                                threshold=0.9,
-                                orgdb="org.Hs.eg.db")
-
-numpy2ri.deactivate()
-grdevices = importr('grDevices')
-grdevices.pdf(file="testtttt.pdf", width=5, height=5)
-revigo.treemapPlot(reducedTerms)
-# plotting code here
-grdevices.dev_off()
+# enricherglm.revigoTreemap(pvals, output="test.pdf")
 # %%
 class distPlotter:
     def __init__(self, gencode, query):

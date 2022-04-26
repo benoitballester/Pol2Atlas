@@ -78,7 +78,7 @@ from lib.jackstraw.permutationPA import permutationPA_PCA
 from sklearn.preprocessing import StandardScaler
 
 feat = countModel.anscombeResiduals[:, hv & outliers]
-decomp = permutationPA_PCA(feat, 10, max_rank=min(500, len(feat)))
+decomp = permutationPA_PCA(feat, 3, max_rank=min(500, len(feat)))
 print(decomp.shape)
 # %%
 import umap
@@ -172,4 +172,23 @@ cb.set_label("95th percentile Z-score")
 plt.tight_layout()
 plt.savefig(paths.outputDir + "rnaseq/global/signalPerClustPerAnnot_colorbar.pdf")
 plt.show()
+# %%
+# HC 
+rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
+colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.anscombeResiduals.T, "correlation")
+# Plot Heatmap
+vals = countModel.normed
+plot_utils.plotHC(vals.T, eq[cancerType], vals.T,  
+                    rowOrder=rowOrder, colOrder=colOrder, hq=True)
+plt.savefig(paths.outputDir + "rnaseq/global/HM_all.pdf", bbox_inches="tight")
+# %%
+# HC 
+rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
+colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.anscombeResiduals.T[hv & outliers], "correlation")
+# Plot Heatmap
+vals = countModel.normed
+plot_utils.plotHC(vals.T[hv & outliers], eq[cancerType], vals.T[hv & outliers],  
+                    rowOrder=rowOrder, colOrder=colOrder, hq=True)
+plt.savefig(paths.outputDir + "rnaseq/global/HM_hv.pdf", bbox_inches="tight")
+
 # %%

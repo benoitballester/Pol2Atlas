@@ -103,7 +103,7 @@ def permutationPA_PCA(X, B=3, alpha=0.01, method='pca', max_rank=None, mincomp=0
     # compute p values
     pvals = np.ones(len(dstat_obs))
     for i in range(len(dstat_obs)):
-        pvals[i] = np.mean(dstat_null[:, i]+3*np.std(dstat_null[:, i]) >= dstat_obs[i])
+        pvals[i] = np.mean(dstat_null[:, i] >= dstat_obs[i])
     for i in range(1, len(dstat_obs)):
         pvals[i] = 1.0-(1.0-pvals[i - 1])*(1.0-pvals[i])
 

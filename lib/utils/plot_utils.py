@@ -150,7 +150,7 @@ def plotUmap(points, colors, forceVectorized=False):
         plt.gca().set_aspect(xScale/yScale)
 
 
-def plotHC(matrix, labels, matPct=None, annotationPalette=None, rowOrder="umap", colOrder="umap", cmap=None, hq=True):
+def plotHC(matrix, labels, matPct=None, annotationPalette=None, rowOrder="umap", colOrder="umap", cmap=None, hq=True, labelsPct=None):
     """
     Plot ordered matrix with sample and consensus annotation
 
@@ -167,6 +167,8 @@ def plotHC(matrix, labels, matPct=None, annotationPalette=None, rowOrder="umap",
         Otherwise uses the supplied order.
 
     """
+    if labelsPct is None:
+        labelsPct = labels
     if matPct is None:
         matPct = matrix
     if colOrder == "umap":
@@ -213,12 +215,15 @@ def plotHC(matrix, labels, matPct=None, annotationPalette=None, rowOrder="umap",
         np.add.at(sampleLabelCol, hasAnnot, palette[i])
     sampleLabelCol = resize(sampleLabelCol, (rasterRes[1], int(rasterRes[0]/33.3)), anti_aliasing=hq, order=0)
     # Big stacked barplot
-    signalPerCategory = np.zeros((np.max(annotations)+1, len(matrix)))
-    for i in range(np.max(annotations)+1):
-        signalPerCategory[i, :] = np.mean(matPct[:, annotations == i], axis=1)
+    annotations2 = eq.get_indexer(labelsPct)
+    signalPerCategory = np.zeros((np.max(annotations2)+1, len(matPct)))
+    signalPerAnnot = np.array([np.sum(matPct[:, i == annotations2]) for i in range(np.max(annotations2)+1)])
+    for i in np.unique(annotations2):
+        signalPerCategory[i, :] = np.sum(matPct[:, annotations2 == i], axis=1) / signalPerAnnot[i]
+    signalPerCategory /= np.sum(signalPerCategory, axis=0)
     runningSum = np.zeros(signalPerCategory.shape[1])
-    barPlot = np.zeros((matrix.shape[1], signalPerCategory.shape[1],3))
-    fractCount = signalPerCategory/np.sum(signalPerCategory, axis=0)*matrix.shape[1]
+    barPlot = np.zeros((matPct.shape[1], signalPerCategory.shape[1],3))
+    fractCount = signalPerCategory/np.sum(signalPerCategory, axis=0)*matPct.shape[1]
     for i, c in enumerate(fractCount):
         for j, f in enumerate(c):
             positions = np.round([runningSum[j],runningSum[j]+f]).astype("int")

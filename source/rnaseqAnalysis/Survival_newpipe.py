@@ -15,10 +15,11 @@ from statsmodels.stats.multitest import fdrcorrection
 import lifelines as ll
 from joblib import Parallel, delayed
 import warnings
+import rpy2.robjects as ro
 from rpy2.robjects.packages import importr
-from rpy2.robjects import numpy2ri
+from rpy2.robjects import pandas2ri, numpy2ri
+from rpy2.robjects.conversion import localconverter
 from matplotlib.ticker import FormatStrFormatter
-numpy2ri.activate()
 scran = importr("scran")
 np.random.seed(42)
 # %%
@@ -84,7 +85,7 @@ for case in cases:
         except:
             continue
     if len(counts) <= 20:
-        print(case, f"not enough samples ({allCounts.shape})")
+        print(case, f"not enough samples")
         continue
     if np.logical_not(survived).sum() < 3:
         print(case, f"not enough survival information")
@@ -97,19 +98,21 @@ for case in cases:
     allCounts = np.concatenate(counts, axis=1).T
     # Normalize and transform counts
     counts = allCounts
-    
-    nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=5, expMin=2)
+    detected = [np.sum(counts >= i, axis=0) for i in range(20)][::-1]
+    topMeans = np.lexsort(detected)[::-1][:int(counts.shape[1]*0.05+1)]
+    with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
+        sf = scran.calculateSumFactors(counts.T[topMeans])
+    nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=2)
     countsNz = allCounts[:, nzCounts]
-    sf = scran.calculateSumFactors(countsNz.T)
     countModel = rnaseqFuncs.RnaSeqModeler().fit(countsNz, sf)         
     anscombe = countModel.anscombeResiduals
     countsNorm = countModel.normed
     df = pd.DataFrame()
     df["Dead"] = np.logical_not(survived[np.isin(timeToEvent.index, order)])
     df["TTE"] = timeToEvent.loc[order].values
+    df["TTE"] -= df["TTE"].min() - 1
     df.index = order
     df = df.copy()
-
     stats = []
     cutoffs = []
     notDropped = []
@@ -119,9 +122,9 @@ for case in cases:
         warnings.filterwarnings("ignore")
         try:
             dfI = survDF.copy()
-            dfI[i] = expr[:, i]
-            cph = ll.CoxPHFitter()
-            cph.fit(dfI[[i, "TTE", "Dead"]], duration_col="TTE", event_col="Dead", robust=True)
+            dfI[i] = expr
+            cph = ll.CoxPHFitter(penalizer=1e-6)
+            cph.fit(dfI, duration_col="TTE", event_col="Dead", robust=True)
             stats = cph.summary
             if np.isnan(stats["p"].values[0]):
                 raise ValueError('Pval is NaN')
@@ -135,9 +138,8 @@ for case in cases:
             return dummyDF
     # Parallelize Cox regression across available cores using joblib
     batchSize = min(512, int(anscombe.shape[1]/len(os.sched_getaffinity(0))))
-
-    with Parallel(n_jobs=32, verbose=1, batch_size=batchSize) as pool:
-        stats = pool(delayed(computeCoxReg)(anscombe, df, i) for i in range(anscombe.shape[1]))
+    with Parallel(n_jobs=-1, verbose=1, batch_size=batchSize) as pool:
+        stats = pool(delayed(computeCoxReg)(anscombe[:, i], df, i) for i in range(anscombe.shape[1]))
     stats = pd.concat(stats)
     stats.index = nzCounts.nonzero()[0]
     pvals = np.array(stats["p"])
@@ -148,9 +150,10 @@ for case in cases:
     progConsensuses[4] = stats["exp(coef)"].loc[progConsensuses[3]]
     progConsensuses.to_csv(paths.outputDir + "rnaseq/Survival2/" + case + "/prognostic.bed", sep="\t", header=None, index=None)
     stats.to_csv(paths.outputDir + "rnaseq/Survival2/" + case + "/stats.csv", sep="\t")
-    enrichedGREAT = enricher.findEnriched(progConsensuses, consensuses[nzCounts])
-    enrichedGREAT.to_csv(paths.outputDir + "rnaseq/Survival2/" + case + "/GREATenriched.csv", sep="\t")
-    enricher.plotEnrichs(enrichedGREAT, savePath=paths.outputDir + "rnaseq/Survival2/" + case + "/GREATenriched.pdf")
+    if len(progConsensuses) > 0:
+        enrichedGREAT = enricher.findEnriched(progConsensuses, consensuses[nzCounts])
+        enrichedGREAT.to_csv(paths.outputDir + "rnaseq/Survival2/" + case + "/GREATenriched.csv", sep="\t")
+        enricher.plotEnrichs(enrichedGREAT, savePath=paths.outputDir + "rnaseq/Survival2/" + case + "/GREATenriched.pdf")
     studiedConsensusesCase[case] = nzCounts.nonzero()[0]
     progPerCancer[case] = np.zeros(allCounts.shape[1])
     progPerCancer[case][nzCounts] = np.where(qvals > 0.05, 0.0, np.sign(stats["coef"].ravel()))
@@ -192,7 +195,7 @@ for i in range(nPerm):
     shuffledDF = np.zeros_like(mat)
     for j, cancer in enumerate(mat.columns):
         # Permute only on detected Pol II
-        shuffledDF[studiedConsensusesCase[cancer], j] = np.random.permutation(mat.iloc[studiedConsensusesCase[cancer], j])
+        shuffledDF[:, j] = np.random.permutation(mat.iloc[:, j])
     s = np.sum(shuffledDF, axis=1)
     counts = np.bincount(s)/nPerm
     countsRnd[:counts.shape[0]] += counts

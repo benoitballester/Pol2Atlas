@@ -58,39 +58,8 @@ sns.stripplot(data=df, x="Percentage of mapped reads", y="Annotation", palette=p
                 edgecolor="black", jitter=1/3, alpha=1.0, s=2, linewidth=0.1)
 plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/pctmapped_per_annot.pdf", bbox_inches="tight")
 # %%
-nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=3)
+nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=2)
 counts = allCounts[:, nzCounts]
-baseSF = np.sum(counts, axis=1)
-baseSF = baseSF / np.mean(baseSF)
-baseNormed = counts / baseSF[:, None]
-# %%
-binCount = 100
-pctSelected = 0.5
-m = np.mean(baseNormed, axis=0)
-v = np.var(baseNormed/m, axis=0)
-bins = np.percentile(m, np.arange(binCount))
-bins[0] -= 1
-bins[-1] += 1
-assigned = np.digitize(m, bins)
-selected = np.zeros(len(m), bool)
-for i in range(75,binCount+1):
-    inBin = assigned == i
-    rescaledCounts = baseNormed[:, inBin] / np.mean(baseNormed[:, inBin], axis=0)
-    topK = np.argsort(np.var(rescaledCounts, axis=0))[:int(pctSelected*inBin.sum()+1)]
-    selBin = np.zeros(inBin.sum(), bool)
-    selBin[topK] = True
-    selected[inBin] = selBin
-
-# %%
-c = np.array([[0.0,0.0,0.0]]*(baseNormed.shape[1]))
-c[:,0 ] = np.argsort(np.lexsort(detected)[::-1]) < 30000
-plt.figure(dpi=500)
-plt.scatter(m, v/m, s = 0.2, linewidths=0, c=c)
-plt.xscale("log")
-plt.yscale("log")
-plt.xlabel("Pol II probe mean")
-plt.ylabel("Pol II probe variance")
-
 
 # %%
 import rpy2.robjects as ro
@@ -100,22 +69,30 @@ from rpy2.robjects.conversion import localconverter
 scran = importr("scran")
 deseq = importr("DESeq2")
 base = importr("base")
-s4 = importr("S4Vectors")
-detected = [np.sum(counts >= i, axis=0) for i in range(10)][::-1]
+detected = [np.sum(counts >= i, axis=0) for i in range(20)][::-1]
 topMeans = np.lexsort(detected)[::-1][:int(counts.shape[1]*0.05+1)]
 with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
     sf = scran.calculateSumFactors(counts.T[topMeans])
 # %%
-import rpy2.robjects as ro
-from rpy2.robjects.packages import importr
-from rpy2.robjects import pandas2ri, numpy2ri
-from rpy2.robjects.conversion import localconverter
-scran = importr("scran")
-deseq = importr("DESeq2")
-base = importr("base")
-countModel = rnaseqFuncs.RnaSeqModeler().fit(counts, sf)
+from lib.AE import DenoiserAE
+model = DenoiserAE("NB")
+denoised = model.fit_transform(counts.T).T
 # %%
-pDev, outliers = countModel.hv_selection()
+from statsmodels.genmod.families.family import Gamma, NegativeBinomial, Poisson
+from statsmodels.genmod.families.links import Log
+import statsmodels.api as sm
+func = NegativeBinomial(Log(), 1.0)
+residuals = np.zeros_like(denoised)
+denoisedNormed = denoised / sf[:, None]
+means = np.mean(denoisedNormed, axis=0)
+for i in range(denoised.shape[1]):
+    residuals[:, i] = func.resid_anscombe(denoisedNormed[:, i], means[i])
+    if i % 200 == 0:
+        print(i)
+# %%
+from scipy.stats import chi2
+deviances = np.sum(residuals**2, axis=0)
+pDev = chi2(509).sf(deviances)
 hv = fdrcorrection(pDev)[0]
 lv = fdrcorrection(1-pDev)[0]
 
@@ -124,8 +101,8 @@ from sklearn.decomposition import PCA
 from lib.jackstraw.permutationPA import permutationPA
 from sklearn.preprocessing import StandardScaler
 
-feat = countModel.anscombeResiduals[:, (hv & outliers)]
-bestRank = permutationPA(feat, max_rank=min(200, len(feat)))
+feat = residuals[:, hv]
+bestRank = permutationPA(feat, max_rank=min(200, np.min(feat.shape))-1)
 modelPCA = PCA(bestRank[0], whiten=True, svd_solver="arpack", random_state=42)
 decomp = modelPCA.fit_transform(feat)
 matrix_utils.looKnnCV(decomp, ann, "correlation",1)

@@ -75,20 +75,48 @@ topMeans = np.lexsort(detected)[::-1][:int(counts.shape[1]*0.05+1)]
 with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
     sf = scran.calculateSumFactors(counts.T[topMeans])
 # %%
-from lib.rnaseqFuncs import RnaSeqModeler
-countModel = RnaSeqModeler().fit(counts, sf)
+import tensorflow as tf
+import tensorflow_addons as tfa
+from lib.AE import nb_loglike
+embeddings = 80
+np.random.seed(42)
 
-pDev, nonOutliers = countModel.hv_selection()
-hv = fdrcorrection(pDev)[0]
-
+A = counts[:, np.random.choice(counts.shape[1], 10000, replace=False)].astype("float32")
+lossFunc = nb_loglike(A.shape[1])
+bestAlpha = tf.identity(lossFunc.logalpha)
+lossFunc.logalpha = tf.Variable(bestAlpha, dtype=tf.float32)
+f0 = np.log(np.mean(A/sf.reshape(-1,1), axis=0)) + np.log(sf.reshape(-1,1))
+fx = f0.astype("float32")
+Us = []
+for i in range(embeddings):
+    U = tf.Variable(tf.random.normal([A.shape[1], 1])/100.0, dtype=tf.float32)
+    V = tf.Variable(tf.random.normal([1, A.shape[0]])/100.0, dtype=tf.float32)
+    optimizer = tfa.optimizers.AdamW(1e-6, 1e-1, amsgrad=True)
+    trainable_weights = [U, V]
+    bestLoss = (-1, 1000000000)
+    for step in range(10000):
+        with tf.GradientTape() as tape:
+            A_prime = tf.clip_by_value(tf.transpose(tf.matmul(U, V)) + fx, -30, 30)
+            loss = lossFunc([A, A_prime])
+        if float(loss) - bestLoss[1] < -0.01:
+            bestLoss = (step, float(loss))
+            bestU = tf.identity(U)
+            bestV = tf.identity(V)
+            bestAlpha = tf.identity(lossFunc.logalpha)
+        else:
+            if step - bestLoss[0] > 20:
+                break
+        grads = tape.gradient(loss, trainable_weights)
+        optimizer.apply_gradients(zip(grads, trainable_weights))
+        if step % 20 == 0:
+            print(f"Training loss at step {step}: {loss:.4f}")
+    if bestLoss[0] != 0:  
+        fx += tf.transpose(tf.matmul(bestU, bestV))
+        Us.append(bestV.numpy().T)
+        lossFunc.logalpha = tf.Variable(bestAlpha, dtype=tf.float32)
+decomp = np.concatenate(Us, axis=1)
 # %%
-from sklearn.decomposition import PCA
-from lib.jackstraw.permutationPA import permutationPA_PCA
-from sklearn.preprocessing import StandardScaler
-
-feat = countModel.anscombeResiduals[:, hv & nonOutliers]
-decomp = permutationPA_PCA(feat)
-matrix_utils.looKnnCV(decomp, ann, "correlation",1)
+matrix_utils.looKnnCV(decomp[:, :20], ann, "correlation",30)
 # %%
 # Plot UMAP of samples for visualization
 embedding = umap.UMAP(n_neighbors=50, min_dist=0.5, random_state=0, low_memory=False, metric="correlation").fit_transform(decomp)
