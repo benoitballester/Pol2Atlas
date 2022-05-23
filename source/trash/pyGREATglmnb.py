@@ -11,6 +11,8 @@ from rpy2.robjects import FloatVector, StrVector, numpy2ri, pandas2ri
 from rpy2.robjects.conversion import localconverter
 from rpy2.robjects.packages import importr
 from statsmodels.stats.multitest import fdrcorrection
+from statsmodels.api import GLM
+from statsmodels.genmod.families.family import Binomial
 
 from .utils import overlap_utils
 
@@ -54,7 +56,37 @@ def capTxtLen(txt, maxlen):
     except:
         return "N/A"
 
-def fitNBmodel(hasAnnot, observed, expected, goTerm, idx, nbType="nb2", cov_type=None):
+def fitBinomModel(hasAnnot, observed, expected, goTerm, idx):
+    df = pd.DataFrame(np.array([hasAnnot.T.astype(float), np.ones_like(expected)]).T, 
+                                columns=["GS", "Intercept"], index=idx)
+    model = discrete_model.Poisson(observed, df, exposure=expected)
+    # Set a large alpha as a first guess for better convergence
+    model = model.fit([0.0, 0.0], disp=False, maxiter=100)
+    beta = model.params["GS"]
+    waldP = model.pvalues["GS"]
+    # Get one sided pvalues
+    if beta >= 0:
+        pvals = waldP/2.0
+    else:
+        pvals = (1.0-waldP/2.0)
+    return (goTerm, pvals, beta)
+
+def fitPoimodel(hasAnnot, observed, expected, goTerm, idx):
+    df = pd.DataFrame(np.array([hasAnnot.T.astype(float), np.ones_like(expected)]).T, 
+                                columns=["GS", "Intercept"], index=idx)
+    model = discrete_model.Poisson(observed, df, exposure=expected)
+    # Set a large alpha as a first guess for better convergence
+    model = model.fit([0.0, 0.0], disp=False, maxiter=100)
+    beta = model.params["GS"]
+    waldP = model.pvalues["GS"]
+    # Get one sided pvalues
+    if beta >= 0:
+        pvals = waldP/2.0
+    else:
+        pvals = (1.0-waldP/2.0)
+    return (goTerm, pvals, beta)
+
+def fitNBmodel(hasAnnot, observed, expected, goTerm, idx, nbType="nb2", cov_type="nonrobust"):
     df = pd.DataFrame(np.array([hasAnnot.T.astype(float), np.ones_like(expected)]).T, 
                                 columns=["GS", "Intercept"], index=idx)
     model = discrete_model.NegativeBinomial(observed, df, nbType, exposure=expected)
@@ -105,7 +137,7 @@ class pyGREAT:
         # Apply infered regulatory logic
         self.geneRegulatory = regLogicGREAT(5000, 1000, 1000000)(reversedTx)
 
-    def findEnriched(self, query, background=None, minGenes=3, cores=-1):
+    def findEnriched(self, query, background=None, minGenes=2, cores=-1):
         """
         Find enriched terms in genes near query.
 
@@ -161,12 +193,12 @@ class pyGREAT:
         # µ is the predicted intersection count. B0 and B1 are the regressed coefficient
         # B1 is the tested coefficient
         with Parallel(n_jobs=cores, verbose=2, batch_size=maxBatch) as pool:
-            results = pool(delayed(fitNBmodel)(hasAnnot, ratios, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows())
+            results = pool(delayed(fitPoimodel)(hasAnnot, ratios, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows())
         results = pd.DataFrame(results)
         results.set_index(0, inplace=True)
         results.columns = ["P(Beta > 0)", "Beta"]
+        results.dropna(inplace=True)
         qvals = results["P(Beta > 0)"].copy()
-        qvals.dropna(inplace=True)
         qvals.loc[:] = fdrcorrection(qvals)[1]
         results["BH corrected p-value"] = qvals
         results.sort_values(by="P(Beta > 0)", inplace=True)
@@ -188,7 +220,7 @@ class pyGREAT:
         newDF = enrichDF.copy()
         newDF.index = [self.goMap[i] for i in newDF.index]
         selected = (newDF["BH corrected p-value"] < alpha)
-        ordered = -np.log10(newDF["BH corrected p-value"][selected]).sort_values(ascending=True)[:topK]
+        ordered = -np.log10(1e-250+newDF["BH corrected p-value"][selected]).sort_values(ascending=True)[:topK]
         terms = ordered.index
         t = [capTxtLen(term, 50) for term in terms]
         ax.tick_params(axis="x", labelsize=8)
@@ -205,9 +237,9 @@ class pyGREAT:
             fig.savefig(savePath, bbox_inches="tight")
         return fig, ax
 
-    def revigoTreemap(self, enrichDF, output=None):
+    def revigoTreemap(self, enrichDF, output=None, simplification=0.9):
         gos = enrichDF.index
-        scores = -np.log10(enrichDF["P(Beta > 0)"][enrichDF["BH corrected p-value"] < 0.05])
+        scores = -np.log10(1e-250+enrichDF["P(Beta > 0)"][enrichDF["BH corrected p-value"] < 0.05])
         scores.index = gos[enrichDF["BH corrected p-value"] < 0.05]
         numpy2ri.deactivate()
         simMatrix = revigo.calculateSimMatrix(StrVector(scores.index),
@@ -218,11 +250,11 @@ class pyGREAT:
         v.names = list(scores.index)
         reducedTerms = revigo.reduceSimMatrix(simMatrix,
                                         v,
-                                        threshold=0.9,
+                                        threshold=simplification,
                                         orgdb="org.Hs.eg.db")
         numpy2ri.deactivate()
         grdevices = importr('grDevices')
-        grdevices.pdf(file="testtttt.pdf", width=5, height=5)
+        grdevices.pdf(file=output, width=5, height=5)
         revigo.treemapPlot(reducedTerms)
         # plotting code here
         grdevices.dev_off()

@@ -49,10 +49,10 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, disconnection_dis
     """
     # Create NN graph
     if k == "auto":
-        k = int(np.power(len(matrix), 0.2)*2)
+        k = int(np.power(matrix.shape[0], 0.2)*2)
     # Add a few extra NNs to compute in order to get more accurate ANNs
     extraNN = 10
-    lowMem = len(matrix) > 100000
+    lowMem = matrix.shape[0] > 100000
     index = pynndescent.NNDescent(matrix, n_neighbors=k+extraNN+1, metric=metric, 
                                 low_memory=lowMem, random_state=42)
     nnGraph = index.neighbor_graph[0][:, 1:k+1]
@@ -155,7 +155,7 @@ def threeStagesHC(matrix, metric, kMetaSamples=50000, method="ward"):
     """
     # First perform dimensionnality reduction
     lowMem = len(matrix) < 100000
-    embedding = umap.UMAP(n_components=20, min_dist=0.0, n_neighbors=50, 
+    embedding = umap.UMAP(n_components=10, min_dist=0.0, n_neighbors=50, 
                           low_memory=lowMem, random_state=42, metric=metric).fit_transform(matrix)
     embedding = np.nan_to_num(embedding, nan=1e5)
     # Aggregrate samples via K-means in order to scale to large datasets
@@ -236,7 +236,7 @@ def threeStagesHClinkage(matrix, metric, kMetaSamples=50000, method="ward"):
     """
     # First perform dimensionnality reduction
     lowMem = len(matrix) < 100000
-    embedding = umap.UMAP(n_components=20, min_dist=0.0, n_neighbors=30, 
+    embedding = umap.UMAP(n_components=min(10, max(1, int(np.min(matrix.shape)/2))), min_dist=0.0, n_neighbors=50, 
                           low_memory=lowMem, random_state=42, metric=metric).fit_transform(matrix)
     embedding = np.nan_to_num(embedding, nan=1e5)
     # Aggregrate samples via K-means in order to scale to large datasets
@@ -265,6 +265,9 @@ def HcOrder(mat, method="ward", metric="euclidean"):
     return rowOrder, colOrder
 
 def looKnnCV(X, Y, metric, k):
+    '''
+    Leave-one-out KNN classification
+    '''
     index = pynndescent.NNDescent(X, n_neighbors=min(30+k, len(X)-1), 
                                 metric=metric, low_memory=False, random_state=42)
     # Exclude itself and select NNs (equivalent to leave-one-out cross-validation)

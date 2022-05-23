@@ -10,40 +10,56 @@ from joblib import Parallel, delayed
 from rpy2.robjects import numpy2ri
 from rpy2.robjects.packages import importr
 from scipy.special import erfinv
-from scipy.stats import nbinom, rankdata, norm, chi2, shapiro, combine_pvalues
+from scipy.stats import nbinom, rankdata, norm
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
+from statsmodels.api import GLM
 from statsmodels.genmod.families import family
 from statsmodels.stats.multitest import fdrcorrection
-from scipy.stats import kstest
 
 scran = importr("scran")
 
 def findMode(arr):
     # Finds the modal value of a continuous sample
-    pos, fitted = KDEpy.FFTKDE(bw="silverman").fit(arr).evaluate(10000)
+    pos, fitted = KDEpy.FFTKDE(bw="silverman").fit(arr).evaluate(1000000)
     return pos[np.argmax(fitted)]
 
-
 def nb_rqr(x, m, alpha):
-    n = 1.0/alpha
+    n = 1/alpha
     p = m / (m + alpha * (m**2))
-    func = nbinom(n,p)
-    # Two cases to maximize precision
-    f1 = func.cdf(x-1)
-    f2 = func.sf(x-1)
-    q = np.random.random(len(x)) * func.pmf(x)
-    q1 = norm.ppf(np.clip(f1+q,0.0,1.0))
-    q2 = norm.isf(np.clip(f2-q,0.0,1.0))
-    # Clip values at precision boundaries
-    return np.clip(np.where(f1 > 0.5, q2, q1), -50, 50)
+    q = nbinom(n,p).cdf(x-1) + np.random.random(x.shape) * nbinom(n,p).pmf(x)
+    f1 = norm.ppf(q)
+    f2 = norm.sf(q)
+    return np.clip(np.where(q > 0, f1, f2), -38.2, 38.2)
 
-def statsProcess(alpha, sf, counts, m):
-    pred = m * sf
-    rp = (counts-pred) / np.sqrt(pred + alpha * pred**2)
-    rp = np.clip(rp, -np.sqrt(16+len(counts)/4),np.sqrt(16+len(counts)/4))
-    p = chi2(len(sf)-1).sf(np.sum(np.square(rp)))
-    return rp, p
+def statsProcess(regAlpha,scaled_ni,countsSel,means):
+    func = family.NegativeBinomial(alpha=regAlpha)
+    pred = means * scaled_ni
+    anscombeResiduals = func.resid_dev(countsSel, pred)
+    dev_raw = func.deviance(countsSel, pred)
+    res_pearson = (countsSel-pred)/np.sqrt(pred + regAlpha * np.square(pred))
+    return anscombeResiduals, dev_raw, res_pearson, pred
+
+def devianceP(nbMean, alpha, devRef, nSamples = 100):
+    alpha = alpha
+    n = 1 / alpha
+    p = nbMean / (nbMean + alpha * (nbMean**2))
+    devs = np.zeros(nSamples)
+    rv = np.random.negative_binomial(n,p,size=(nSamples,len(p)))
+    func = family.NegativeBinomial(alpha=alpha)
+    resid = func.resid_dev(rv, nbMean) + 0.25
+    devs = np.sum(np.square(resid), axis=1)
+    return np.mean(devs > devRef), np.mean(devs)
+
+def nullDeviance(nbMean, alpha, nSamples = 10000):
+    alpha = alpha
+    n = 1 / alpha
+    p = nbMean / (nbMean + alpha * (nbMean**2))
+    devs = np.zeros(nSamples)
+    rv = np.random.negative_binomial(n,p,size=(nSamples,len(p)))
+    func = family.NegativeBinomial(alpha=alpha)
+    resid = func.resid_dev(rv, nbMean) + 0.25
+    devs = np.sum(np.square(resid), axis=1)
+    return devs
 
 def fitModels(counts, sfs, m):
     warnings.filterwarnings("error")
@@ -66,12 +82,11 @@ class RnaSeqModeler:
         '''
         pass
     
-    def fit(self, counts, sf, subSampleEst=10000, hv_fdr=0.05, plot=True, verbose=True):
+    def fit(self, counts, sf, subSampleEst=20000, plot=True, verbose=True):
         '''
         Fit the model
         '''
         # Setup size factors
-        self.counts = counts
         self.scaled_sf = sf/np.mean(sf)
         self.normed = counts / self.scaled_sf.reshape(-1,1)
         # Estimate Negative Binomial parameters per Pol II probe
@@ -82,8 +97,8 @@ class RnaSeqModeler:
             subSampleEst = counts.shape[1]
         shuffled = np.random.permutation(counts.shape[1])[:subSampleEst]
         m = np.mean(self.normed, axis=0)
-        with Parallel(n_jobs=-1, verbose=verbose, batch_size=512, max_nbytes=None) as pool:
-           fittedParams = pool(delayed(fitModels)(self.counts[:, i], self.scaled_sf, m[i]) for i in shuffled)
+        with Parallel(n_jobs=-1, verbose=verbose, batch_size=512) as pool:
+           fittedParams = pool(delayed(fitModels)(counts[:, i], self.scaled_sf, m[i]) for i in shuffled)
         alphas = np.array(fittedParams)[:, 1]
         valid = alphas > 1e-3
         # Estimate NB overdispersion in function of mean expression
@@ -92,7 +107,7 @@ class RnaSeqModeler:
         # The modal value of overdispersion is tracked for each decile of mean expression using a kernel density estimate
         # The median value would overestimate overdispersion as the % of DE probes is unknown
         means = np.mean(self.normed[:, shuffled], axis=0)
-        nQuantiles = 20
+        nQuantiles = 10
         pcts = np.linspace(0,100,nQuantiles+1)
         centers = (pcts * 0.5 + np.roll(pcts,1)*0.5)[1:]/100
         quantiles = np.percentile(means, pcts)
@@ -105,14 +120,6 @@ class RnaSeqModeler:
         self.means = np.mean(self.normed, axis=0)
         fittedAlpha = si.interp1d(centers, regressed, bounds_error=False, fill_value="extrapolate")
         self.regAlpha = fittedAlpha((rankdata(self.means)-0.5)/len(self.means))
-
-        # Dispatch accross multiple processes
-        with Parallel(n_jobs=-1, verbose=verbose, batch_size=512, max_nbytes=None) as pool:
-            stats = pool(delayed(statsProcess)(self.regAlpha[i], self.scaled_sf, counts[:, i], self.means[i]) for i in range(counts.shape[1]))
-        # stats = [statsProcess(self.regAlpha[i], self.scaled_sf, counts[:, i], self.means[i]) for i in range(counts.shape[1])]
-        # Unpack results
-        self.residuals = np.array([i[0] for i in stats]).T
-        self.hv = fdrcorrection(np.array([i[1] for i in stats]).T, hv_fdr)[0]
         if plot:
             plt.figure(dpi=500)
             plt.plot(self.regAlpha[np.argsort(np.mean(self.normed, axis=0))])
@@ -127,9 +134,8 @@ class RnaSeqModeler:
             v = np.var(self.normed[:, :self.normed.shape[1]], axis=0)
             m = np.mean(self.normed[:, :self.normed.shape[1]], axis=0)
             c = np.array([[0.0,0.0,1.0]]*(self.normed.shape[1]))
-            c[self.hv] = [1.0,0.0,0.0]
             plt.figure(dpi=500)
-            plt.scatter(m, v, s = 0.5*np.sqrt(200000/len(m)), linewidths=0, c=c, alpha=0.25)
+            plt.scatter(m, v, s = 0.2, linewidths=0, c=c)
             plt.scatter(m, m+m*m*self.regAlpha, s = 1.0, linewidths=0, c=[0.0,1.0,0.0])
             pts = np.geomspace(m.min(), m.max())
             plt.plot(pts, pts)
@@ -139,8 +145,97 @@ class RnaSeqModeler:
             plt.ylabel("Pol II probe variance")
             plt.show()
             plt.close()
+        # Dispatch accross multiple processes
+        with Parallel(n_jobs=-1, verbose=verbose, batch_size=512) as pool:
+            stats = pool(delayed(statsProcess)(self.regAlpha[i], self.scaled_sf, counts[:, i], self.means[i]) for i in range(counts.shape[1]))
+        # stats = [statsProcess(self.regAlpha[i], self.scaled_sf, counts[:, i], self.means[i]) for i in range(counts.shape[1])]
+        # Unpack results
+        print("lol")
+        self.anscombeResiduals = np.array([i[0] for i in stats]).T
+        self.anscombeResiduals = np.nan_to_num(self.anscombeResiduals, nan=0.0)
+        self.deviances = np.sum(self.anscombeResiduals**2, axis=0)
+        self.res_dev = np.array([i[2] for i in stats]).T
+        self.nullDataset = np.array([i[3] for i in stats]).T
         return self
 
+    
+    def hv_selection(self, evalsPts=100, maxOutlierDeviance=0.66, plot=True, verbose=True):
+        '''
+        Select features not not well modelized by the fitted NB model.
+        Requires to have run the fit method before.
+
+        Parameters
+        ----------
+        evalsPts: int (default 100)
+            The number of points at which to evaluate the CDF of the deviance
+
+        maxOutlierDeviance: float (default 0.75)
+            Threshold for outlier removal (set to 0 to not remove outliers). Maximum amount
+            of excess deviance carried by a single point.
+
+        plot: bool (default True)
+            Whether to display or not the mean/var relationship with selected features
+
+        Returns
+        -------
+        pvals : ndarray
+            Deviance p values
+        deviance_outliers : boolean ndarray
+            Features with a single point carrying most of excess deviance. 
+        
+        '''
+        # In order to find potentially DE probes, find the ones that are not well modelized by the NB model using deviance as a criterion
+        # For sufficiently large NB means, deviance follows a Chi-squared distribution with n samples - 1 degrees of freedom
+        # But we do not have large means, so use monte-carlo instead and sample from a NB(mu, alpha) distribution
+        with Parallel(n_jobs=-1, verbose=verbose, batch_size=512) as pool:
+            stats = pool(delayed(devianceP)(self.nullDataset[:, i], self.regAlpha[i], self.deviances[i]) for i in range(self.normed.shape[1]))
+        pvals = np.array([i[0] for i in stats])
+        expectedDeviances = np.array([i[1] for i in stats])
+
+        # It is too time consuming to compute monte-carlo deviance cdfs with a sufficient sample count for each probe
+        # Instead compute it at fixed percentiles of the mean and interpolate p-value estimates
+        '''
+        rankedMeans = (rankdata(self.means)-0.5)/len(self.means)*100
+        centers = (np.linspace(0,100,evalsPts+1)+0.5/evalsPts)[:-1]
+        assigned = [np.where(np.abs(rankedMeans-c) < 100.0/evalsPts)[0] for c in centers]
+        pvals = np.zeros(len(rankedMeans))
+        weights = np.zeros(len(rankedMeans))
+        expectedDeviances = np.zeros(len(rankedMeans))
+        for i in range(len(assigned)):
+            bucket = assigned[i]
+            interpFactor = np.maximum(0, np.abs(rankedMeans[bucket] - centers[i])*evalsPts/100)
+            m = np.sum(self.means[bucket] * interpFactor)/np.sum(interpFactor)
+            a = np.sum(self.regAlpha[bucket] * interpFactor)/np.sum(interpFactor)
+            devBucket = self.deviances[bucket]
+            ecdf = nullDeviance(m * self.scaled_sf, a)
+            pvals[bucket] += np.mean(devBucket[:, None] < ecdf, axis=1) * interpFactor
+            expectedDeviances[bucket] += np.mean(ecdf) * interpFactor
+            weights[bucket] += interpFactor
+        expectedDeviances /= weights
+        pvals /= weights
+        '''
+        # Filter probes who
+        # Filter probes whose excess deviance (observed-expected) is mostly driven (75%+) by a single outlier
+        deltaDev = self.deviances-expectedDeviances
+        filteredOutliers = np.sum(np.square(self.anscombeResiduals.T) > maxOutlierDeviance*deltaDev[:, None], axis=1) != 1
+        hv = fdrcorrection(pvals)[0]
+        if plot:
+            # Plot mean/variance relationship and selected probes
+            v = np.var(self.normed[:, :self.normed.shape[1]], axis=0)
+            m = np.mean(self.normed[:, :self.normed.shape[1]], axis=0)
+            c = np.array([[0.0,0.0,1.0]]*(self.normed.shape[1]))
+            c[hv] = [1.0,0.0,0.0]
+            plt.figure(dpi=500)
+            plt.scatter(m, v, s = 0.2, linewidths=0, c=c)
+            plt.scatter(m, m+m*m*self.regAlpha, s = 1.0, linewidths=0, c=[0.0,1.0,0.0])
+            pts = np.geomspace(m.min(), m.max())
+            plt.plot(pts, pts)
+            plt.xscale("log")
+            plt.yscale("log")
+            plt.xlabel("Pol II probe mean")
+            plt.ylabel("Pol II probe variance")
+            plt.show()
+        return pvals, filteredOutliers
         
 
 def permutationPA_PCA(X, perm=3, alpha=0.01, solver="randomized", whiten=True,
@@ -241,4 +336,9 @@ def permutationPA_PCA(X, perm=3, alpha=0.01, solver="randomized", whiten=True,
 
 def filterDetectableGenes(counts, readMin, expMin):
     return np.sum(counts >= readMin, axis=0) >= expMin
+
+
+def quantileTransform(counts):
+    rg = ((rankdata(counts, axis=0)-0.5)/counts.shape[0])*2.0 - 1.0
+    return StandardScaler().fit_transform(erfinv(rg))
 

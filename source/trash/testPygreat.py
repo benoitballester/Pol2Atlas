@@ -17,20 +17,17 @@ consensuses["Name"] = np.arange(len(consensuses))
 consensuses.columns = ["Chromosome", "Start", "End", "Name"]
 consensusesPr = pr.PyRanges(consensuses)
 clusts = np.loadtxt(paths.outputDir + "clusterConsensuses_Labels.txt").astype(int)
-
 # %%
-from lib.pyGREATnewInput import pyGREAT as pyGREATglm
+from lib.pyGREATglm import pyGREAT as pyGREATglm
 enricherglm = pyGREATglm("/scratch/pdelangen/projet_these/data_clean/GO_files/hsapiens.GO:BP.name.gmt",
                           geneFile=paths.gencode)
 # %%
-
-# %%
-inclust = clusts == 4
+inclust = clusts == 2
 queryClust = pr.PyRanges(consensuses[inclust])
 # queryClust = pr.read_bed(paths.outputDir + "rnaseq/Survival2/globally_prognostic.bed")
 pvals = enricherglm.findEnriched(queryClust, background=consensusesPr)
 enricherglm.plotEnrichs(pvals)
-# enricherglm.revigoTreemap(pvals, output="test.pdf")
+enricherglm.clusterTreemap(pvals, score="-log10(pval)", output="test.pdf")
 # %%
 class distPlotter:
     def __init__(self, gencode, query):

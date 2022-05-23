@@ -4,11 +4,11 @@ import matplotlib.pyplot as plt
 import cv2
 from scipy.stats import norm
 import pandas as pd 
+from statsmodels.stats.multitest import fdrcorrection
 import umap
 from matplotlib.patches import Patch
 from skimage.transform import rescale, resize, downscale_local_mean
 import matplotlib.patches as mpatch
-import zepid
 from zepid.graphics import EffectMeasurePlot
 import matplotlib
 
@@ -202,6 +202,7 @@ def plotHC(matrix, labels, matPct=None, annotationPalette=None, rowOrder="umap",
     eq = ["Non annotated"]
     annotations, eq = pd.factorize(labels,
                                     sort=True)
+    eq = pd.Index(eq)
     if np.max(annotations) >= 18 and annotationPalette is None:
         print("Warning : Over 18 annotations, using random colors instead of a palette")
     if annotationPalette is None:
@@ -457,3 +458,31 @@ def forestPlot(regDF):
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(True)
     ax.spines['left'].set_visible(False)
+
+
+def manhattanPlot(coords, chrInfo, pvalues, es, maxLogP=30, threshold="fdr", fdrThreshold=0.05):
+    fig, ax = plt.subplots(dpi=500)
+    fractPos = (chrInfo.values.ravel()/np.sum(chrInfo.values).ravel())
+    offsets = np.insert(np.cumsum(fractPos),0,0)
+    for i, c in enumerate(chrInfo.index):
+        usedIdx = coords[0] == c
+        coordSubset = coords[usedIdx]
+        x = offsets[i] + (coordSubset[1]*0.5 + coordSubset[2]*0.5)/chrInfo.loc[c].values * fractPos[i]
+        y = np.clip(-np.log10(pvalues[usedIdx]),0, maxLogP)
+        ax.scatter(x,y, s=1.0, linewidths=0)
+    ax.set_xticks(offsets[:-1]+0.5*fractPos, chrInfo.index, rotation=90, fontsize=8)
+    if threshold is not None:
+        if threshold == "fdr":
+            sortedP = np.sort(pvalues)[::-1]
+            fdrSig = np.searchsorted(fdrcorrection(np.sort(pvalues)[::-1], fdrThreshold)[0], True)
+            if fdrSig > 0:
+                threshold = -np.log10(sortedP[fdrSig])
+            else:
+                threshold = -np.log10(0.05/len(coords))
+        ax.set_xlim(-0.02,1.02)
+        ax.hlines(threshold, ax.get_xlim()[0], ax.get_xlim()[1], color=(0,0,0), linestyles="dashed")
+            # plt.text(plt.xlim()[0], threshold*1.1, f"{fdrThreshold} FDR", fontsize=8)
+    ax.set_ylabel("-log10(p-value)")
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    return fig, ax

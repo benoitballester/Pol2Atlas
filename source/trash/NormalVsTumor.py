@@ -43,7 +43,7 @@ cases = allAnnots["project_id"].unique()
 # %%
 # Compute DE, UMAP, and predictive model CV per cancer
 for case in cases:
-    case = "TCGA-KICH"
+    case = "TCGA-ESCA"
     print(case)
     # Select only relevant files and annotations
     annotation = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnotation.tsv", 

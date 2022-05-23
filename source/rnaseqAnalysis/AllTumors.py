@@ -53,28 +53,46 @@ allCounts = allCounts[kept]
 # bgCounts = bgCounts[kept]
 allReads = allReads[kept]
 # %%
-# Remove undected Pol II probes
-counts = allCounts
-extremeExpr = np.mean(counts, axis=0) <= np.percentile(np.mean(counts, axis=0), 99)
-sf = scran.calculateSumFactors(counts.T, scaling=allReads[:, None])
-countsNorm = counts/np.array(sf)[:, None]
-nzCounts = rnaseqFuncs.filterDetectableGenes(countsNorm, readMin=1, expMin=3)
-countsNorm = countsNorm[:, nzCounts]
-# Apply quantile transformation to Pol II probes
-rgs = rnaseqFuncs.quantileTransform(countsNorm)
+nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=2)
+counts = allCounts[:, nzCounts]
+
+# %%
+import rpy2.robjects as ro
+from rpy2.robjects.packages import importr
+from rpy2.robjects import pandas2ri, numpy2ri
+from rpy2.robjects.conversion import localconverter
+scran = importr("scran")
+base = importr("base")
+detected = [np.sum(counts >= i, axis=0) for i in range(20)][::-1]
+topMeans = np.lexsort(detected)[::-1][:int(counts.shape[1]*0.05+1)]
+with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
+    sf = scran.calculateSumFactors(counts.T[topMeans])
 # %%
 # Feature selection 
-selected = rnaseqFuncs.variableSelection(rankdata(countsNorm, "min", axis=1), plot=False)
+countModel = rnaseqFuncs.RnaSeqModeler().fit(counts, sf)
+hv = countModel.hv
 # %%
-from sklearn.decomposition import PCA
-from lib.jackstraw.permutationPA import permutationPA_PCA
-decomp = permutationPA_PCA(rgs[:, selected],3, max_rank=min(500, len(rgs)))
+feat = countModel.residuals[:, hv]
+decomp, model = rnaseqFuncs.permutationPA_PCA(feat, max_rank=2000, returnModel=True)
 # %%
 import umap
 from lib.utils.plot_utils import plotUmap, getPalette
 from matplotlib.patches import Patch
-embedding = umap.UMAP(n_neighbors=30, min_dist=0.5, random_state=0, low_memory=False, 
+embedding = umap.UMAP(n_neighbors=30, min_dist=0.3, random_state=0, low_memory=False, 
                       metric="correlation").fit_transform(decomp)
+# %%
+import plotly.express as px
+df = pd.DataFrame(embedding, columns=["x","y"])
+df["Sample Type"] = annotation["Sample Type"].values
+df["Project"] = annotation["Project ID"].values
+df = df.sample(frac=1)
+# colormap = dict(zip(colors.index, colors["color_hex"])) 
+fig = px.scatter(df, x="x", y="y", color="Project", hover_data=['Sample Type'], 
+                 width=1200, height=800)
+fig.update_traces(marker=dict(size=3*np.sqrt(len(df)/7500)))
+fig.show()
+fig.write_image(paths.outputDir + "rnaseq/global/umap_samples.pdf")
+fig.write_html(paths.outputDir + "rnaseq/global/umap_samples.pdf" + ".html")
 #%%
 import catboost
 from sklearn.model_selection import train_test_split, StratifiedKFold

@@ -3,9 +3,10 @@
 # $3 : Bam file to count
 # $4 : Path to featureCount executable
 # $5 : Temporary directory
+# $6 : Thread count
 # Create temp dir
 mkdir $5
-# Count reads using feature counts
+# Count reads using featureCount
 # First attempt paired end reads
 $4 -T 2 \
 -F SAF \

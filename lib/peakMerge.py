@@ -23,7 +23,9 @@ from statsmodels.stats.multitest import multipletests
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.neighbors import KNeighborsClassifier
 import pickle
-
+import os
+import sys
+sys.setrecursionlimit(100000)
 
 class peakMerger:
     """
@@ -202,7 +204,6 @@ class peakMerger:
                 alltabs.append(tab)
         # Concatenate files
         self.df = pd.concat(alltabs)
-        # self.df[[0,1,2]].to_csv("h3k27ac_output/allPeaks.bed", sep="\t", header=False, index=False)
         self.numElements = len(self.df)
         self.avgPeakSize = np.mean(self.df[2] - self.df[1])
         # Check strandedness
@@ -410,7 +411,7 @@ class peakMerger:
         # Run UMAP
         if transpose:
             if reDo or (self.embedding[1] is None):
-                self.embedderT = umap.UMAP(n_neighbors=k, min_dist=0.0, metric=metric)
+                self.embedderT = umap.UMAP(n_neighbors=k, min_dist=0.0, metric=metric, random_state=42)
                 if altMatrix is None:
                     self.embedding[1] = self.embedderT.fit_transform(self.matrix.T)
                 else:
@@ -422,11 +423,11 @@ class peakMerger:
                                                           eq, annotationPalette)
         else:
             if reDo or (self.embedding[0] is None):
-                self.embedder = umap.UMAP(n_neighbors=k, min_dist=0.0, metric=metric)
+                embedder = umap.UMAP(n_neighbors=k, min_dist=0.0, metric=metric,random_state=42)
                 if altMatrix is None:
-                    self.embedding[0] = self.embedder.fit_transform(self.matrix)
+                    self.embedding[0] = embedder.fit_transform(self.matrix)
                 else:
-                    self.embedding[0] = self.embedder.fit_transform(altMatrix)
+                    self.embedding[0] = embedder.fit_transform(altMatrix)
             # Annotate each point according to strongest mean annotation signal in consensus
             signalPerCategory = np.zeros((np.max(annotations)+1, len(self.embedding[0])))
             signalPerAnnot = np.array([np.sum(self.matrix[:, i == annotations]) for i in range(np.max(annotations)+1)])

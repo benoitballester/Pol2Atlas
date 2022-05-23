@@ -24,11 +24,8 @@ scran = importr("scran")
 np.random.seed(42)
 # %%
 from lib.pyGREATglm import pyGREAT
-enricher = pyGREAT(oboFile=paths.GOfolder + "/go_eq.obo", geneFile=paths.gencode, 
-                   geneGoFile=paths.GOfolder + "/goa_human.gaf")
+enricher = pyGREAT("/scratch/pdelangen/projet_these/data_clean/GO_files/hsapiens.GO:BP.name.gmt", geneFile=paths.gencode, )
 import pyranges as pr
-from lib.utils import overlap_utils
-remap_catalog = pr.read_bed(paths.remapFile)
 # %%
 allAnnots = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnotation.tsv", 
                         sep="\t", index_col=0)
@@ -151,9 +148,11 @@ for case in cases:
     progConsensuses.to_csv(paths.outputDir + "rnaseq/Survival2/" + case + "/prognostic.bed", sep="\t", header=None, index=None)
     stats.to_csv(paths.outputDir + "rnaseq/Survival2/" + case + "/stats.csv", sep="\t")
     if len(progConsensuses) > 0:
-        enrichedGREAT = enricher.findEnriched(progConsensuses, consensuses[nzCounts])
+        enrichedGREAT = enricher.findEnriched(progConsensuses, consensuses)
         enrichedGREAT.to_csv(paths.outputDir + "rnaseq/Survival2/" + case + "/GREATenriched.csv", sep="\t")
         enricher.plotEnrichs(enrichedGREAT, savePath=paths.outputDir + "rnaseq/Survival2/" + case + "/GREATenriched.pdf")
+        if len(enrichedGREAT) > 0:
+            enricher.revigoTreemap(enrichedGREAT, output=paths.outputDir + "rnaseq/Survival2/" + case + "/GREATenriched_revigo.pdf")
     studiedConsensusesCase[case] = nzCounts.nonzero()[0]
     progPerCancer[case] = np.zeros(allCounts.shape[1])
     progPerCancer[case][nzCounts] = np.where(qvals > 0.05, 0.0, np.sign(stats["coef"].ravel()))
@@ -224,6 +223,8 @@ globallyDEs.to_csv(paths.outputDir + f"rnaseq/Survival2/globally_prognostic.bed"
 enrichs = enricher.findEnriched(consensuses[studied], consensuses)
 enricher.plotEnrichs(enrichs, savePath=paths.outputDir + "rnaseq/Survival2/globally_prognostic_GREAT.pdf")
 enrichs.to_csv(paths.outputDir + f"rnaseq/Survival2/globally_prognostic_GREAT.csv", sep="\t")
+if len(enrichs) > 1:
+    enricher.revigoTreemap(enrichs, paths.outputDir + "rnaseq/Survival2/globally_prognostic_GREAT_revigo.pdf")
 # %%
 # Forest Plots
 try:

@@ -60,32 +60,48 @@ from rpy2.robjects.packages import importr
 from rpy2.robjects import pandas2ri, numpy2ri
 from rpy2.robjects.conversion import localconverter
 scran = importr("scran")
-deseq = importr("DESeq2")
 base = importr("base")
 detected = [np.sum(counts >= i, axis=0) for i in range(20)][::-1]
 topMeans = np.lexsort(detected)[::-1][:int(counts.shape[1]*0.05+1)]
 with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
     sf = scran.calculateSumFactors(counts.T[topMeans])
 # %%
+# Feature selection 
 countModel = rnaseqFuncs.RnaSeqModeler().fit(counts, sf)
-pDev, outliers = countModel.hv_selection()
-hv = fdrcorrection(pDev)[0]
-lv = fdrcorrection(1-pDev)[0]
-
+hv = countModel.hv
 # %%
-from sklearn.decomposition import PCA
-from lib.jackstraw.permutationPA import permutationPA_PCA
-from sklearn.preprocessing import StandardScaler
-
-feat = countModel.anscombeResiduals[:, hv & outliers]
-decomp = permutationPA_PCA(feat, 3, max_rank=min(500, len(feat)))
-print(decomp.shape)
+feat = countModel.residuals[:, hv]
+decomp, model = rnaseqFuncs.permutationPA_PCA(feat, max_rank=2000, returnModel=True)
 # %%
 import umap
 from lib.utils.plot_utils import plotUmap, getPalette
 from matplotlib.patches import Patch
 embedding = umap.UMAP(n_neighbors=30, min_dist=0.5, random_state=0, low_memory=False, 
                       metric="correlation").fit_transform(decomp)
+# %%
+import plotly.express as px
+import plotly.graph_objects as go
+df = pd.DataFrame(embedding, columns=["x","y"])
+df["Sample Type"] = annotation["Sample Type"].values
+df["Project"] = annotation["Project ID"].values
+df["Normal"] = 1.0*(annotation["Sample Type"].values == "Solid Tissue Normal")
+df["Size"] = 3*np.sqrt(len(df)/7500) * (1+df["Normal"])
+df["Hover"] = df["Project"] + "\n" + df["Sample Type"]
+project_id = annotation["project_id"]
+cancerType, eq = pd.factorize(annotation["project_id"], sort=True)
+palette, colors = getPalette(cancerType)
+df["Color"] = [f"rgb({int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)})" for c in colors]
+markers = go.scattergl.Marker(color=df["Color"], size=df["Size"], 
+                            line=dict(width=df["Normal"], color="rgb(0,0,0)"))
+dat = go.Scattergl(x=embedding[:,0],y=embedding[:,1], mode="markers",
+                   marker=markers, hovertext=df["Hover"])
+layout = dict(height=800, width=1200)
+fig = go.Figure(dat, layout=layout)
+fig.show()
+fig.write_image(paths.outputDir + "rnaseq/global/umap_samples.pdf")
+fig.write_html(paths.outputDir + "rnaseq/global/umap_samples.pdf" + ".html")
+# %%
+import plotly.express as px
 #%%
 import catboost
 from sklearn.model_selection import train_test_split, StratifiedKFold

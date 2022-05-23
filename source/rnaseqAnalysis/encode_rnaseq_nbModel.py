@@ -1,22 +1,23 @@
 # %%
+import os
+
+import fastcluster
+import matplotlib as mpl
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import os
-import matplotlib.pyplot as plt
-from settings import params, paths
-from lib import normRNAseq, rnaseqFuncs
-from lib.utils import plot_utils, matrix_utils
-from matplotlib.patches import Patch
-from scipy.stats import rankdata, chi2
-from scipy.stats import chi2
-import seaborn as sns
-import umap
-from statsmodels.stats.multitest import fdrcorrection
-from scipy.spatial.distance import dice
-import matplotlib as mpl
-import fastcluster
-import sklearn.metrics as metrics
 import scipy.stats as ss
+import seaborn as sns
+import sklearn.metrics as metrics
+import umap
+from lib import normRNAseq, rnaseqFuncs
+from lib.utils import matrix_utils, plot_utils
+from matplotlib.patches import Patch
+from scipy.spatial.distance import dice
+from scipy.stats import chi2, rankdata
+from settings import params, paths
+from statsmodels.stats.multitest import fdrcorrection
+
 os.environ["CUDA_VISIBLE_DEVICES"]="2"
 countDir = "/scratch/pdelangen/projet_these/outputPol2/rnaseq/encode_counts/"
 try:
@@ -46,7 +47,7 @@ for f in dlFiles:
         continue
 allReads = np.array(allReads)
 allCounts = np.concatenate(counts, axis=1).T
-ann, eq = pd.factorize(annotation.loc[order]["Annotation"])
+ann, eq = pd.factorize(annotation.loc[order]["Annotation"], sort=True)
 # %% 
 # Plot FPKM expr per annotation
 palette = pd.read_csv(paths.polIIannotationPalette, sep=",")
@@ -64,9 +65,10 @@ counts = allCounts[:, nzCounts]
 
 # %%
 import rpy2.robjects as ro
-from rpy2.robjects.packages import importr
-from rpy2.robjects import pandas2ri, numpy2ri
+from rpy2.robjects import numpy2ri, pandas2ri
 from rpy2.robjects.conversion import localconverter
+from rpy2.robjects.packages import importr
+
 scran = importr("scran")
 deseq = importr("DESeq2")
 base = importr("base")
@@ -76,26 +78,38 @@ with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.conver
     sf = scran.calculateSumFactors(counts.T[topMeans])
 # %%
 from lib.rnaseqFuncs import RnaSeqModeler
+
 countModel = RnaSeqModeler().fit(counts, sf)
 
-pDev, nonOutliers = countModel.hv_selection()
-hv = fdrcorrection(pDev)[0]
+hv = countModel.hv
 
 # %%
-from sklearn.decomposition import PCA
-from lib.jackstraw.permutationPA import permutationPA_PCA
-from sklearn.preprocessing import StandardScaler
-
-feat = countModel.anscombeResiduals[:, hv & nonOutliers]
-decomp = permutationPA_PCA(feat)
+feat = countModel.residuals[:, hv]
+# feat = StandardScaler().fit_transform(np.log(1+counts[:, hv]/sf[:, None]))
+decomp = rnaseqFuncs.permutationPA_PCA(feat, max_rank=250)
 matrix_utils.looKnnCV(decomp, ann, "correlation",1)
 # %%
 # Plot UMAP of samples for visualization
-embedding = umap.UMAP(n_neighbors=50, min_dist=0.5, random_state=0, low_memory=False, metric="correlation").fit_transform(decomp)
-plt.figure(figsize=(10,10), dpi=500)
+embedding = umap.UMAP(n_neighbors=30, min_dist=0.3, random_state=42, low_memory=False, metric="correlation").fit_transform(decomp)
+# %%
+import plotly.express as px
+
+df = pd.DataFrame(embedding, columns=["x","y"])
+df["Annotation"] = annotation.loc[order]["Annotation"].values
+df["Biosample term name"] = annotation.loc[order]["Biosample term name"].values
 annot, palette, colors = plot_utils.applyPalette(annotation.loc[order]["Annotation"],
                                                 np.unique(annotation.loc[order]["Annotation"]),
                                                  paths.polIIannotationPalette, ret_labels=True)
+palettePlotly = [f"rgb({int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)})" for c in palette]
+colormap = dict(zip(annot, palettePlotly))        
+fig = px.scatter(df, x="x", y="y", color="Annotation", color_discrete_map=colormap,
+                hover_data=['Biosample term name'], width=800, height=800)
+fig.show()
+fig.write_image(paths.outputDir + "rnaseq/encode_rnaseq/umap_samples.pdf")
+fig.write_html(paths.outputDir + "rnaseq/encode_rnaseq/umap_samples.pdf" + ".html")
+# %%
+plt.figure(figsize=(10,10), dpi=500)
+
 plot_utils.plotUmap(embedding, colors)
 patches = []
 for i, a in enumerate(annot):
@@ -103,7 +117,7 @@ for i, a in enumerate(annot):
     patches.append(legend)
 plt.legend(handles=patches, prop={'size': 7}, bbox_to_anchor=(0,1.02,1,0.2),
                     loc="lower left", mode="expand", ncol=6)
-# plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/umap_samples.pdf")
+plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/umap_samples.pdf")
 plt.show()
 plt.close()
 # %%
@@ -112,6 +126,7 @@ colOrder, colLink = matrix_utils.threeStagesHClinkage(feat.T, "correlation")
 # %%
 # Plot dendrograms
 from scipy.cluster import hierarchy
+
 plt.figure(dpi=500)
 hierarchy.dendrogram(colLink, p=10, truncate_mode="level", color_threshold=-1)
 plt.axis('off')
@@ -127,11 +142,11 @@ plt.show()
 plt.close()
 # %%
 clippedSQ= np.log(1+countModel.normed)
-plot_utils.plotHC(clippedSQ.T[hv & nonOutliers], annotation.loc[order]["Annotation"], (countModel.normed).T[hv & nonOutliers],  
+plot_utils.plotHC(clippedSQ.T[hv], annotation.loc[order]["Annotation"], (countModel.normed).T[hv],  
                   paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder)
 plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_hvg.pdf")
 # %%
-colOrderAll, colLinkAll = matrix_utils.threeStagesHClinkage(countModel.anscombeResiduals.T, "correlation")
+colOrderAll, colLinkAll = matrix_utils.threeStagesHClinkage(countModel.residuals.T, "correlation")
 # Plot dendrograms
 plt.figure(dpi=500)
 hierarchy.dendrogram(colLinkAll, p=10, truncate_mode="level", color_threshold=-1)
@@ -146,17 +161,19 @@ plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM.pdf")
 # %%
 # Comparison Pol II biotype vs RNA-seq
 import pickle
+
 polIIMerger = pickle.load(open(paths.outputDir + "merger", "rb"))
-# %%
+
+mtx = polIIMerger.matrix[nzCounts, :]
 annotationDf = pd.read_csv(paths.annotationFile, sep="\t", index_col=0)
 annotationsP2, eq2 = pd.factorize(annotationDf.loc[polIIMerger.labels]["Annotation"],
                                 sort=True)
-signalPerCategory = np.zeros((np.max(annotationsP2)+1, len(polIIMerger.embedding[0])))
-signalPerAnnot = np.array([np.sum(polIIMerger.matrix[:, i == annotationsP2]) for i in range(np.max(annotationsP2)+1)])
+signalPerCategory = np.zeros((np.max(annotationsP2)+1, len(mtx)))
+signalPerAnnot = np.array([np.sum(mtx[:, i == annotationsP2]) for i in range(np.max(annotationsP2)+1)])
 for i in range(np.max(annotationsP2)+1):
-    signalPerCategory[i, :] = np.sum(polIIMerger.matrix[:, annotationsP2 == i], axis=1) / signalPerAnnot[i]
+    signalPerCategory[i, :] = np.sum(mtx[:, annotationsP2 == i], axis=1) / signalPerAnnot[i]
 signalPerCategory /= np.sum(signalPerCategory, axis=0)
-# %%
+
 rnaseqPerCategory = np.zeros((np.max(ann)+1, len(countModel.normed[1])))
 for i in range(np.max(ann)+1):
     rnaseqPerCategory[i, :] = np.mean(countModel.normed.T[:, ann == i], axis=1)
@@ -165,6 +182,7 @@ rnaseqPerCategory /= np.sum(rnaseqPerCategory, axis=1)[:, None]
 rnaseqPerCategory /= np.sum(rnaseqPerCategory, axis=0)
 signalPerCategory = signalPerCategory[:, nzCounts]
 # %%
+
 try:
     os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/polII_vs_rnaseq/")
 except FileExistsError:
@@ -222,7 +240,7 @@ def plotHmPol2vsRnaseq(eq, eq2, signalPolIIperAnnot, signalRnaseqPerAnnot, saveP
     resultMat = resultMat[np.sort(y)]
     resultMat = resultMat.loc[np.sort(np.array(x)[matching])]
     plt.figure(dpi=500)
-    sns.heatmap(resultMat, cmap="vlag", vmin=0.0, vmax=1.0,)
+    sns.heatmap(resultMat, cmap="vlag", vmin=-1.0, vmax=1.0)
     plt.xlabel("Pol II annotations")
     plt.ylabel("ENCODE annotations")
     plt.title("log2(Reads on probe > 50% Pol Biotype / Reads on probe < 50% Pol Biotype)")
@@ -232,22 +250,23 @@ def plotHmPol2vsRnaseq(eq, eq2, signalPolIIperAnnot, signalRnaseqPerAnnot, saveP
 
 plotHmPol2vsRnaseq(eq, eq2, signalPerCategory, rnaseqPerCategory,
                    paths.outputDir + f"rnaseq/encode_rnaseq/polII_vs_rnaseq/heatmap_fc.pdf")
-plotHmPol2vsRnaseq(eq, eq2, signalPerCategory[:, hv & nonOutliers], rnaseqPerCategory[:, hv & nonOutliers],
+plotHmPol2vsRnaseq(eq, eq2, signalPerCategory[:, hv], rnaseqPerCategory[:, hv],
                    paths.outputDir + f"rnaseq/encode_rnaseq/polII_vs_rnaseq/heatmap_fc_hv.pdf")
 # %%
+# Cluster-annotation relationship
 import scipy.stats as ss
+
 clustsPol2 = np.loadtxt(paths.outputDir + "clusterConsensuses_Labels.txt",dtype=int)[nzCounts]
 nClusts = np.max(clustsPol2)+1
 nAnnots = len(eq)
 zScores = np.zeros((nClusts, nAnnots))
-filteredMat = (countModel.normed / np.mean(countModel.normed, axis=0))[:, hv & nonOutliers]
-clustsPol2 = clustsPol2[hv & nonOutliers]
+filteredMat = (countModel.normed / np.mean(countModel.normed, axis=0))[:, hv]
+clustsPol2 = clustsPol2[hv]
 for i in np.unique(clustsPol2):
-    avgPerAnnotInClust = np.mean(rnaseqPerCategory.T[hv & nonOutliers][clustsPol2 == i], axis=0)
+    avgPerAnnotInClust = np.mean(rnaseqPerCategory.T[hv][clustsPol2 == i], axis=0)
     for j in range(nAnnots):
         hasAnnot = np.arange(nAnnots) == j
         zScores[i, j] = np.log(avgPerAnnotInClust[hasAnnot]/np.mean(avgPerAnnotInClust[np.logical_not(hasAnnot)]))
-# %%
 rowOrder, colOrder = matrix_utils.HcOrder(np.nan_to_num(zScores))
 rowOrder = np.loadtxt(paths.outputDir + "clusterBarplotOrder.txt").astype(int)
 zClip = zScores
@@ -269,6 +288,7 @@ plt.tight_layout()
 # plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/signalPerClustPerAnnot_colorbar.pdf")
 plt.show()
 # %%
+# All, encode ordered, encode signal
 rowOrder = np.argsort(ann)
 topCat = rnaseqPerCategory.argmax(axis=0)
 signalTopCat = -rnaseqPerCategory[(topCat,range(len(topCat)))]
@@ -279,9 +299,10 @@ clippedSQ= np.log(1+countModel.normed)
 plt.figure(dpi=500)
 plot_utils.plotHC(clippedSQ.T, annotation.loc[order]["Annotation"], countModel.normed.T,  
                   paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder)
-plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_autorank.pdf")
+plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/HM_all_encode_order_encode_signal.pdf")
 plt.close()
 # %%
+# At least 50% biotype, Pol II ordered, at least 50% biotype, Pol II signal
 rowOrder = np.argsort(ann)
 topCat = signalPerCategory.argmax(axis=0)
 signalTopCat = -signalPerCategory[(topCat,range(len(topCat)))]
@@ -289,35 +310,14 @@ top50 = signalTopCat < -0.51
 colOrder = np.lexsort((signalTopCat[top50], topCat[top50]))
 clippedSQ= np.log(1+countModel.normed)
 plt.figure(dpi=500)
-plot_utils.plotHC(clippedSQ.T[top50], annotation.loc[order]["Annotation"], countModel.normed.T[top50],  
-                  paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder)
-plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_rank_pol2_top50.pdf")
-plt.close()
-plt.figure(dpi=500)
-plot_utils.plotHC(countModel.anscombeResiduals.T[top50], annotation.loc[order]["Annotation"], countModel.normed.T[top50],  
-                  paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder)
-plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_rank_pol2_top50_resid.pdf")
+plot_utils.plotHC(clippedSQ.T[top50], annotation.loc[order]["Annotation"],
+                  mtx[top50],
+                  paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder, 
+                  labelsPct=annotationDf.loc[polIIMerger.labels]["Annotation"])
+plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/HM_top50Pol_pol2_order_pol2_signal.pdf")
 plt.close()
 # %%
-rowOrder = np.argsort(ann)
-topCat = signalPerCategory.argmax(axis=0)[hv & nonOutliers]
-signalTopCat = -signalPerCategory[:, hv & nonOutliers][(topCat,range(len(topCat)))]
-top50 = signalTopCat < -0.51
-colOrder = np.lexsort((signalTopCat[top50], topCat[top50]))
-clippedSQ= np.log(1+countModel.normed)
-plt.figure(dpi=500)
-plot_utils.plotHC(countModel.anscombeResiduals.T[hv & nonOutliers][top50], annotation.loc[order]["Annotation"], countModel.normed.T[hv & nonOutliers][top50],  
-                  paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder)
-plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_rank_pol2_top50_hv_resid.pdf")
-plt.show()
-plt.close()
-plt.figure(dpi=500)
-plot_utils.plotHC(clippedSQ.T[hv & nonOutliers][top50], annotation.loc[order]["Annotation"], countModel.normed.T[hv & nonOutliers][top50],  
-                  paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder)
-plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_rank_pol2_top50_hv.pdf")
-plt.show()
-plt.close()
-# %%
+# All, encode ordered, Pol II signal
 rowOrder = np.argsort(ann)
 topCat = rnaseqPerCategory.argmax(axis=0)
 signalTopCat = -rnaseqPerCategory[(topCat,range(len(topCat)))]
@@ -326,9 +326,31 @@ meanNormed = countModel.normed/np.mean(countModel.normed, axis=0)
 epsilon = 1/np.nanmax(np.log(meanNormed), axis=0)
 clippedSQ= np.log(1+countModel.normed)
 plt.figure(dpi=500)
-plot_utils.plotHC(clippedSQ.T, annotation.loc[order]["Annotation"], polIIMerger.matrix[nzCounts],  
-                  paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder, labelsPct=annotationDf.loc[polIIMerger.labels]["Annotation"])
-plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_autorank_PolII_signal.pdf")
+plot_utils.plotHC(clippedSQ.T, annotation.loc[order]["Annotation"],
+                  mtx,
+                  paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder, 
+                  labelsPct=annotationDf.loc[polIIMerger.labels]["Annotation"])
+plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/HM_all_encode_order_pol2_signal.pdf")
+plt.show()
+plt.close()
+# %%
+# All, encode ordered, Pol II signal, min50% pol
+rowOrder = np.argsort(ann)
+topCat = signalPerCategory.argmax(axis=0)
+signalTopCat = -signalPerCategory[(topCat,range(len(topCat)))]
+top50 = signalTopCat < -0.51
+topCat = rnaseqPerCategory.argmax(axis=0)
+signalTopCat = -rnaseqPerCategory[(topCat,range(len(topCat)))]
+colOrder = np.lexsort((signalTopCat[top50], topCat[top50]))
+meanNormed = countModel.normed/np.mean(countModel.normed, axis=0)
+epsilon = 1/np.nanmax(np.log(meanNormed), axis=0)
+clippedSQ= np.log(1+countModel.normed)
+plt.figure(dpi=500)
+plot_utils.plotHC(clippedSQ.T[top50], annotation.loc[order]["Annotation"],
+                  mtx[top50],
+                  paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder, 
+                  labelsPct=annotationDf.loc[polIIMerger.labels]["Annotation"])
+plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/HM_50Pol_encode_order_pol2_signal.pdf")
 plt.show()
 plt.close()
 # %%

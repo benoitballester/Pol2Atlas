@@ -8,7 +8,7 @@ polIIannotationPalette = "/scratch/pdelangen/projet_these/data_clean/annotation_
 peaksFolder = "/scratch/pdelangen/projet_these/data_clean/peaksInterg/"
 remapFile = "/scratch/pdelangen/projet_these/data_clean/remap2020_nr.bed"
 repeatFile = "/scratch/pdelangen/projet_these/oldBackup/temp_POL2_lenient/repeatBedType.bed"
-GOfolder = "/scratch/pdelangen/projet_these/data_clean/GO_annotations"
+GOfolder = "/scratch/pdelangen/projet_these/data_clean/GO_files"
 gencode = "/scratch/pdelangen/projet_these/data/annotation/gencode.v38.annotation.gtf"
 # ---------- Required for GWAS LDSC ---------- 
 ldscFilesPath = "/scratch/pdelangen/projet_these/data_clean/ldsc/"
@@ -25,6 +25,8 @@ encodeBlacklist = "/scratch/pdelangen/projet_these/data_clean/hg38-blacklist.v2.
 tokenPath = "/scratch/pdelangen/projet_these/data/tcga/token.txt"
 manifest = "/scratch/pdelangen/projet_these/data_clean/gdc_manifest.2021-09-22.txt"
 gdcClientPath = "/scratch/pdelangen/projet_these/data/tcga/gdc-client"
+# ---------- Required to download counts from GTEx ---------- 
+gtexData = "/scratch/pdelangen/projet_these/data_clean/GTex/"
 # ---------- Required only to read counts ---------- 
 featureCountPath = "/scratch/pdelangen/projet_these/data/tcga/featureCounts"
 # ---------- Required for RNA-seq analysis ---------- 

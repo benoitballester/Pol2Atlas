@@ -1,40 +1,47 @@
 # %%
-import numpy as np
-import pandas as pd
 import os
 import sys
+sys.setrecursionlimit(10000)
+import numpy as np
+import pandas as pd
+
 sys.path.append("./")
+import catboost
 import matplotlib.pyplot as plt
-from settings import params, paths
-from lib import rnaseqFuncs, normRNAseq, glm
-from lib.utils import plot_utils, matrix_utils
-from matplotlib.patches import Patch
-from scipy.stats import rankdata, chi2, mannwhitneyu, ttest_ind
+import rpy2.robjects as ro
 import seaborn as sns
 import umap
-from statsmodels.stats.multitest import fdrcorrection
-from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import accuracy_score, recall_score, precision_score, confusion_matrix,balanced_accuracy_score
-import catboost
-import rpy2.robjects as ro
-from rpy2.robjects.packages import importr
-from rpy2.robjects import pandas2ri, numpy2ri
+from lib import glm, normRNAseq, rnaseqFuncs
+from lib.utils import matrix_utils, plot_utils
+from matplotlib.patches import Patch
+from rpy2.robjects import numpy2ri, pandas2ri
 from rpy2.robjects.conversion import localconverter
+from rpy2.robjects.packages import importr
+from scipy.stats import chi2, mannwhitneyu, rankdata, ttest_ind
+from settings import params, paths
+from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
+                             confusion_matrix, precision_score, recall_score)
+from sklearn.model_selection import StratifiedKFold
+from statsmodels.stats.multitest import fdrcorrection
+
 scran = importr("scran")
 deseq = importr("DESeq2")
 base = importr("base")
 s4 = importr("S4Vectors")
-from matplotlib.ticker import FormatStrFormatter
 import KDEpy
-from sklearn.preprocessing import StandardScaler
-from scipy.stats import rankdata
 import scipy.interpolate as si
-from scipy.cluster import hierarchy
 # %%
 from lib.pyGREATglm import pyGREAT
-import pyranges as pr
-enricher = pyGREAT(oboFile=paths.GOfolder + "/go_eq.obo", geneFile=paths.gencode, 
-                   geneGoFile=paths.GOfolder + "/goa_human.gaf")
+from matplotlib.ticker import FormatStrFormatter
+from scipy.cluster import hierarchy
+from scipy.stats import rankdata
+from sklearn.preprocessing import StandardScaler
+chrFile = pd.read_csv(paths.genomeFile, sep="\t", index_col=0, header=None)
+sortedIdx = ["chr1", 'chr2','chr3','chr4','chr5','chr6',
+              'chr7','chr8','chr9', 'chr10', 'chr11','chr12','chr13','chr14','chr15','chr16','chr17',
+              'chr18','chr19','chr20','chr21','chr22','chrX','chrY']
+chrFile = chrFile.loc[sortedIdx]
+enricher = pyGREAT("/scratch/pdelangen/projet_these/data_clean/GO_files/hsapiens.GO:BP.name.gmt", geneFile=paths.gencode)
 # %%
 allAnnots = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnotation.tsv", 
                         sep="\t", index_col=0)
@@ -106,8 +113,8 @@ for case in cases:
     allReads = np.array(allReads)
     allCounts = np.concatenate(counts, axis=1).T
     
-    from rpy2.robjects.packages import importr
     from rpy2.robjects import numpy2ri
+    from rpy2.robjects.packages import importr
     scran = importr("scran")
     counts = allCounts
     # Remove undected Pol II probes
@@ -118,23 +125,17 @@ for case in cases:
     # Small counts are usually more represented in samples with larger library sizes,
     # moving down the median and artificially decreasing their size factor
     means = np.mean(countsNz/np.mean(countsNz, axis=1)[:, None], axis=0)
-    detected = [np.sum(counts >= i, axis=0) for i in range(20)][::-1]
-    mostDetected = np.lexsort(detected)[::-1][:int(counts.shape[1]*0.05+1)]
+    detected = [np.sum(countsNz >= i, axis=0) for i in range(20)][::-1]
+    mostDetected = np.lexsort(detected)[::-1][:int(countsNz.shape[1]*0.05+1)]
     with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
         sf = scran.calculateSumFactors(counts.T[mostDetected])
+    # ScTransform-like transformation and deviance-based variable selection
     countModel = rnaseqFuncs.RnaSeqModeler().fit(countsNz, sf)
-    anscombe = countModel.anscombeResiduals
+    residuals = countModel.residuals
     countsNorm = countModel.normed
-    pDev, nonOutliers = countModel.hv_selection()
-    hv = fdrcorrection(pDev)[0] & nonOutliers
-    lv = fdrcorrection(1-pDev)[0] & nonOutliers
-    countsNorm = countModel.normed
-    # Compute PCA on the anscombe residuals
-    # Anscombe residuals have asymptotic convergence to a normal distribution with a null NB distribution
-    # Pearson and raw residuals are skewed for non-normal models like the NB or Poisson
-    # The number of components is selected with a permutation test
-    from lib.jackstraw.permutationPA import permutationPA_PCA
-    decomp = permutationPA_PCA(anscombe[:, hv], max_rank=min(500, len(countsNorm)), mincomp=2)
+    hv = countModel.hv
+    # Compute PCA on the residuals
+    decomp = rnaseqFuncs.permutationPA_PCA(residuals[:, hv], max_rank=min(500, np.min(residuals[:, hv].shape))-1, mincomp=2)
     # Plot PC 1 and 2
     plt.figure(dpi=500)
     plt.scatter(decomp[:, 0], decomp[:, 1], c=labels)
@@ -147,19 +148,28 @@ for case in cases:
     infos["sizeFactor"] = sf.ravel()
     with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
         dds = deseq.DESeqDataSetFromMatrix(countData=countTable, colData=infos, design=ro.Formula("~Type"))
-        dds = deseq.DESeq(dds, fitType="local")
+        dds = deseq.DESeq(dds, fitType="local", parallel=True)
         res = deseq.results(dds)
-        res = pd.DataFrame(res.slots["listData"], index=res.slots["listData"].names).T
-        res["padj"] = np.nan_to_num(res["padj"], nan=1.0)
+    res = pd.DataFrame(res.slots["listData"], index=res.slots["listData"].names).T
+    res["padj"] = np.nan_to_num(res["padj"], nan=1.0)
     allDE = consensuses[nzCounts][res["padj"].values < 0.05]
     allDE[4] = -np.log10(res["padj"].values[res["padj"].values < 0.05])
     allDE.to_csv(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/allDE.bed", sep="\t", header=None, index=None)
-    # enrichedBP = enricher.findEnriched(consensuses[nzCounts][res["padj"].values < 0.05], consensuses[nzCounts])
-    # enricher.plotEnrichs(enrichedBP, savePath=paths.outputDir + f"rnaseq/TumorVsNormal/{case}/DE_greatglm.pdf")
-    # enrichedBP.to_csv(paths.outputDir + f"rnaseq/TumorVsNormal2/" + case + "/DE_greatglm.tsv", sep="\t")
+    enrichedBP = enricher.findEnriched(consensuses[nzCounts][res["padj"].values < 0.05], consensuses[nzCounts])
+    enricher.plotEnrichs(enrichedBP, savePath=paths.outputDir + f"rnaseq/TumorVsNormal2/{case}/DE_greatglm.pdf")
+    if len(enrichedBP) > 1:
+        enricher.clusterTreemap(enrichedBP, output=paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/DE_great_revigo.pdf")
+    enrichedBP.to_csv(paths.outputDir + f"rnaseq/TumorVsNormal2/" + case + "/DE_greatglm.tsv", sep="\t")
+
+    # Manhattan plot
+    res.index = consensuses[nzCounts].index
+    orderP = np.argsort(res["pvalue"].values)[::-1]
+    threshold = -np.log10(res["pvalue"].values[orderP][np.searchsorted(res["padj"].values[orderP] < 0.05, True)])
+    fig, ax = plot_utils.manhattanPlot(consensuses[nzCounts], chrFile, res["pvalue"].values, es=None, threshold=threshold)
+    fig.savefig(paths.outputDir + f"rnaseq/TumorVsNormal2/" + case + "/manhattan_DE.pdf")
     # Plot heatmap and dendrograms
-    rowOrder, rowLink = matrix_utils.twoStagesHClinkage(decomp)
-    colOrder, colLink = matrix_utils.threeStagesHClinkage(anscombe.T, "correlation")
+    rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
+    colOrder, colLink = matrix_utils.threeStagesHClinkage(residuals.T, "correlation")
     plt.figure(dpi=500)
     hierarchy.dendrogram(colLink, p=10, truncate_mode="level", color_threshold=-1)
     plt.axis('off')
@@ -170,12 +180,14 @@ for case in cases:
     hierarchy.dendrogram(rowLink, p=10, truncate_mode="level", color_threshold=-1, orientation="left")
     plt.axis('off')
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/dendrogram_row.pdf")
+    plt.close()
     clippedSQ= np.log(countsNorm+1)
     plot_utils.plotHC(clippedSQ.T, np.array(["Cancer","Normal"])[1-labels], countsNorm.T,  
                     rowOrder=rowOrder, colOrder=colOrder)
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/heatmap.pdf")
+    plt.close()
     # Plot heatmap and dendrograms (hv)
-    colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.anscombeResiduals.T[hv], "correlation")
+    colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.residuals.T[hv], "correlation")
     plt.figure(dpi=500)
     hierarchy.dendrogram(colLink, p=10, truncate_mode="level", color_threshold=-1)
     plt.axis('off')
@@ -190,8 +202,9 @@ for case in cases:
     plot_utils.plotHC(clippedSQ.T[hv], np.array(["Cancer","Normal"])[1-labels], countsNorm.T[hv],  
                     rowOrder=rowOrder, colOrder=colOrder)
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/heatmap_hv.pdf")
+    plt.close()
     # Plot heatmap and dendrograms (DE)
-    colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.anscombeResiduals.T[res["padj"].values < 0.05], "correlation")
+    colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.redisuals.T[res["padj"].values < 0.05], "correlation")
     plt.figure(dpi=500)
     hierarchy.dendrogram(colLink, p=10, truncate_mode="level", color_threshold=-1)
     plt.axis('off')
@@ -202,29 +215,31 @@ for case in cases:
     hierarchy.dendrogram(rowLink, p=10, truncate_mode="level", color_threshold=-1, orientation="left")
     plt.axis('off')
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/dendrogram_row_DE.pdf")
+    plt.close()
     clippedSQ= np.log(countsNorm+1)
     plot_utils.plotHC(clippedSQ.T[res["padj"].values < 0.05], np.array(["Cancer","Normal"])[1-labels], countsNorm.T[res["padj"].values < 0.05],  
                     rowOrder=rowOrder, colOrder=colOrder)
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/heatmap_DE.pdf")
+    plt.close()
     # Plot DE signal
     orderCol = np.argsort(labels)
-    meanNormal = np.mean(anscombe[labels == 0][:, res["padj"].values < 0.05], axis=0)
-    meanTumor = np.mean(anscombe[labels == 1][:, res["padj"].values < 0.05], axis=0)
+    meanNormal = np.mean(residuals[labels == 0][:, res["padj"].values < 0.05], axis=0)
+    meanTumor = np.mean(residuals[labels == 1][:, res["padj"].values < 0.05], axis=0)
     diff = meanTumor - meanNormal
     orderRow = np.argsort(diff)
     # Only DE
     plt.figure(dpi=500)
-    plot_utils.plotDeHM(anscombe[:, res["padj"].values < 0.05][orderCol][:, orderRow], labels[orderCol], np.ones(np.sum(res["padj"].values < 0.05)))
+    plot_utils.plotDeHM(residuals[:, res["padj"].values < 0.05][orderCol][:, orderRow], labels[orderCol], np.ones(np.sum(res["padj"].values < 0.05)))
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/DE_plot_only_DE.pdf")
     plt.close()
     # All Pol II
     orderCol = np.argsort(labels)
-    meanNormal = np.mean(anscombe[labels == 0], axis=0)
-    meanTumor = np.mean(anscombe[labels == 1], axis=0)
+    meanNormal = np.mean(residuals[labels == 0], axis=0)
+    meanTumor = np.mean(residuals[labels == 1], axis=0)
     diff = meanTumor - meanNormal
     orderRow = np.argsort(diff)
     plt.figure(dpi=500)
-    plot_utils.plotDeHM(anscombe[orderCol][:, orderRow], labels[orderCol], (res["padj"].values < 0.05).astype(float)[orderRow])
+    plot_utils.plotDeHM(residuals[orderCol][:, orderRow], labels[orderCol], (res["padj"].values < 0.05).astype(float)[orderRow])
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/DE_plot.pdf")
     # plt.show()
     plt.close()
@@ -250,18 +265,18 @@ for case in cases:
         patches.append(legend)
     plt.legend(handles=patches, prop={'size': 7})
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/UMAP_samples.pdf")
-    plt.show()
+    # plt.show()
     plt.close()
     # Predictive model on PCA space
     predictions = np.zeros(len(labels), dtype=int)
     for train, test in StratifiedKFold(10, shuffle=True, random_state=42).split(decomp, labels):
         # Fit power transform on train data only
         x_train = decomp[train]
-        # Fit classifier on scaled train data
+        # Fit classifier train data
         model = catboost.CatBoostClassifier(class_weights=len(labels) / (2 * np.bincount(labels)), 
                                             random_state=42)
         model.fit(x_train, labels[train], silent=True)
-        # Scale and predict on test data
+        # Predict on test data
         x_test = decomp[test]
         predictions[test] = model.predict(x_test)
     with open(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/" +  f"classifier_{case}.txt", "w") as f:
@@ -275,6 +290,7 @@ for case in cases:
         df.columns = ["Normal Tissue True", "Tumor True"]
         df.index = ["Normal Tissue predicted", "Tumor predicted"]
         print(df, file=f)
+    break
 # %%
 # Summary predictive metrics plots
 def plotMetrics(summaryTab, metricName):
@@ -400,7 +416,10 @@ for c in cases:
     globallyDEs[4] = np.sum(mat, axis=1)
     globallyDEs.to_csv(paths.outputDir + f"rnaseq/TumorVsNormal2/globally_{c}.bed", sep="\t", header=None, index=None)
     enrichs = enricher.findEnriched(consensuses[studied], consensuses)
-    enricher.plotEnrichs(enrichs, savePath=paths.outputDir + "rnaseq/TumorVsNormal2/globally_{c}_GREAT.pdf")
+    enricher.plotEnrichs(enrichs, savePath=paths.outputDir + f"rnaseq/TumorVsNormal2/globally_{c}_GREAT.pdf")
     enrichs.to_csv(paths.outputDir + f"rnaseq/TumorVsNormal2/globally_{c}_GREAT.csv", sep="\t")
+    if len(enrichs) > 0:
+        enricher.revigoTreemap(enrichs, paths.outputDir + "rnaseq/TumorVsNormal2/" + f"/globally_{c}_GREAT_revigo.pdf.pdf")
+
 # %%
 

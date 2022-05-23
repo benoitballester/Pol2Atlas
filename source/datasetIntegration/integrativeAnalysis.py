@@ -6,6 +6,9 @@ from settings import params, paths
 import pyranges as pr
 import pandas as pd
 import matplotlib.pyplot as plt
+import os
+import sys
+sys.setrecursionlimit(100000)
 # %%
 '''
 from lib.peakMerge import peakMerger
@@ -86,13 +89,14 @@ plt.show()
 # %%
 # GO terms
 from lib.pyGREATglm import pyGREAT
-enricher = pyGREAT(oboFile=paths.GOfolder + "/go_eq.obo", geneFile=paths.gencode, 
-                   geneGoFile=paths.GOfolder + "/goa_human.gaf")
+enricher = pyGREAT("/scratch/pdelangen/projet_these/data_clean/GO_files/hsapiens.GO:BP.name.gmt", geneFile=paths.gencode)
+
 # %%
 # testReg = pd.read_csv(paths.tempDir + "globallyProg.bed", sep="\t", header=None)
 for i in range(np.max(merger.clustered[0])+1):
     testReg = merger.consensuses[merger.clustered[0]==i]
     goEnrich = enricher.findEnriched(testReg, merger.consensuses)
-    enricher.plotEnrichs(enrichDF)
+    enricher.plotEnrichs(goEnrich, savePath=paths.outputDir + f"cluster_enrichments/GO_fc_{i}.png")
+    enricher.clusterTreemap(goEnrich, output=paths.outputDir + f"cluster_enrichments/GO_treemap_{i}.png")
 # %%
 # %%
