@@ -95,14 +95,11 @@ for case in cases:
     allCounts = np.concatenate(counts, axis=1).T
     # Normalize and transform counts
     counts = allCounts
-    detected = [np.sum(counts >= i, axis=0) for i in range(20)][::-1]
-    topMeans = np.lexsort(detected)[::-1][:int(counts.shape[1]*0.05+1)]
-    with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
-        sf = scran.calculateSumFactors(counts.T[topMeans])
     nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=2)
     countsNz = allCounts[:, nzCounts]
+    sf = rnaseqFuncs.scranNorm(countsNz)
     countModel = rnaseqFuncs.RnaSeqModeler().fit(countsNz, sf)         
-    anscombe = countModel.anscombeResiduals
+    anscombe = countModel.residuals
     countsNorm = countModel.normed
     df = pd.DataFrame()
     df["Dead"] = np.logical_not(survived[np.isin(timeToEvent.index, order)])

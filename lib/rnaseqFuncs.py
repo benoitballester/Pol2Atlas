@@ -4,39 +4,24 @@ import KDEpy
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.interpolate as si
-import scipy.stats as ss
 import statsmodels.discrete.discrete_model as discrete_model
+import rpy2.robjects as ro
 from joblib import Parallel, delayed
-from rpy2.robjects import numpy2ri
+from rpy2.robjects import numpy2ri, pandas2ri
+from rpy2.robjects.conversion import localconverter
 from rpy2.robjects.packages import importr
-from scipy.special import erfinv
-from scipy.stats import nbinom, rankdata, norm, chi2, shapiro, combine_pvalues
+from scipy.stats import chi2, rankdata
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-from statsmodels.genmod.families import family
 from statsmodels.stats.multitest import fdrcorrection
-from scipy.stats import kstest
-
+import pandas as pd
 scran = importr("scran")
+deseq = importr("DESeq2")
+
 
 def findMode(arr):
     # Finds the modal value of a continuous sample
     pos, fitted = KDEpy.FFTKDE(bw="silverman").fit(arr).evaluate(10000)
     return pos[np.argmax(fitted)]
-
-
-def nb_rqr(x, m, alpha):
-    n = 1.0/alpha
-    p = m / (m + alpha * (m**2))
-    func = nbinom(n,p)
-    # Two cases to maximize precision
-    f1 = func.cdf(x-1)
-    f2 = func.sf(x-1)
-    q = np.random.random(len(x)) * func.pmf(x)
-    q1 = norm.ppf(np.clip(f1+q,0.0,1.0))
-    q2 = norm.isf(np.clip(f2-q,0.0,1.0))
-    # Clip values at precision boundaries
-    return np.clip(np.where(f1 > 0.5, q2, q1), -50, 50)
 
 def statsProcess(alpha, sf, counts, m):
     pred = m * sf
@@ -242,3 +227,21 @@ def permutationPA_PCA(X, perm=3, alpha=0.01, solver="randomized", whiten=True,
 def filterDetectableGenes(counts, readMin, expMin):
     return np.sum(counts >= readMin, axis=0) >= expMin
 
+def scranNorm(counts):
+    detected = [np.sum(counts >= i, axis=0) for i in range(10)][::-1]
+    mostDetected = np.lexsort(detected)[::-1][:int(counts.shape[1]*0.05+1)]
+    with localconverter(ro.default_converter + numpy2ri.converter):
+        sf = scran.calculateSumFactors(counts.T[mostDetected])
+    return sf
+
+def deseqDE(counts, sf, labels, colNames):
+    countTable = pd.DataFrame(counts.T, columns=colNames)
+    infos = pd.DataFrame(np.array(["N", "T"])[labels], index=colNames, columns=["Type"])
+    infos["sizeFactor"] = sf.ravel()
+    with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
+        dds = deseq.DESeqDataSetFromMatrix(countData=countTable, colData=infos, design=ro.Formula("~Type"))
+        dds = deseq.DESeq(dds, fitType="local", parallel=True)
+        res = deseq.results(dds)
+    res = pd.DataFrame(res.slots["listData"], index=res.slots["listData"].names).T
+    res["padj"] = np.nan_to_num(res["padj"], nan=1.0)
+    return res

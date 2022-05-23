@@ -8,29 +8,16 @@ import pandas as pd
 sys.path.append("./")
 import catboost
 import matplotlib.pyplot as plt
-import rpy2.robjects as ro
 import seaborn as sns
 import umap
-from lib import glm, normRNAseq, rnaseqFuncs
+from lib import rnaseqFuncs
 from lib.utils import matrix_utils, plot_utils
 from matplotlib.patches import Patch
-from rpy2.robjects import numpy2ri, pandas2ri
-from rpy2.robjects.conversion import localconverter
-from rpy2.robjects.packages import importr
-from scipy.stats import chi2, mannwhitneyu, rankdata, ttest_ind
-from settings import params, paths
-from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
+from settings import paths
+from sklearn.metrics import (balanced_accuracy_score,
                              confusion_matrix, precision_score, recall_score)
 from sklearn.model_selection import StratifiedKFold
-from statsmodels.stats.multitest import fdrcorrection
 
-scran = importr("scran")
-deseq = importr("DESeq2")
-base = importr("base")
-s4 = importr("S4Vectors")
-import KDEpy
-import scipy.interpolate as si
-# %%
 from lib.pyGREATglm import pyGREAT
 from matplotlib.ticker import FormatStrFormatter
 from scipy.cluster import hierarchy
@@ -113,22 +100,14 @@ for case in cases:
     allReads = np.array(allReads)
     allCounts = np.concatenate(counts, axis=1).T
     
-    from rpy2.robjects import numpy2ri
-    from rpy2.robjects.packages import importr
-    scran = importr("scran")
+
     counts = allCounts
     # Remove undected Pol II probes
     nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=2)
     countsNz = allCounts[:, nzCounts]
     studiedConsensusesCase[case] = nzCounts
-    # Normalize only on the top decile of means to trim very small counts
-    # Small counts are usually more represented in samples with larger library sizes,
-    # moving down the median and artificially decreasing their size factor
-    means = np.mean(countsNz/np.mean(countsNz, axis=1)[:, None], axis=0)
-    detected = [np.sum(countsNz >= i, axis=0) for i in range(20)][::-1]
-    mostDetected = np.lexsort(detected)[::-1][:int(countsNz.shape[1]*0.05+1)]
-    with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
-        sf = scran.calculateSumFactors(counts.T[mostDetected])
+    # Scran normalization
+    sf = rnaseqFuncs.scranNorm(countsNz)
     # ScTransform-like transformation and deviance-based variable selection
     countModel = rnaseqFuncs.RnaSeqModeler().fit(countsNz, sf)
     residuals = countModel.residuals
@@ -143,15 +122,7 @@ for case in cases:
     plt.show()
     plt.close()
     # Find DE genes using DESeq2
-    countTable = pd.DataFrame(countsNz.T, columns=order)
-    infos = pd.DataFrame(np.array(["N", "T"])[labels], index=order, columns=["Type"])
-    infos["sizeFactor"] = sf.ravel()
-    with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
-        dds = deseq.DESeqDataSetFromMatrix(countData=countTable, colData=infos, design=ro.Formula("~Type"))
-        dds = deseq.DESeq(dds, fitType="local", parallel=True)
-        res = deseq.results(dds)
-    res = pd.DataFrame(res.slots["listData"], index=res.slots["listData"].names).T
-    res["padj"] = np.nan_to_num(res["padj"], nan=1.0)
+    res = rnaseqFuncs.deseqDE(countsNz, sf, labels, order)
     allDE = consensuses[nzCounts][res["padj"].values < 0.05]
     allDE[4] = -np.log10(res["padj"].values[res["padj"].values < 0.05])
     allDE.to_csv(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/allDE.bed", sep="\t", header=None, index=None)
@@ -160,7 +131,6 @@ for case in cases:
     if len(enrichedBP) > 1:
         enricher.clusterTreemap(enrichedBP, output=paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/DE_great_revigo.pdf")
     enrichedBP.to_csv(paths.outputDir + f"rnaseq/TumorVsNormal2/" + case + "/DE_greatglm.tsv", sep="\t")
-
     # Manhattan plot
     res.index = consensuses[nzCounts].index
     orderP = np.argsort(res["pvalue"].values)[::-1]
