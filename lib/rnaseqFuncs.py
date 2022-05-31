@@ -26,7 +26,7 @@ def findMode(arr):
 def statsProcess(alpha, sf, counts, m):
     pred = m * sf
     rp = (counts-pred) / np.sqrt(pred + alpha * pred**2)
-    rp = np.clip(rp, -np.sqrt(16+len(counts)/4),np.sqrt(16+len(counts)/4))
+    rp = np.clip(rp, -np.sqrt(4+len(counts)/4),np.sqrt(4+len(counts)/4))
     p = chi2(len(sf)-1).sf(np.sum(np.square(rp)))
     return rp, p
 
@@ -51,7 +51,7 @@ class RnaSeqModeler:
         '''
         pass
     
-    def fit(self, counts, sf, subSampleEst=10000, hv_fdr=0.05, plot=True, verbose=True):
+    def fit(self, counts, sf, subSampleEst=20000, hv_fdr=0.05, plot=True, verbose=True):
         '''
         Fit the model
         '''
@@ -234,13 +234,13 @@ def scranNorm(counts):
         sf = scran.calculateSumFactors(counts.T[mostDetected])
     return sf
 
-def deseqDE(counts, sf, labels, colNames):
+def deseqDE(counts, sf, labels, colNames, parallel=False):
     countTable = pd.DataFrame(counts.T, columns=colNames)
     infos = pd.DataFrame(np.array(["N", "T"])[labels], index=colNames, columns=["Type"])
     infos["sizeFactor"] = sf.ravel()
     with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
         dds = deseq.DESeqDataSetFromMatrix(countData=countTable, colData=infos, design=ro.Formula("~Type"))
-        dds = deseq.DESeq(dds, fitType="local", parallel=True)
+        dds = deseq.DESeq(dds, fitType="local", parallel=parallel)
         res = deseq.results(dds)
     res = pd.DataFrame(res.slots["listData"], index=res.slots["listData"].names).T
     res["padj"] = np.nan_to_num(res["padj"], nan=1.0)

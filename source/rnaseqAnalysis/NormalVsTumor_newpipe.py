@@ -1,28 +1,25 @@
 # %%
 import os
 import sys
-sys.setrecursionlimit(10000)
-import numpy as np
-import pandas as pd
-
 sys.path.append("./")
+sys.setrecursionlimit(10000)
 import catboost
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns
 import umap
 from lib import rnaseqFuncs
+from lib.pyGREATglm import pyGREAT
 from lib.utils import matrix_utils, plot_utils
 from matplotlib.patches import Patch
-from settings import paths
-from sklearn.metrics import (balanced_accuracy_score,
-                             confusion_matrix, precision_score, recall_score)
-from sklearn.model_selection import StratifiedKFold
-
-from lib.pyGREATglm import pyGREAT
 from matplotlib.ticker import FormatStrFormatter
 from scipy.cluster import hierarchy
-from scipy.stats import rankdata
-from sklearn.preprocessing import StandardScaler
+from settings import paths
+from sklearn.metrics import (balanced_accuracy_score, confusion_matrix,
+                             precision_score, recall_score)
+from sklearn.model_selection import StratifiedKFold
+
 chrFile = pd.read_csv(paths.genomeFile, sep="\t", index_col=0, header=None)
 sortedIdx = ["chr1", 'chr2','chr3','chr4','chr5','chr6',
               'chr7','chr8','chr9', 'chr10', 'chr11','chr12','chr13','chr14','chr15','chr16','chr17',
@@ -114,7 +111,7 @@ for case in cases:
     countsNorm = countModel.normed
     hv = countModel.hv
     # Compute PCA on the residuals
-    decomp = rnaseqFuncs.permutationPA_PCA(residuals[:, hv], max_rank=min(500, np.min(residuals[:, hv].shape))-1, mincomp=2)
+    decomp = rnaseqFuncs.permutationPA_PCA(residuals[:, hv], mincomp=2)
     # Plot PC 1 and 2
     plt.figure(dpi=500)
     plt.scatter(decomp[:, 0], decomp[:, 1], c=labels)
@@ -174,7 +171,7 @@ for case in cases:
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/heatmap_hv.pdf")
     plt.close()
     # Plot heatmap and dendrograms (DE)
-    colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.redisuals.T[res["padj"].values < 0.05], "correlation")
+    colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.residuals.T[res["padj"].values < 0.05], "correlation")
     plt.figure(dpi=500)
     hierarchy.dendrogram(colLink, p=10, truncate_mode="level", color_threshold=-1)
     plt.axis('off')
@@ -223,7 +220,7 @@ for case in cases:
     downreg.to_csv(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/DE_downreg.bed", sep="\t", header=None, index=None)
     # UMAP plot
     # Plot UMAP of samples for visualization
-    embedding = umap.UMAP(n_neighbors=30, min_dist=0.5,
+    embedding = umap.UMAP(n_neighbors=30, min_dist=0.3,
                         random_state=42, low_memory=False, metric="correlation").fit_transform(decomp)
     plt.figure(figsize=(10,10), dpi=500)
     plt.title(f"{case} samples")
@@ -260,7 +257,6 @@ for case in cases:
         df.columns = ["Normal Tissue True", "Tumor True"]
         df.index = ["Normal Tissue predicted", "Tumor predicted"]
         print(df, file=f)
-    break
 # %%
 # Summary predictive metrics plots
 def plotMetrics(summaryTab, metricName):

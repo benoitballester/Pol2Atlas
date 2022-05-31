@@ -1,31 +1,42 @@
 # %%
+import os
+import sys
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import os
-import matplotlib.pyplot as plt
-import sys
+
 sys.path.append("./")
-from settings import params, paths
-from lib import normRNAseq, rnaseqFuncs
-from lib.utils import plot_utils, matrix_utils
-from matplotlib.patches import Patch
-from scipy.stats import rankdata, chi2, mannwhitneyu, ttest_ind
-import seaborn as sns
-from statsmodels.stats.multitest import fdrcorrection
-import lifelines as ll
-from joblib import Parallel, delayed
 import warnings
+
+import lifelines as ll
 import rpy2.robjects as ro
-from rpy2.robjects.packages import importr
-from rpy2.robjects import pandas2ri, numpy2ri
-from rpy2.robjects.conversion import localconverter
+import seaborn as sns
+from joblib import Parallel, delayed
+from lib import rnaseqFuncs
+from lib.utils import matrix_utils, plot_utils
+from matplotlib.patches import Patch
 from matplotlib.ticker import FormatStrFormatter
+from rpy2.robjects import numpy2ri, pandas2ri
+from rpy2.robjects.conversion import localconverter
+from rpy2.robjects.packages import importr
+from scipy.stats import chi2, mannwhitneyu, rankdata, ttest_ind
+from settings import params, paths
+from statsmodels.stats.multitest import fdrcorrection
+
 scran = importr("scran")
 np.random.seed(42)
 # %%
+chrFile = pd.read_csv(paths.genomeFile, sep="\t", index_col=0, header=None)
+sortedIdx = ["chr1", 'chr2','chr3','chr4','chr5','chr6',
+              'chr7','chr8','chr9', 'chr10', 'chr11','chr12','chr13','chr14','chr15','chr16','chr17',
+              'chr18','chr19','chr20','chr21','chr22','chrX','chrY']
+chrFile = chrFile.loc[sortedIdx]
 from lib.pyGREATglm import pyGREAT
+
 enricher = pyGREAT("/scratch/pdelangen/projet_these/data_clean/GO_files/hsapiens.GO:BP.name.gmt", geneFile=paths.gencode, )
 import pyranges as pr
+
 # %%
 allAnnots = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnotation.tsv", 
                         sep="\t", index_col=0)
@@ -40,6 +51,25 @@ studiedConsensusesCase = dict()
 nzPerCancer = dict()
 cases = allAnnots["project_id"].unique()
 # %%
+# Compute univariate cox proportionnal hazards p value 
+def computeCoxReg(expr, survDF, i):
+    warnings.filterwarnings("ignore")
+    try:
+        dfI = survDF.copy()
+        dfI[i] = expr
+        cph = ll.CoxPHFitter(penalizer=1e-6)
+        cph.fit(dfI, duration_col="TTE", event_col="Dead", robust=True)
+        stats = cph.summary
+        if np.isnan(stats["p"].values[0]):
+            raise ValueError('Pval is NaN')
+        return cph.summary
+    except:
+        # If the regression failed to converge assume HR=1.0 and p = 1.0
+        dummyDF = pd.DataFrame(data=[[0.0,1.0,0.0,0.0,0.0,1.0,1.0,0.0,1.0,0.0]], 
+                                columns=['coef', 'exp(coef)', 'se(coef)', 'coef lower 95%', 'coef upper 95%', 'exp(coef) lower 95%', 'exp(coef) upper 95%', 'z', 'p', '-log2(p)'], 
+                                index=[i])
+        dummyDF.index.name = "covariate"
+        return dummyDF
 for case in cases:
     print(case)
     # Select only relevant files and annotations
@@ -99,7 +129,7 @@ for case in cases:
     countsNz = allCounts[:, nzCounts]
     sf = rnaseqFuncs.scranNorm(countsNz)
     countModel = rnaseqFuncs.RnaSeqModeler().fit(countsNz, sf)         
-    anscombe = countModel.residuals
+    residuals = countModel.residuals
     countsNorm = countModel.normed
     df = pd.DataFrame()
     df["Dead"] = np.logical_not(survived[np.isin(timeToEvent.index, order)])
@@ -110,30 +140,11 @@ for case in cases:
     stats = []
     cutoffs = []
     notDropped = []
-    print(f"Cox regression on {anscombe.shape[1]} peaks")
-    # Compute univariate cox proportionnal hazards p value 
-    def computeCoxReg(expr, survDF, i):
-        warnings.filterwarnings("ignore")
-        try:
-            dfI = survDF.copy()
-            dfI[i] = expr
-            cph = ll.CoxPHFitter(penalizer=1e-6)
-            cph.fit(dfI, duration_col="TTE", event_col="Dead", robust=True)
-            stats = cph.summary
-            if np.isnan(stats["p"].values[0]):
-                raise ValueError('Pval is NaN')
-            return cph.summary
-        except:
-            # If the regression failed to converge assume HR=1.0 and p = 1.0
-            dummyDF = pd.DataFrame(data=[[0.0,1.0,0.0,0.0,0.0,1.0,1.0,0.0,1.0,0.0]], 
-                                    columns=['coef', 'exp(coef)', 'se(coef)', 'coef lower 95%', 'coef upper 95%', 'exp(coef) lower 95%', 'exp(coef) upper 95%', 'z', 'p', '-log2(p)'], 
-                                    index=[i])
-            dummyDF.index.name = "covariate"
-            return dummyDF
+    print(f"Cox regression on {residuals.shape[1]} peaks")
     # Parallelize Cox regression across available cores using joblib
-    batchSize = min(512, int(anscombe.shape[1]/len(os.sched_getaffinity(0))))
+    batchSize = min(512, int(residuals.shape[1]/len(os.sched_getaffinity(0))))
     with Parallel(n_jobs=-1, verbose=1, batch_size=batchSize) as pool:
-        stats = pool(delayed(computeCoxReg)(anscombe[:, i], df, i) for i in range(anscombe.shape[1]))
+        stats = pool(delayed(computeCoxReg)(residuals[:, i], df, i) for i in range(residuals.shape[1]))
     stats = pd.concat(stats)
     stats.index = nzCounts.nonzero()[0]
     pvals = np.array(stats["p"])
@@ -149,10 +160,15 @@ for case in cases:
         enrichedGREAT.to_csv(paths.outputDir + "rnaseq/Survival2/" + case + "/GREATenriched.csv", sep="\t")
         enricher.plotEnrichs(enrichedGREAT, savePath=paths.outputDir + "rnaseq/Survival2/" + case + "/GREATenriched.pdf")
         if len(enrichedGREAT) > 0:
-            enricher.revigoTreemap(enrichedGREAT, output=paths.outputDir + "rnaseq/Survival2/" + case + "/GREATenriched_revigo.pdf")
+            enricher.clusterTreemap(enrichedGREAT, output=paths.outputDir + "rnaseq/Survival2/" + case + "/GREATenriched_revigo.pdf")
     studiedConsensusesCase[case] = nzCounts.nonzero()[0]
     progPerCancer[case] = np.zeros(allCounts.shape[1])
     progPerCancer[case][nzCounts] = np.where(qvals > 0.05, 0.0, np.sign(stats["coef"].ravel()))
+    orderP = np.argsort(pvals)[::-1]
+    threshold = -np.log10(pvals[orderP][np.searchsorted(pvals[orderP] < 0.05, True)])
+    fig, ax = plot_utils.manhattanPlot(consensuses[nzCounts], chrFile, pvals, es=None, threshold=threshold)
+    fig.savefig(paths.outputDir + f"rnaseq/Survival2/" + case + "/manhattan_prog.pdf")
+
 # %%
 # Plot # of DE Pol II Cancer vs Normal
 DEperCancer = pd.DataFrame(np.sum(np.abs(progPerCancer), axis=0)).T
@@ -222,6 +238,9 @@ enricher.plotEnrichs(enrichs, savePath=paths.outputDir + "rnaseq/Survival2/globa
 enrichs.to_csv(paths.outputDir + f"rnaseq/Survival2/globally_prognostic_GREAT.csv", sep="\t")
 if len(enrichs) > 1:
     enricher.revigoTreemap(enrichs, paths.outputDir + "rnaseq/Survival2/globally_prognostic_GREAT_revigo.pdf")
+fig, ax = plot_utils.manhattanPlot(consensuses[nzCounts], chrFile, 
+                                   pvals, es=None, threshold=threshold)
+fig.savefig(paths.outputDir + f"rnaseq/Survival2/manhattan_progCount.pdf")
 # %%
 # Forest Plots
 try:

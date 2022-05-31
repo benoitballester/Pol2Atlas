@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import pyranges as pr
-import rpy2.robjects as ro
 from joblib import Parallel, delayed
 from scipy.sparse import csr_matrix
 from statsmodels.api import GLM
@@ -16,32 +15,37 @@ from statsmodels.stats.multitest import fdrcorrection
 from .utils import matrix_utils, overlap_utils
 
 maxCores = len(os.sched_getaffinity(0))
-
 class regLogicGREAT:
     def __init__(self, upstream, downstream, distal):
         self.upstream = upstream
         self.downstream = downstream
         self.distal = distal
 
-    def __call__(self, txDF):
+    def __call__(self, txDF, chrInfo):
         # Infered regulatory domain logic
-        txDF.sort_values(by=["Chromosome", "Start"], inplace=True)
-        regPm = txDF["Start"] - self.upstream * np.sign(txDF["End"]-txDF["Start"])
-        regPp = txDF["Start"] + self.downstream * np.sign(txDF["End"]-txDF["Start"])
-        gb = txDF.groupby("Chromosome")
+        
+        copyTx = txDF.copy()
+        copyTx["Start"] = (txDF["Start"] - self.upstream).where(txDF["Strand"] == "+", 
+                                    txDF["End"] - self.downstream)
+        copyTx["End"] = (txDF["Start"] + self.downstream).where(txDF["Strand"] == "+", 
+                                    txDF["End"] + self.upstream)
+        copyTx.sort_values(["Chromosome", "Start"], inplace=True)
+        gb = copyTx.groupby("Chromosome")
         perChr = dict([(x,gb.get_group(x)) for x in gb.groups])
         for c in perChr:
-            inIdx = txDF["Chromosome"] == c
-            previousReg = np.roll(regPp[inIdx], 1)
+            inIdx = copyTx["Chromosome"] == c
+            nextReg = np.roll(copyTx["Start"][inIdx], -1)
+            nextReg[-1] = chrInfo.loc[c].values[0]
+            previousReg = np.roll(copyTx["End"][inIdx], 1)
             previousReg[0] = 0
-            previousReg[-1] = int(1e10)
-            nextReg = np.roll(regPm[inIdx], -1)
-            nextReg[-1] = int(1e10)
-            extendedM = np.maximum(txDF["Start"][inIdx] - self.distal, np.minimum(previousReg, regPm[inIdx]))
-            extendedP = np.minimum(txDF["Start"][inIdx] + self.distal, np.maximum(nextReg, regPp[inIdx]))
-            txDF.loc[txDF["Chromosome"] == c, "Start"] = extendedM
-            txDF.loc[txDF["Chromosome"] == c, "End"] = extendedP
-        return txDF
+            nextReg[-1] = chrInfo.loc[c].values[0]
+            extMin = np.maximum(copyTx["Start"][inIdx] - self.distal, previousReg)
+            extMax = np.minimum(copyTx["End"][inIdx] + self.distal, nextReg)
+            extMin = np.minimum(copyTx["Start"][inIdx], extMin)
+            extMax = np.maximum(copyTx["End"][inIdx], extMax)
+            copyTx.loc[copyTx["Chromosome"] == c, "Start"] = np.clip(extMin, 0, chrInfo.loc[c].values[0])
+            copyTx.loc[copyTx["Chromosome"] == c, "End"] = np.clip(extMax, 0, chrInfo.loc[c].values[0])
+        return copyTx
 
 def customwrap(s,width=20):
     return "<br>".join(textwrap.wrap(s,width=width)).capitalize()
@@ -70,14 +74,18 @@ def fitBinomModel(hasAnnot, observed, expected, goTerm, idx):
         pvals = (1.0-waldP/2.0)
     return (goTerm, pvals, beta)
 
-def fitBinomModelNoBg(observed, expected, goTerm, idx):
-    df = pd.DataFrame(np.array([np.ones_like(expected)]).T, 
-                                columns=["Intercept"], index=idx)
-    model = GLM(observed, df, family=Binomial())
-    model = model.fit([0.0], disp=False)
+def fitBinomModelNoBg(hasAnnot, observed, expected, goTerm, idx):
+    df = pd.DataFrame(np.array([hasAnnot.T.astype(float), np.ones_like(expected)]).T, 
+                                columns=["GS", "Intercept"], index=idx)
+    model = GLM(observed, df, offset=np.log(expected/(1-expected)), family=Binomial())
+    model = model.fit([0.0,0.0], disp=False)
+    beta = model.params["GS"]
+    waldP = model.pvalues["GS"]
+    '''
     t_test = model.t_test(f"Intercept = {expected}")
     beta = t_test.z[0]
     waldP = t_test.pvalue[0]
+    '''
     # Get one sided pvalues
     if beta >= 0:
         pvals = waldP/2.0
@@ -90,7 +98,8 @@ class pyGREAT:
     """
     doc
     """
-    def __init__(self, gmtFile, geneFile, gtfGeneCol="gene_name"):
+    def __init__(self, gmtFile, geneFile, chrFile):
+        self.chrInfo = pd.read_csv(chrFile, sep="\t", index_col=0, header=None)
         self.gtfGeneCol = "gene_name"
         # Parse GMT file
         # Setup gene-GO matrix
@@ -112,14 +121,13 @@ class pyGREAT:
         gencode = gencode.as_df()
         transcripts = gencode[gencode["Feature"] == "gene"].copy()
         del gencode
-        transcripts = transcripts[["Chromosome", "Start", "End", gtfGeneCol, "Strand"]]
+        transcripts = transcripts[["Chromosome", "Start", "End", self.gtfGeneCol, "Strand"]]
         # Reverse positions on opposite strand for convenience
         geneInList = np.isin(list(transcripts[self.gtfGeneCol]), list(allGenes), assume_unique=True)
-        reversedTx = transcripts.copy()[["Chromosome", "Start", "End", self.gtfGeneCol]][geneInList]
-        reversedTx["Start"] = transcripts["Start"].where(transcripts["Strand"] == "+", transcripts["End"])
-        reversedTx["End"] = transcripts["End"].where(transcripts["Strand"] == "+", transcripts["Start"])
+        reversedTx = transcripts.copy()[["Chromosome", "Start", "End", self.gtfGeneCol, "Strand"]][geneInList]
+        self.txList = reversedTx.copy()
         # Apply infered regulatory logic
-        self.geneRegulatory = regLogicGREAT(5000, 1000, 1000000)(reversedTx)
+        self.geneRegulatory = regLogicGREAT(5000, 1000, 1000000)(reversedTx, self.chrInfo)
 
     def findEnriched(self, query, background=None, minGenes=3, cores=-1):
         """
@@ -147,8 +155,9 @@ class pyGREAT:
         if background is not None:
             intersectBg = overlap_utils.countOverlapPerCategory(regPR, overlap_utils.dfToPrWorkaround(background, useSummit=False))
         else:
-            intersectBg = (self.geneRegulatory["End"]-self.geneRegulatory["Start"])/3e9 * len(query)
-            intersectBg = np.maximum(intersectBg, 1/(3e9))
+            genomeSize = np.sum(self.chrInfo).values[0]
+            intersectBg = (self.geneRegulatory["End"]-self.geneRegulatory["Start"])/genomeSize
+            intersectBg = np.maximum(intersectBg, 1/genomeSize)
             intersectBg.index = self.geneRegulatory["gene_name"]
             intersectBg = intersectBg.groupby(intersectBg.index).sum()
         intersectQuery = overlap_utils.countOverlapPerCategory(regPR, overlap_utils.dfToPrWorkaround(query, useSummit=False))
@@ -160,10 +169,14 @@ class pyGREAT:
         if background is not None:
             expected = intersectBg.loc[obsMatrix.columns]
             observed = pd.DataFrame(queryCounts.loc[queryCounts.index[obsGenes]])
-        else:
+            endog = pd.merge(observed, expected, right_index = True, left_index = True)
+        else: 
             expected = intersectBg.loc[obsMatrix.columns]
             observed = pd.DataFrame(queryCounts.loc[queryCounts.index[obsGenes]])
-        endog = pd.merge(observed, expected, right_index = True, left_index = True)
+            endog = observed.copy()
+            endog[1] = len(query)
+        print(endog)
+        print(expected)
         # Trim GOs under cutoff
         trimmed = obsMatrix[intersectQuery.index[queryGenes]].sum(axis=1) >= minGenes
         # Setup parallel computation settings
@@ -173,20 +186,20 @@ class pyGREAT:
         maxBatch = int(0.25*maxBatch/cores)+1
         hitsPerGO = np.sum(obsMatrix * observed.values.ravel()[None, :], axis=1)
         # Fit a Binomial GLM for each annotation, and evaluate wald test p-value for each gene annotation
-        with Parallel(n_jobs=cores, verbose=2, backend="loky", batch_size=maxBatch, max_nbytes=None) as pool:
+        with Parallel(n_jobs=cores, batch_size=maxBatch, max_nbytes=None, mmap_mode=None) as pool:
             if background is not None:
                 results = pool(delayed(fitBinomModel)(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows())
                 # results = [fitBinomModel(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows()]
             else:
                 # results = pool(delayed(fitBinomModelNoBg)(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows())
-                results = [fitBinomModelNoBg(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows()]
+                results = pool(delayed(fitBinomModelNoBg)(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows())
         
         results = pd.DataFrame(results)
         results.set_index(0, inplace=True)
         results.columns = ["P(Beta > 0)", "Beta"]
         results.dropna(inplace=True)
         qvals = results["P(Beta > 0)"].copy()
-        qvals.loc[:] = fdrcorrection(qvals)[1]
+        qvals.loc[:] = fdrcorrection(qvals, method="negcorr")[1]
         results["BH corrected p-value"] = qvals
         results["-log10(qval)"] = -np.log10(qvals)
         results["-log10(pval)"] = -np.log10(results["P(Beta > 0)"])
@@ -229,10 +242,10 @@ class pyGREAT:
             fig.savefig(savePath, bbox_inches="tight")
         return fig, ax
 
-    def clusterTreemap(self, enrichDF, alpha=0.05, score="-log10(qval)", resolution=1.0, output=None):
+    def clusterTreemap(self, enrichDF, alpha=0.05, score="-log10(qval)", metric="dice", resolution=1.0, output=None):
         sig = enrichDF[enrichDF["BH corrected p-value"] < alpha]
         clusters = matrix_utils.graphClustering(csr_matrix(self.mat.loc[sig.index]), 
-                                                "dice", k=int(0.5+0.5*np.sqrt(len(sig))), r=resolution, snn=True, 
+                                                metric, k=int(1.0+0.5*np.sqrt(len(sig))), r=resolution, snn=True, 
                                                 disconnection_distance=1.0, restarts=10)
         sig["Cluster"] = clusters
         sig["Name"] = [customwrap(self.goMap[i]) for i in sig.index]

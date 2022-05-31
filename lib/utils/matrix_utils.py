@@ -92,46 +92,6 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, disconnection_dis
         clustered[p] = i
     return clustered
 
-def autoRankPCA(mat, whiten=True, plot=True, minRank=0, maxRank=None):
-    '''
-    Performs PCA and select the adequate PCA dimensionnality using the elbow
-    method.
-
-    Parameters
-    ----------
-    mat: ndarray
-        Input matrix
-
-    whiten: boolean (optional, default False)
-        Whether to whiten the PCA space or not
-    
-    plot: boolean (optional, default True)
-        Plots the elbow curve
-
-    maxRank: None or integer (optional, default None)
-        Maximum PCA rank to compute. If set to None, selects the 
-        smallest dimension of the matrix.
-
-    Returns
-    -------
-    decomp : ndarray
-        PCA space with optimal rank according to the elbow method.
-    '''
-    if maxRank is None:
-        maxRank = np.min(mat.shape)
-    model = PCA(maxRank, whiten=whiten)
-    decomp = model.fit_transform(mat)
-    kneedl = KneeLocator(np.arange(maxRank), model.explained_variance_, 
-                         direction="decreasing", curve="convex", online=True)
-    bestR = kneedl.knee
-    if plot:
-        plt.figure(dpi=300)
-        kneedl.plot_knee()
-        plt.xlabel("Principal component")
-        plt.ylabel("Explained variance")
-        plt.show()
-    return decomp[:, :max(bestR,minRank)]
-
 def threeStagesHC(matrix, metric, kMetaSamples=50000, method="ward"):
     """
     Three steps Hierachical clustering. UMAP -> K-Means -> Ward HC on clusters
@@ -236,7 +196,7 @@ def threeStagesHClinkage(matrix, metric, kMetaSamples=50000, method="ward"):
     """
     # First perform dimensionnality reduction
     lowMem = len(matrix) < 100000
-    embedding = umap.UMAP(n_components=min(10, max(1, int(np.min(matrix.shape)/2))), min_dist=0.0, n_neighbors=50, 
+    embedding = umap.UMAP(n_components=10, min_dist=0.0, n_neighbors=50, 
                           low_memory=lowMem, random_state=42, metric=metric).fit_transform(matrix)
     embedding = np.nan_to_num(embedding, nan=1e5)
     # Aggregrate samples via K-means in order to scale to large datasets

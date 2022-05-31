@@ -460,7 +460,8 @@ def forestPlot(regDF):
     ax.spines['left'].set_visible(False)
 
 
-def manhattanPlot(coords, chrInfo, pvalues, es, maxLogP=30, threshold="fdr", fdrThreshold=0.05):
+def manhattanPlot(coords, chrInfo, pvalues, es, maxLogP=30, threshold="fdr", ylabel="-log10(p-value)",
+                  fdrThreshold=0.05):
     fig, ax = plt.subplots(dpi=500)
     fractPos = (chrInfo.values.ravel()/np.sum(chrInfo.values).ravel())
     offsets = np.insert(np.cumsum(fractPos),0,0)
@@ -482,7 +483,7 @@ def manhattanPlot(coords, chrInfo, pvalues, es, maxLogP=30, threshold="fdr", fdr
         ax.set_xlim(-0.02,1.02)
         ax.hlines(threshold, ax.get_xlim()[0], ax.get_xlim()[1], color=(0,0,0), linestyles="dashed")
             # plt.text(plt.xlim()[0], threshold*1.1, f"{fdrThreshold} FDR", fontsize=8)
-    ax.set_ylabel("-log10(p-value)")
+    ax.set_ylabel(ylabel)
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
     return fig, ax
