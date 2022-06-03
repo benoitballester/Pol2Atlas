@@ -4,7 +4,7 @@ import pandas as pd
 import os
 import matplotlib.pyplot as plt
 from settings import params, paths
-from lib import normRNAseq, rnaseqFuncs
+from lib import rnaseqFuncs
 from lib.utils import plot_utils, matrix_utils
 from matplotlib.patches import Patch
 from scipy.stats import rankdata, chi2
@@ -125,6 +125,33 @@ plt.legend(handles=patches, prop={'size': 7}, bbox_to_anchor=(0,1.02,1,0.2),
 plt.savefig(paths.outputDir + "rnaseq/gtex_rnaseq/umap_samples.pdf")
 plt.show()
 plt.close()
+# %%
+try:
+    os.mkdir(paths.outputDir + "rnaseq/gtex_rnaseq/DE/")
+except FileExistsError:
+    pass
+consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
+from lib.pyGREATglm import pyGREAT as pyGREATglm
+enricherglm = pyGREATglm("/scratch/pdelangen/projet_these/data_clean/GO_files/hsapiens.GO:BP.name.gmt",
+                          geneFile=paths.gencode,
+                          chrFile=paths.genomeFile)
+# %%
+for i in np.unique(ann):
+    print(eq[i])
+    labels = (ann == i).astype(int)
+    res2 = rnaseqFuncs.mannWhitneyDE(countModel.residuals, sf, labels, order)
+    sig = fdrcorrection(res2[0])[0] & (res2[1] > 0)
+    res = pd.DataFrame(res2, columns=consensuses.index[nzCounts], index=["pval", "residual diff"]).T
+    res["Upreg"] = sig.astype(int)
+    res.to_csv(paths.outputDir + f"rnaseq/gtex_rnaseq/DE/res_{eq[i]}.csv")
+    test = consensuses[nzCounts][sig]
+    test.to_csv(paths.outputDir + f"rnaseq/gtex_rnaseq/DE/bed_{eq[i]}", header=None, sep="\t", index=None)
+    if len(test) == 0:
+        continue
+    pvals = enricherglm.findEnriched(test, background=consensuses)
+    enricherglm.plotEnrichs(pvals)
+    enricherglm.clusterTreemap(pvals, score="-log10(pval)", 
+                                output=paths.outputDir + f"rnaseq/gtex_rnaseq/DE/great_{eq[i]}.pdf")
 # %%
 rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
 colOrder, colLink = matrix_utils.threeStagesHClinkage(feat.T, "correlation")

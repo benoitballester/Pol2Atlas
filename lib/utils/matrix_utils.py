@@ -216,6 +216,10 @@ def threeStagesHClinkage(matrix, metric, kMetaSamples=50000, method="ward"):
         link = linkage_vector(embedding, method=method)
         return hierarchy.leaves_list(link), link
 
+def HcOrderRow(mat, method="ward", metric="euclidean"):
+    link = linkage_vector(mat, method=method, metric=metric)
+    rowOrder = hierarchy.leaves_list(link)
+    return rowOrder
 
 def HcOrder(mat, method="ward", metric="euclidean"):
     link = linkage_vector(mat, method=method, metric=metric)

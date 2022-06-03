@@ -175,8 +175,6 @@ class pyGREAT:
             observed = pd.DataFrame(queryCounts.loc[queryCounts.index[obsGenes]])
             endog = observed.copy()
             endog[1] = len(query)
-        print(endog)
-        print(expected)
         # Trim GOs under cutoff
         trimmed = obsMatrix[intersectQuery.index[queryGenes]].sum(axis=1) >= minGenes
         # Setup parallel computation settings
@@ -193,7 +191,6 @@ class pyGREAT:
             else:
                 # results = pool(delayed(fitBinomModelNoBg)(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows())
                 results = pool(delayed(fitBinomModelNoBg)(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows())
-        
         results = pd.DataFrame(results)
         results.set_index(0, inplace=True)
         results.columns = ["P(Beta > 0)", "Beta"]

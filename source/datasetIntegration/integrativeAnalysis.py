@@ -58,6 +58,9 @@ try:
 except FileExistsError:
     pass
 # %%
+# Annotation Specific
+enrichs = merger.topPeaksPerAnnot(paths.annotationFile)
+# %%
 # Remap
 overlap_utils.computeEnrichForLabels(pr.read_bed(paths.remapFile), 
                                     merger.consensuses, merger.clustered[0], 

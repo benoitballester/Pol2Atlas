@@ -810,10 +810,6 @@ class peakMerger:
         perAnnotQvals: dictionnary of ndarrays
             Each key correspond to an annotation and its associated consensuses pvalue.
         """
-        try:
-            os.mkdir(self.outputPath + "topEnriched/")
-        except:
-            pass
         annotationDf = pd.read_csv(annotationFile, sep="\t", index_col=0)
         annotations, eq = pd.factorize(annotationDf.loc[self.labels]["Annotation"], sort=True)
         M = self.matrix.shape[1]
@@ -841,6 +837,10 @@ class peakMerger:
                 sig, qvals = multitesting(pvals)[0:2]
             sigConsensuses = self.consensuses.iloc[sig]
             if self.outputPath is not None:
+                try:
+                    os.mkdir(self.outputPath + "enrichedPerAnnot/")
+                except FileExistsError:
+                    pass
                 sigConsensuses.to_csv(self.outputPath + f"enrichedPerAnnot/{eq[i]}.bed", header=False, index=False, sep="\t")
                 pd.DataFrame(qvals[sig]).to_csv(self.outputPath + f"enrichedPerAnnot/{eq[i]}_qvals.bed", header=False, index=False, sep="\t")
             perAnnotQvals[eq[i]] = qvals[sig]

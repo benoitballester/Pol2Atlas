@@ -10,7 +10,7 @@ from joblib import Parallel, delayed
 from rpy2.robjects import numpy2ri, pandas2ri
 from rpy2.robjects.conversion import localconverter
 from rpy2.robjects.packages import importr
-from scipy.stats import chi2, rankdata
+from scipy.stats import chi2, rankdata, mannwhitneyu
 from sklearn.decomposition import PCA
 from statsmodels.stats.multitest import fdrcorrection
 import pandas as pd
@@ -245,3 +245,9 @@ def deseqDE(counts, sf, labels, colNames, parallel=False):
     res = pd.DataFrame(res.slots["listData"], index=res.slots["listData"].names).T
     res["padj"] = np.nan_to_num(res["padj"], nan=1.0)
     return res
+
+def mannWhitneyDE(vals, sf, labels, colNames, parallel=False):
+    countsC1 = vals[labels == 0]
+    countsC2 = vals[labels == 1]
+    delta = np.mean(countsC2, axis=0) - np.mean(countsC1, axis=0)
+    return mannwhitneyu(countsC1, countsC2)[1], delta

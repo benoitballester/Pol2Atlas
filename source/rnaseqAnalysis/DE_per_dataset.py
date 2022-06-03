@@ -1,67 +1,72 @@
 # %%
-from msilib.schema import File
 import os
 import sys
 sys.path.append("./")
 sys.setrecursionlimit(10000)
-import catboost
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
-import umap
 from lib import rnaseqFuncs
-from lib.pyGREATglm import pyGREAT
-from lib.utils import matrix_utils, plot_utils
-from matplotlib.patches import Patch
-from matplotlib.ticker import FormatStrFormatter
-from scipy.cluster import hierarchy
+from statsmodels.stats.multitest import fdrcorrection
 from settings import paths
-from sklearn.metrics import (balanced_accuracy_score, confusion_matrix,
-                             precision_score, recall_score)
-from sklearn.model_selection import StratifiedKFold
 try:
-    os.mkdir(paths.outputDir + "rnaseq/DE_per_dataset/")
+    os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/DE/")
 except FileExistsError:
     pass
+consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
 # %%
-# Load GTEX counts
-countDir = "/scratch/pdelangen/projet_these/outputPol2/rnaseq/gtex_counts/"
-annotation = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/GTex/tsvs/sample.tsv", 
-                        sep="\t", index_col="specimen_id")
-colors = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/GTex/colors.txt", 
-                        sep="\t", index_col="tissue_site_detail")
+from lib.pyGREATglm import pyGREAT as pyGREATglm
+enricherglm = pyGREATglm("/scratch/pdelangen/projet_these/data_clean/GO_files/hsapiens.GO:BP.name.gmt",
+                          geneFile=paths.gencode,
+                          chrFile=paths.genomeFile)
+# %%
+countDir = "/scratch/pdelangen/projet_these/outputPol2/rnaseq/encode_counts/"
+annotation = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/encode_total_rnaseq_annot_0.tsv", 
+                        sep="\t", index_col=0)
 dlFiles = os.listdir(countDir + "BG/")
 dlFiles = [f for f in dlFiles if f.endswith(".txt.gz")]
 counts = []
 countsBG = []
 allReads = []
 order = []
-allStatus = []
 for f in dlFiles:
-        id = ".".join(f.split(".")[:-3])
+    try:
+        id = f.split(".")[0]
         # countsBG.append(pd.read_csv(paths.countDirectory + "BG/" + f, header=None, skiprows=2).values)
         status = pd.read_csv(countDir + "500centroid/" + id + ".counts.summary",
-                                header=None, index_col=0, sep="\t", skiprows=1).T
+                             header=None, index_col=0, sep="\t", skiprows=1).T
         counts.append(pd.read_csv(countDir + "500centroid/" + f, header=None, skiprows=2).values)
-        allStatus.append(status)
         status = status.drop("Unassigned_Unmapped", axis=1)
         allReads.append(status.values.sum())
-        order.append(f.split(".")[0])
-    
+        order.append(id)
+    except:
+        continue
 allReads = np.array(allReads)
 allCounts = np.concatenate(counts, axis=1).T
-ann, eq = pd.factorize(annotation.loc[order]["tissue_type"])
+ann, eq = pd.factorize(annotation.loc[order]["Annotation"], sort=True)
 # %%
 # Deseq2 DE calculations
 nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=2)
 countsNz = allCounts[:, nzCounts]
 # Scran normalization
 sf = rnaseqFuncs.scranNorm(countsNz)
+countModel = rnaseqFuncs.RnaSeqModeler().fit(countsNz, sf)
 # %%
 for i in np.unique(ann):
     print(eq[i])
     labels = (ann == i).astype(int)
-    DE_res = rnaseqFuncs.deseqDE(countsNz, sf, labels, order, parallel=True)
-    break
+    res2 = rnaseqFuncs.mannWhitneyDE(countModel.residuals, sf, labels, order)
+    sig = fdrcorrection(res2[0])[0] & (res2[1] > 0)
+    res = pd.DataFrame(res2, columns=consensuses.index[nzCounts], index=["pval", "residual diff"]).T
+    res["Upreg"] = sig.astype(int)
+    res.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/res_{eq[i]}.csv")
+    test = consensuses[nzCounts][sig]
+    test.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/bed_{eq[i]}", header=None, sep="\t", index=None)
+    if len(test) == 0:
+        continue
+    pvals = enricherglm.findEnriched(test, background=consensuses)
+    enricherglm.plotEnrichs(pvals)
+    enricherglm.clusterTreemap(pvals, score="-log10(pval)", 
+                                output=paths.outputDir + f"rnaseq/encode_rnaseq/DE/great_{eq[i]}.pdf")
+# %%
+
 # %%
