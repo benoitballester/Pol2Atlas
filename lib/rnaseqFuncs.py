@@ -1,3 +1,4 @@
+from statistics import median
 import warnings
 
 import KDEpy
@@ -10,9 +11,11 @@ from joblib import Parallel, delayed
 from rpy2.robjects import numpy2ri, pandas2ri
 from rpy2.robjects.conversion import localconverter
 from rpy2.robjects.packages import importr
-from scipy.stats import chi2, rankdata, mannwhitneyu
+from scipy.stats import chi2, rankdata, mannwhitneyu, gmean, nbinom
 from sklearn.decomposition import PCA
 from statsmodels.stats.multitest import fdrcorrection
+from statsmodels.api import GLM
+from statsmodels.genmod.families.family import NegativeBinomial
 import pandas as pd
 scran = importr("scran")
 deseq = importr("DESeq2")
@@ -23,22 +26,32 @@ def findMode(arr):
     pos, fitted = KDEpy.FFTKDE(bw="silverman").fit(arr).evaluate(10000)
     return pos[np.argmax(fitted)]
 
-def statsProcess(alpha, sf, counts, m):
-    pred = m * sf
-    rp = (counts-pred) / np.sqrt(pred + alpha * pred**2)
-    rp = np.clip(rp, -np.sqrt(4+len(counts)/4),np.sqrt(4+len(counts)/4))
-    p = chi2(len(sf)-1).sf(np.sum(np.square(rp)))
-    return rp, p
+def statsProcess(alpha, sf, counts, design):
+    distrib = NegativeBinomial(alpha=alpha)
+    model = GLM(counts.reshape(-1,1), design, family=distrib, exposure=sf)
+    pred = model.fit().predict()
+    n = np.clip(1/alpha, 1e-9, 1e9)
+    p = np.clip(pred / (pred + alpha * (pred**2)), 1e-9, 1-1e-9)
+    distrib = nbinom(n, p)
+    lowerClip = np.maximum(distrib.ppf(0.5*0.05/len(counts)), 0)
+    upperClip = np.maximum(distrib.isf(0.5*0.05/len(counts)), 0)
+    clippedCounts = np.clip(counts, lowerClip, upperClip)
+    sd = np.sqrt(pred + alpha * pred**2)
+    rp = (clippedCounts-pred) / sd
+    # Compute pvalues
+    p = np.minimum(distrib.sf(counts-1), distrib.cdf(counts))*2.0
+    p = np.sum(fdrcorrection(p, 0.05)[0]) < 2
+    return rp.astype("float32"), float(p)
 
-def fitModels(counts, sfs, m):
+def fitModels(counts, sfs, m, design):
     warnings.filterwarnings("error")
     try:
-        model = discrete_model.NegativeBinomial(counts, np.ones(len(counts)), exposure=sfs)
-        fit = model.fit([np.log(m), 10.0], method="nm", ftol=1e-9, maxiter=500, disp=False, skip_hessian=True)
+        model = discrete_model.NegativeBinomial(counts.reshape(-1,1), design, exposure=sfs)
+        fit = model.fit(method="nm", ftol=1e-9, maxiter=500, disp=False, skip_hessian=True)
     except:
-        return [np.log(m), -1]
+        return -1
     warnings.filterwarnings("default")
-    return fit.params
+    return fit.params[-1]
 
 
 class RnaSeqModeler:
@@ -51,14 +64,16 @@ class RnaSeqModeler:
         '''
         pass
     
-    def fit(self, counts, sf, subSampleEst=20000, hv_fdr=0.05, plot=True, verbose=True):
+    def fit(self, counts, sf, design=None, maxThreads=-1, subSampleEst=5000, hv_fdr=0.25, plot=True, verbose=True):
         '''
         Fit the model
         '''
+        if design is None:
+            design = np.ones_like(sf)
         # Setup size factors
         self.counts = counts
         self.scaled_sf = sf/np.mean(sf)
-        self.normed = counts / self.scaled_sf.reshape(-1,1)
+        self.normed = (counts / self.scaled_sf.reshape(-1,1)).astype("float32")
         # Estimate Negative Binomial parameters per Pol II probe
         fittedParams = []
         np.random.seed(42)
@@ -67,17 +82,17 @@ class RnaSeqModeler:
             subSampleEst = counts.shape[1]
         shuffled = np.random.permutation(counts.shape[1])[:subSampleEst]
         m = np.mean(self.normed, axis=0)
-        with Parallel(n_jobs=-1, verbose=verbose, batch_size=512, max_nbytes=None) as pool:
-           fittedParams = pool(delayed(fitModels)(self.counts[:, i], self.scaled_sf, m[i]) for i in shuffled)
-        alphas = np.array(fittedParams)[:, 1]
-        valid = alphas > 1e-3
+        with Parallel(n_jobs=maxThreads, verbose=verbose, batch_size=512, max_nbytes=None) as pool:
+           fittedParams = pool(delayed(fitModels)(self.counts[:, i], self.scaled_sf, m[i], design) for i in shuffled)
+        alphas = np.array(fittedParams)
+        valid = alphas > 0.0
         # Estimate NB overdispersion in function of mean expression
         # Overdispersion can be caused by biological variation as well as technical variation
         # To estimate technical overdispersion, it is assumed that a large fraction of probes are non-DE, and that overdispersion is a function of mean
         # The modal value of overdispersion is tracked for each decile of mean expression using a kernel density estimate
         # The median value would overestimate overdispersion as the % of DE probes is unknown
         means = np.mean(self.normed[:, shuffled], axis=0)
-        nQuantiles = 20
+        nQuantiles = 25
         pcts = np.linspace(0,100,nQuantiles+1)
         centers = (pcts * 0.5 + np.roll(pcts,1)*0.5)[1:]/100
         quantiles = np.percentile(means, pcts)
@@ -90,14 +105,14 @@ class RnaSeqModeler:
         self.means = np.mean(self.normed, axis=0)
         fittedAlpha = si.interp1d(centers, regressed, bounds_error=False, fill_value="extrapolate")
         self.regAlpha = fittedAlpha((rankdata(self.means)-0.5)/len(self.means))
-
         # Dispatch accross multiple processes
-        with Parallel(n_jobs=-1, verbose=verbose, batch_size=512, max_nbytes=None) as pool:
-            stats = pool(delayed(statsProcess)(self.regAlpha[i], self.scaled_sf, counts[:, i], self.means[i]) for i in range(counts.shape[1]))
+        with Parallel(n_jobs=maxThreads, verbose=verbose, batch_size=512, max_nbytes=None) as pool:
+            stats = pool(delayed(statsProcess)(self.regAlpha[i], self.scaled_sf, counts[:, i], design) for i in range(counts.shape[1]))
         # stats = [statsProcess(self.regAlpha[i], self.scaled_sf, counts[:, i], self.means[i]) for i in range(counts.shape[1])]
         # Unpack results
         self.residuals = np.array([i[0] for i in stats]).T
-        self.hv = fdrcorrection(np.array([i[1] for i in stats]).T, hv_fdr)[0]
+        self.pvals = np.array([i[1] for i in stats]).ravel()
+        self.hv = fdrcorrection(self.pvals, hv_fdr)[0]
         if plot:
             plt.figure(dpi=500)
             plt.plot(self.regAlpha[np.argsort(np.mean(self.normed, axis=0))])
@@ -128,7 +143,7 @@ class RnaSeqModeler:
 
         
 
-def permutationPA_PCA(X, perm=3, alpha=0.01, solver="randomized", whiten=True,
+def permutationPA_PCA(X, perm=3, alpha=0.01, solver="randomized", whiten=False,
                       max_rank=None, mincomp=0, returnModel=False, plot=True):
     """
     Permutation Parallel Analysis to find the optimal number of PCA components.
@@ -228,11 +243,17 @@ def filterDetectableGenes(counts, readMin, expMin):
     return np.sum(counts >= readMin, axis=0) >= expMin
 
 def scranNorm(counts):
-    detected = [np.sum(counts >= i, axis=0) for i in range(10)][::-1]
+    detected = [np.sum(counts > i, axis=0) for i in range(10)][::-1]
     mostDetected = np.lexsort(detected)[::-1][:int(counts.shape[1]*0.05+1)]
     with localconverter(ro.default_converter + numpy2ri.converter):
         sf = scran.calculateSumFactors(counts.T[mostDetected])
     return sf
+
+def deseqNorm(counts):
+    gmeans = gmean(counts, axis=0)
+    gmeans = np.where(counts.min(axis=0) == 0, np.nan, gmeans)
+    return np.nanmedian(counts/gmeans, axis=1)
+    
 
 def deseqDE(counts, sf, labels, colNames, parallel=False):
     countTable = pd.DataFrame(counts.T, columns=colNames)

@@ -1,9 +1,9 @@
 # ---------- Common ---------- 
-outputDir = "/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2_newAnnot/"   # Main results
+outputDir = "/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2/"   # Main results
 tempDir = "/shared/projects/pol2_chipseq/pol2_interg_default/tempPol2/"       # Temporary files / unimportant
 genomeFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/hg38.chrom.sizes.sorted"
-annotationFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/annotPol2.tsv"
-polIIannotationPalette = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/palettes/main_annot_fmt2.csv"
+annotationFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/annotPol2_cpy.tsv"
+polIIannotationPalette = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/palettes/annotation_palette2.tsv"
 # ---------- Required for peak integrative analysis ---------- 
 peaksFolder = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/peaksInterg/"
 remapFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/remap2020_nr.bed"
@@ -35,9 +35,8 @@ countsTCGA = "/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2/rnase
 tcgaGeneCounts = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/geneCounts.hd5"
 tcgaAnnot = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/perFileAnnotation.tsv"
 tcgaAnnotCounts = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/perFileAnnotationCounts.tsv"
-tcgaToMainAnnot = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/tcga_project_annot.csv"
 countsENCODE = "/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2/rnaseq/encode_counts/"
-encodeAnnot = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/encode_total_rnaseq_annot_0.tsv"
+encodeAnnot = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/encode_total_rnaseq_annot_0 (copy).tsv"
 countsGTEx = "/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2/rnaseq/gtex_counts/"
 GTExAnnot = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/GTex/tsvs/sample.tsv"
 atlasPath = "/shared/projects/pol2_chipseq/pol2_interg_default/temp_POL2_lenient_largerTSS_latestGENCODE/POLR2A_Inter_500.saf"

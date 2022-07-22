@@ -1,30 +1,36 @@
 # %%
-import numpy as np
-from scipy.signal import argrelextrema, oaconvolve
-from scipy.signal.windows import gaussian
-from scipy.io import mmwrite
-from scipy.sparse import csr_matrix
-from scipy.stats import hypergeom, mannwhitneyu
-import seaborn as sns
-import pandas as pd
-import umap
 import argparse
 import os
-import pynndescent
-import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
 import sys
+
 import cv2
-from .utils import plot_utils, matrix_utils, overlap_utils
-from sklearn.metrics import adjusted_rand_score, adjusted_mutual_info_score
-from fastcluster import linkage_vector
-import scipy.cluster.hierarchy as hierarchy
-from statsmodels.stats.multitest import multipletests
-from sklearn.metrics import balanced_accuracy_score
-from sklearn.neighbors import KNeighborsClassifier
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import pynndescent
+import seaborn as sns
+import umap
+from matplotlib.patches import Patch
+from scipy.io import mmwrite
+from scipy.signal import argrelextrema, oaconvolve
+from scipy.signal.windows import gaussian
+from scipy.sparse import csr_matrix
+from scipy.stats import binom, hypergeom, mannwhitneyu
+
+try:
+    from utils import matrix_utils, overlap_utils, plot_utils
+except ModuleNotFoundError:
+    from .utils import plot_utils, matrix_utils, overlap_utils
+
 import pickle
-import os
-import sys
+import pyranges as pr
+import scipy.cluster.hierarchy as hierarchy
+from fastcluster import linkage_vector
+from sklearn.metrics import (adjusted_mutual_info_score, adjusted_rand_score,
+                             balanced_accuracy_score)
+from sklearn.neighbors import KNeighborsClassifier
+from statsmodels.stats.multitest import multipletests
+
 sys.setrecursionlimit(100000)
 
 class peakMerger:
@@ -345,14 +351,14 @@ class peakMerger:
             f.write("Genome size\t" + str(self.genomeSize) + "\n")
 
 
-    def pseudoHC(self, annotationFile=None, metric="dice", kMetaSamples=50000, method="ward"):
+    def pseudoHC(self, annotationFile=None, metric="dice", kMetaSamples=50000, method="ward", figureFmt="pdf"):
         orderRows = matrix_utils.threeStagesHC(self.matrix.T, metric)
         orderCols = matrix_utils.threeStagesHC(self.matrix, metric)
-        plot_utils.plotHC(self.matrix, self.labels, annotationFile, rowOrder=orderRows, colOrder=orderCol)
+        plot_utils.plotHC(self.matrix, self.labels, annotationFile, rowOrder=orderRows, colOrder=orderCols)
         plt.savefig(self.outputPath + f"pseudoHC.{figureFmt}", bbox_inches='tight')
         plt.show()
 
-    def umap(self, transpose, altMatrix=None, annotationFile=None, annotationPalette=None, metric="auto", k=15, figureFmt="pdf", reDo=False):
+    def umap(self, transpose, altMatrix=None, annotationFile=None, annotationPalette=None, metric="auto", k=30, figureFmt="pdf", reDo=False):
         """
         Performs UMAP dimensionnality reduction on the matrix, and plot results 
         with the annotation.
@@ -396,7 +402,9 @@ class peakMerger:
         # Autoselect metric
         if metric == "auto":
             if self.score == "binary":
-                    metric = "dice"
+                metric = "dice"
+                if transpose:
+                    metric = "yule"
             else:
                 metric = "correlation"
         # Load annotation file
@@ -411,7 +419,7 @@ class peakMerger:
         # Run UMAP
         if transpose:
             if reDo or (self.embedding[1] is None):
-                self.embedderT = umap.UMAP(n_neighbors=k, min_dist=0.0, metric=metric, random_state=42)
+                self.embedderT = umap.UMAP(n_neighbors=k, min_dist=0.5, metric=metric, random_state=42)
                 if altMatrix is None:
                     self.embedding[1] = self.embedderT.fit_transform(self.matrix.T)
                 else:
@@ -481,7 +489,7 @@ class peakMerger:
         return self.embedding[int(transpose)]
 
 
-    def clusterize(self, transpose, altMatrix=None, metric="auto", r=0.4, k="auto", 
+    def clusterize(self, transpose, altMatrix=None, metric="auto", r=1.0, k="auto", 
                   method="SNN", restarts=1, annotationFile=None, annotationPalette=None, 
                   figureFmt="pdf", reDo=False):
         """
@@ -542,7 +550,9 @@ class peakMerger:
             raise TypeError(f"Invalid clustering method : {method}, please use 'SNN' or 'KNN'")
         if metric == "auto":
             if self.score == "binary":
-                    metric = "dice"
+                metric = "dice"
+                if transpose:
+                    metric = "yule"
             else:
                 metric = "correlation"
         if reDo or (self.clustered[int(transpose)] is None):
@@ -778,7 +788,7 @@ class peakMerger:
         return enrichments
 
 
-    def topPeaksPerAnnot(self, annotationFile, multitesting="fdr_by", alpha=0.05):
+    def topPeaksPerAnnot(self, annotationFile, multitesting="fdr_bh", alpha=0.05):
         """
         For each annotation, find the consensuses with enriched presence in experiments
         belonging to this annotation. Performs a hypergeometric test in the 
@@ -812,29 +822,27 @@ class peakMerger:
         """
         annotationDf = pd.read_csv(annotationFile, sep="\t", index_col=0)
         annotations, eq = pd.factorize(annotationDf.loc[self.labels]["Annotation"], sort=True)
-        M = self.matrix.shape[1]
+        M = self.matrix.sum()
         perAnnotConsensuses = dict()
         perAnnotQvals = dict()
         # For each annotation
         for i in range(len(eq)):
             hasAnnot = annotations == i
-            N = np.sum(hasAnnot)
-            pvals = []
-            # Compute p value for each consensus
-            for c in self.matrix:
-                if self.score == "binary":
-                    k = np.sum(c & hasAnnot)
-                    n = np.sum(c)
-                    pvals.append(hypergeom(M, n, N).sf(k-1))
-                else:
-                    p = mannwhitneyu(c[hasAnnot], c[np.logical_not(hasAnnot)], alternative="greater")[1]
-                    pvals.append(p)
-            pvals = np.array(pvals)
+            N = self.matrix[:, hasAnnot].sum()
+            n = np.sum(self.matrix, axis=1)
+            k = np.sum(self.matrix[:, hasAnnot], axis=1)
+            if self.score == "binary":
+                pvals = hypergeom(M, n, N).sf(k-1)
+            else:
+                pvals = mannwhitneyu(self.matrix[:, hasAnnot], 
+                                          self.matrix[:, np.logical_not(hasAnnot)], 
+                                          axis=1, alternative="greater")[1]
             # Multitesting correction
             if type(multitesting) is str:
-                sig, qvals = multipletests(pvals, method=multitesting, alpha=alpha)[0:2]
+                qvals = multipletests(pvals, method=multitesting, alpha=alpha)[1]
             else:
-                sig, qvals = multitesting(pvals)[0:2]
+                qvals = multitesting(pvals)[1]
+            sig = qvals < alpha
             sigConsensuses = self.consensuses.iloc[sig]
             if self.outputPath is not None:
                 try:
@@ -880,7 +888,7 @@ class peakMerger:
         """
         if metric == "auto":
             if self.score == "binary":
-                metric = "dice"
+                metric = "yule"
             else:
                 metric = "correlation"
         index = pynndescent.NNDescent(self.matrix.T, n_neighbors=min(30+k, len(self.matrix.T)-1), 
@@ -900,7 +908,7 @@ class peakMerger:
             score = evalMetric(annotations, pred)
         with open(self.outputPath + "knnBalancedAcc.txt", "w") as f:
             f.write(str(score))
-        return balanced_accuracy_score(annotations, pred), KNeighborsClassifier(1, metric="dice").fit(self.matrix.T, annotations)
+        return balanced_accuracy_score(annotations, pred), KNeighborsClassifier(1, metric=metric).fit(self.matrix.T, annotations)
 
 
 
@@ -1024,3 +1032,5 @@ if __name__ == "__main__":
         else:
             print("No annotation file given, will skip 1-NN accuracy.")
     sys.exit()
+
+# %%

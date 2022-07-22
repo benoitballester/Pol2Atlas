@@ -10,7 +10,7 @@ import scipy.stats as ss
 import seaborn as sns
 import sklearn.metrics as metrics
 import umap
-from lib import normRNAseq, rnaseqFuncs
+from lib import rnaseqFuncs
 from lib.utils import matrix_utils, plot_utils
 from matplotlib.patches import Patch
 from scipy.spatial.distance import dice
@@ -18,14 +18,17 @@ from scipy.stats import chi2, rankdata
 from settings import params, paths
 from statsmodels.stats.multitest import fdrcorrection
 
-os.environ["CUDA_VISIBLE_DEVICES"]="2"
-countDir = "/scratch/pdelangen/projet_these/outputPol2/rnaseq/encode_counts/"
+countDir = paths.countsENCODE
+try:
+    os.mkdir(paths.outputDir + "rnaseq/")
+except FileExistsError:
+    pass
 try:
     os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/")
 except FileExistsError:
     pass
 # %%
-annotation = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/encode_total_rnaseq_annot_0.tsv", 
+annotation = pd.read_csv(paths.encodeAnnot, 
                         sep="\t", index_col=0)
 dlFiles = os.listdir(countDir + "BG/")
 dlFiles = [f for f in dlFiles if f.endswith(".txt.gz")]
@@ -39,7 +42,7 @@ for f in dlFiles:
         # countsBG.append(pd.read_csv(paths.countDirectory + "BG/" + f, header=None, skiprows=2).values)
         status = pd.read_csv(countDir + "500centroid/" + id + ".counts.summary",
                              header=None, index_col=0, sep="\t", skiprows=1).T
-        counts.append(pd.read_csv(countDir + "500centroid/" + f, header=None, skiprows=2).values)
+        counts.append(pd.read_csv(countDir + "500centroid/" + f, header=None, skiprows=2).values.astype("int32"))
         status = status.drop("Unassigned_Unmapped", axis=1)
         allReads.append(status.values.sum())
         order.append(id)
@@ -50,58 +53,46 @@ allCounts = np.concatenate(counts, axis=1).T
 ann, eq = pd.factorize(annotation.loc[order]["Annotation"], sort=True)
 # %% 
 # Plot FPKM expr per annotation
-palette = pd.read_csv(paths.polIIannotationPalette, sep=",")
-palette = dict([(d["Annotation"], (d["r"],d["g"],d["b"])) for r,d in palette.iterrows()])
 fpkmExpr = np.sum(allCounts/allReads[:, None], axis=1)*100
 df = pd.DataFrame(data=np.concatenate([fpkmExpr[:, None], annotation.loc[order]["Annotation"].ravel()[:, None]], axis=1), columns=["Percentage of mapped reads", "Annotation"])
 plt.figure(figsize=(6,4), dpi=500)
-sns.boxplot(data=df, x="Percentage of mapped reads", y="Annotation", palette=palette, showfliers=False)
-sns.stripplot(data=df, x="Percentage of mapped reads", y="Annotation", palette=palette, dodge=True, 
+sns.boxplot(data=df, x="Percentage of mapped reads", y="Annotation", showfliers=False)
+sns.stripplot(data=df, x="Percentage of mapped reads", y="Annotation", dodge=True, 
                 edgecolor="black", jitter=1/3, alpha=1.0, s=2, linewidth=0.1)
 plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/pctmapped_per_annot.pdf", bbox_inches="tight")
 # %%
-nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=2)
+nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=3)
 counts = allCounts[:, nzCounts]
-
 # %%
-import rpy2.robjects as ro
-from rpy2.robjects import numpy2ri, pandas2ri
-from rpy2.robjects.conversion import localconverter
-from rpy2.robjects.packages import importr
-
-scran = importr("scran")
-deseq = importr("DESeq2")
-base = importr("base")
-detected = [np.sum(counts >= i, axis=0) for i in range(20)][::-1]
-topMeans = np.lexsort(detected)[::-1][:int(counts.shape[1]*0.05+1)]
-with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
-    sf = scran.calculateSumFactors(counts.T[topMeans])
+sf = rnaseqFuncs.scranNorm(counts).astype("float32")
 # %%
 from lib.rnaseqFuncs import RnaSeqModeler
 
-countModel = RnaSeqModeler().fit(counts, sf)
+countModel = RnaSeqModeler().fit(counts, sf, maxThreads=32)
 
 hv = countModel.hv
 
 # %%
 feat = countModel.residuals[:, hv]
 # feat = StandardScaler().fit_transform(np.log(1+counts[:, hv]/sf[:, None]))
-decomp = rnaseqFuncs.permutationPA_PCA(feat, max_rank=250)
+decomp = rnaseqFuncs.permutationPA_PCA(feat, whiten=True, max_rank=250)
 matrix_utils.looKnnCV(decomp, ann, "correlation",1)
 # %%
 # Plot UMAP of samples for visualization
-embedding = umap.UMAP(n_neighbors=30, min_dist=0.3, random_state=42, low_memory=False, metric="correlation").fit_transform(decomp)
+embedding = umap.UMAP(n_neighbors=30, min_dist=0.5, random_state=42, low_memory=False, metric="correlation").fit_transform(decomp)
 # %%
 import plotly.express as px
 
 df = pd.DataFrame(embedding, columns=["x","y"])
 df["Annotation"] = annotation.loc[order]["Annotation"].values
 df["Biosample term name"] = annotation.loc[order]["Biosample term name"].values
+
 annot, palette, colors = plot_utils.applyPalette(annotation.loc[order]["Annotation"],
                                                 np.unique(annotation.loc[order]["Annotation"]),
                                                  paths.polIIannotationPalette, ret_labels=True)
 palettePlotly = [f"rgb({int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)})" for c in palette]
-colormap = dict(zip(annot, palettePlotly))        
+colormap = dict(zip(annot, palettePlotly))     
+
 fig = px.scatter(df, x="x", y="y", color="Annotation", color_discrete_map=colormap,
                 hover_data=['Biosample term name'], width=800, height=800)
 fig.show()
@@ -117,9 +108,49 @@ for i, a in enumerate(annot):
     patches.append(legend)
 plt.legend(handles=patches, prop={'size': 7}, bbox_to_anchor=(0,1.02,1,0.2),
                     loc="lower left", mode="expand", ncol=6)
-plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/umap_samples.pdf")
+plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/umap_samples2.pdf")
 plt.show()
 plt.close()
+# %%
+from lib.pyGREAT_normal import pyGREAT as pyGREATglm
+enricherglm = pyGREATglm(paths.GOfile,
+                          geneFile=paths.gencode,
+                          chrFile=paths.genomeFile)
+consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
+
+try:
+    os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/DE/")
+except FileExistsError:
+    pass
+# %%
+from lib.utils.reusableUtest import mannWhitneyAsymp
+tester = mannWhitneyAsymp(countModel.residuals)
+# %%
+pctThreshold = 0.1
+lfcMin = 0.25
+for i in np.unique(ann):
+    print(eq[i])
+    labels = (ann == i).astype(int)
+    res2 = tester.test(labels, "less")
+    sig = fdrcorrection(res2[1])[0]
+    minpct = np.mean(counts[ann == i] > 0.5, axis=0) > max(0.1, 1.5/labels.sum())
+    fc = np.mean(counts[ann == i], axis=0) / (1e-9+np.mean(counts[ann != i], axis=0))
+    lfc = np.log2(fc) > lfcMin
+    sig = sig & lfc & minpct
+    print(sig.sum())
+    res = pd.DataFrame(res2[::-1], columns=consensuses.index[nzCounts], index=["pval", "stat"]).T
+    res["Upreg"] = sig.astype(int)
+    res.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/res_{eq[i]}.csv")
+    test = consensuses[nzCounts][sig]
+    test.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/bed_{eq[i]}", header=None, sep="\t", index=None)
+    if len(test) == 0:
+        continue
+    '''
+    pvals = enricherglm.findEnriched(test, background=consensuses)
+    enricherglm.plotEnrichs(pvals)
+    enricherglm.clusterTreemap(pvals, score="-log10(pval)", 
+                                output=paths.outputDir + f"rnaseq/encode_rnaseq/DE/great_{eq[i]}.pdf")
+    '''
 # %%
 rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
 colOrder, colLink = matrix_utils.threeStagesHClinkage(feat.T, "correlation")
@@ -141,7 +172,7 @@ plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_row_dendrogram.pdf
 plt.show()
 plt.close()
 # %%
-clippedSQ= np.log(1+countModel.normed)
+clippedSQ = countModel.residuals
 plot_utils.plotHC(clippedSQ.T[hv], annotation.loc[order]["Annotation"], (countModel.normed).T[hv],  
                   paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder)
 plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_hvg.pdf")
@@ -153,7 +184,7 @@ hierarchy.dendrogram(colLinkAll, p=10, truncate_mode="level", color_threshold=-1
 plt.axis('off')
 plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_col_dendrogram.pdf")
 plt.show()
-clippedSQ= np.log(1+countModel.normed)
+clippedSQ = countModel.residuals
 plt.figure(dpi=500)
 plot_utils.plotHC(clippedSQ.T, annotation.loc[order]["Annotation"], (countModel.normed).T,  
                   paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrderAll)
@@ -180,7 +211,6 @@ for i in range(np.max(ann)+1):
 rnaseqPerCategory /= np.sum(rnaseqPerCategory, axis=0)
 rnaseqPerCategory /= np.sum(rnaseqPerCategory, axis=1)[:, None]
 rnaseqPerCategory /= np.sum(rnaseqPerCategory, axis=0)
-signalPerCategory = signalPerCategory[:, nzCounts]
 # %%
 
 try:
@@ -295,7 +325,7 @@ signalTopCat = -rnaseqPerCategory[(topCat,range(len(topCat)))]
 colOrder = np.lexsort((signalTopCat, topCat))
 meanNormed = countModel.normed/np.mean(countModel.normed, axis=0)
 epsilon = 1/np.nanmax(np.log(meanNormed), axis=0)
-clippedSQ= np.log(1+countModel.normed)
+clippedSQ= countModel.residuals
 plt.figure(dpi=500)
 plot_utils.plotHC(clippedSQ.T, annotation.loc[order]["Annotation"], countModel.normed.T,  
                   paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder)
@@ -308,7 +338,7 @@ topCat = signalPerCategory.argmax(axis=0)
 signalTopCat = -signalPerCategory[(topCat,range(len(topCat)))]
 top50 = signalTopCat < -0.51
 colOrder = np.lexsort((signalTopCat[top50], topCat[top50]))
-clippedSQ= np.log(1+countModel.normed)
+clippedSQ= countModel.residuals
 plt.figure(dpi=500)
 plot_utils.plotHC(clippedSQ.T[top50], annotation.loc[order]["Annotation"],
                   mtx[top50],
@@ -324,7 +354,7 @@ signalTopCat = -rnaseqPerCategory[(topCat,range(len(topCat)))]
 colOrder = np.lexsort((signalTopCat, topCat))
 meanNormed = countModel.normed/np.mean(countModel.normed, axis=0)
 epsilon = 1/np.nanmax(np.log(meanNormed), axis=0)
-clippedSQ= np.log(1+countModel.normed)
+clippedSQ= countModel.residuals
 plt.figure(dpi=500)
 plot_utils.plotHC(clippedSQ.T, annotation.loc[order]["Annotation"],
                   mtx,
@@ -344,7 +374,7 @@ signalTopCat = -rnaseqPerCategory[(topCat,range(len(topCat)))]
 colOrder = np.lexsort((signalTopCat[top50], topCat[top50]))
 meanNormed = countModel.normed/np.mean(countModel.normed, axis=0)
 epsilon = 1/np.nanmax(np.log(meanNormed), axis=0)
-clippedSQ= np.log(1+countModel.normed)
+clippedSQ = countModel.residuals
 plt.figure(dpi=500)
 plot_utils.plotHC(clippedSQ.T[top50], annotation.loc[order]["Annotation"],
                   mtx[top50],

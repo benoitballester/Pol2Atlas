@@ -1,6 +1,7 @@
 {
-    "python.pythonPath": "/home/pdelangen/miniconda3/envs/baseEnv/bin/python",
+    "python.pythonPath": "/shared/projects/pol2_chipseq/pkg/miniconda3/envs/baseEnv/bin/python",
     "jupyter.notebookFileRoot": "${workspaceFolder}",
     "jupyter.jupyterServerType": "local",
     "jupyter.jupyterLaunchTimeout": 600000,
+    "jupyter.useDefaultConfigForJupyter": false,
 }

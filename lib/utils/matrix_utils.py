@@ -10,8 +10,10 @@ import umap
 from sklearn.cluster import MiniBatchKMeans
 from fastcluster import linkage_vector
 import scipy.cluster.hierarchy as hierarchy
+from sklearn.neighbors import KNeighborsTransformer
 
-def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, disconnection_distance=None, method="approx", restarts=1):
+def graphClustering(matrix, metric, k="auto", r=1.0, snn=True, 
+                    approx=True, restarts=1):
     """
     Performs graph based clustering on the matrix.
 
@@ -23,12 +25,12 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, disconnection_dis
         if the peak scoring is set to binary, or pearson correlation otherwise. 
         See the pynndescent documentation for a list of available metrics.
 
-    r: float (optional, default 0.4)
+    r: float (optional, default 1.0)
         Resolution parameter of the graph partitionning algorithm. Lower values = less clusters.
 
     k: "auto" or integer (optional, default "auto")
         Number of nearest neighbors used to build the NN graph.
-        If set to auto uses 2*numPoints^0.2 neighbors as a rule of thumb, as too few 
+        If set to auto uses 5*numPoints^0.2 neighbors as a rule of thumb, as too few 
         NN with a lot of points can create disconnections in the graph.
 
     snn: Boolean (optional, default True)
@@ -37,6 +39,11 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, disconnection_dis
         to the number of shared nearest neighbors between two nodes. Otherwise,
         all edges are equally weighted. SNN can produce a more refined clustering 
         but it can also hallucinate some clusters.
+    
+    approx: Boolean (optional, default True)
+        Whether to use approximate nearest neighbors using nearest neighbor descent
+        or exact nearest neighbors. Exact method will take very long on a large number of
+        points.
 
     restarts: integer (optional, default 1)
         The number of times to restart the graph partitionning algorithm, before keeping 
@@ -49,23 +56,25 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, disconnection_dis
     """
     # Create NN graph
     if k == "auto":
-        k = int(np.power(matrix.shape[0], 0.2)*2)
-    # Add a few extra NNs to compute in order to get more accurate ANNs
-    extraNN = 10
-    lowMem = matrix.shape[0] > 100000
-    index = pynndescent.NNDescent(matrix, n_neighbors=k+extraNN+1, metric=metric, 
-                                low_memory=lowMem, random_state=42)
-    nnGraph = index.neighbor_graph[0][:, 1:k+1]
-    dists = index.neighbor_graph[1][:, 1:k+1]
+        k = int(np.power(matrix.shape[0], 0.2)*5)
+        print(k)
+    if approx:
+        # Add a few extra NNs to compute in order to get more accurate ANNs
+        extraNN = 20
+        index = pynndescent.NNDescent(matrix, n_neighbors=k+extraNN+1, metric=metric, 
+                                    low_memory=False, random_state=42)
+        nnGraph = index.neighbor_graph[0][:, 1:k+1]
+    else:
+        graph = KNeighborsTransformer(mode="connectivity", n_neighbors=k+1, 
+                        metric=metric, n_jobs=-1).fit_transform(matrix)
+        nnGraph = np.array(graph.nonzero()).T
+        nnGraph = nnGraph[:, 1].reshape(len(matrix), -1)[:, 1:k+1]
     edges = np.zeros((nnGraph.shape[0]*nnGraph.shape[1], 2), dtype='int64')
     if snn:
         weights = np.zeros((nnGraph.shape[0]*nnGraph.shape[1]), dtype='float')
     for i in range(len(nnGraph)):
         for j in range(nnGraph.shape[1]):
             if nnGraph[i, j] > -0.5:    # Pynndescent may fail to find nearest neighbors in some cases
-                if disconnection_distance is not None:
-                    if dists[i, j] >= disconnection_distance:
-                        continue
                 link = nnGraph[i, j]
                 edges[i*nnGraph.shape[1]+j] = [i, link]
                 if snn:
@@ -82,7 +91,7 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, disconnection_dis
                                             seed=i, resolution_parameter=r, weights=weights, n_iterations=-1)
         else:
             part = leidenalg.find_partition(graph, leidenalg.RBConfigurationVertexPartition, 
-                                            seed=i,resolution_parameter=r, n_iterations=-1)
+                                            seed=i, resolution_parameter=r, n_iterations=-1)
         if part.quality() > best:
             partitions = part
             best = part.quality()
@@ -91,6 +100,7 @@ def graphClustering(matrix, metric, k="auto", r=0.4, snn=True, disconnection_dis
     for i, p in enumerate(partitions):
         clustered[p] = i
     return clustered
+
 
 def threeStagesHC(matrix, metric, kMetaSamples=50000, method="ward"):
     """
@@ -244,4 +254,4 @@ def looKnnCV(X, Y, metric, k):
         # Weighted by the proportion of the labels
         pred.append(np.argmax(np.bincount(nns, minlength=len(annProp))/annProp))
     score = balanced_accuracy_score(Y, pred)
-    return balanced_accuracy_score(Y, pred)
+    return score

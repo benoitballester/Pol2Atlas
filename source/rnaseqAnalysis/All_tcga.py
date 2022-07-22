@@ -17,9 +17,9 @@ from rpy2.robjects import numpy2ri
 numpy2ri.activate()
 scran = importr("scran")
 # %%
-annotation = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnotation.tsv", 
+annotation = pd.read_csv(paths.tcgaData + "/perFileAnnotation.tsv", 
                         sep="\t", index_col=0)
-dlFiles = os.listdir(paths.countDirectory + "BG/")
+dlFiles = os.listdir(paths.countsTCGA + "BG/")
 dlFiles = [f for f in dlFiles if f.endswith(".txt.gz")]
 counts = []
 countsBG = []
@@ -28,47 +28,95 @@ order = []
 for f in np.array(dlFiles):
     try:
         id = f.split(".")[0]
-        # countsBG.append(pd.read_csv(paths.countDirectory + "BG/" + f, header=None, skiprows=2).values)
-        status = pd.read_csv(paths.countDirectory + "500centroid/" + id + ".counts.summary",
+        # countsBG.append(pd.read_csv(paths.countsTCGA + "BG/" + f, header=None, skiprows=2).values)
+        status = pd.read_csv(paths.countsTCGA + "500centroid/" + id + ".counts.summary",
                              header=None, index_col=0, sep="\t", skiprows=1).T
-        counts.append(pd.read_csv(paths.countDirectory + "500centroid/" + f, header=None, skiprows=2).values)
+        counts.append(pd.read_csv(paths.countsTCGA + "500centroid/" + f, header=None, skiprows=2).values.astype("int32"))
         status = status.drop("Unassigned_Unmapped", axis=1)
         allReads.append(status.values.sum())
         order.append(id)
     except:
         continue
 allReads = np.array(allReads)
-allCounts = np.concatenate(counts, axis=1).T
+counts = np.concatenate(counts, axis=1).T
 # bgCounts = np.concatenate(countsBG, axis=1).T
 # %%
 # Keep tumoral samples
 kept = np.isin(order, annotation.index)
-allCounts = allCounts[kept]
+counts = counts[kept]
 # bgCounts = bgCounts[:, kept]
 allReads = allReads[kept]
 annotation = annotation.loc[np.array(order)[kept]]
 tumor = np.logical_not(annotation["Sample Type"] == "Solid Tissue Normal")
 # %%
 # Remove undected Pol II probes
+nzCounts = rnaseqFuncs.filterDetectableGenes(counts, readMin=1, expMin=3)
+counts = counts[:, nzCounts]
 # %%
-nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=2)
-counts = allCounts[:, nzCounts]
-
+# Normalize
+sf = rnaseqFuncs.scranNorm(counts)
 # %%
-import rpy2.robjects as ro
-from rpy2.robjects.packages import importr
-from rpy2.robjects import pandas2ri, numpy2ri
-from rpy2.robjects.conversion import localconverter
-scran = importr("scran")
-base = importr("base")
-detected = [np.sum(counts >= i, axis=0) for i in range(20)][::-1]
-topMeans = np.lexsort(detected)[::-1][:int(counts.shape[1]*0.05+1)]
-with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
-    sf = scran.calculateSumFactors(counts.T[topMeans])
+try:
+    os.mkdir(paths.outputDir + "rnaseq/TCGA/")
+except FileExistsError:
+    pass
 # %%
 # Feature selection 
 countModel = rnaseqFuncs.RnaSeqModeler().fit(counts, sf)
 hv = countModel.hv
+# %%
+# Identify DE per condition
+try:
+    os.mkdir(paths.outputDir + "rnaseq/TCGA/DE/")
+except FileExistsError:
+    pass
+consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
+# %%
+from lib.pyGREAT_normal import pyGREAT as pyGREATglm
+enricherglm = pyGREATglm(paths.GOfile,
+                          geneFile=paths.gencode,
+                          chrFile=paths.genomeFile)
+consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
+
+try:
+    os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/DE/")
+except FileExistsError:
+    pass
+# %%
+from lib.utils.reusableUtest import mannWhitneyAsymp
+residualUnclipped = counts.astype("float32") - countModel.means*sf.reshape(-1,1)
+tester = mannWhitneyAsymp(residualUnclipped)
+# %%
+pctThreshold = 0.1
+lfcMin = 0.25
+orig = annotation["Project ID"]
+state = np.array(["Normal"]*len(orig))
+state[tumor] = "Tumor"
+annotConv = pd.read_csv(paths.tcgaToMainAnnot, sep="\t", index_col=0)
+orig = annotConv.loc[orig]["Origin"]
+label = orig.str.cat(state,sep="_")
+
+for i in label.unique():
+    print(i)
+    labels = (label == i).astype(int)
+    res2 = tester.test(labels, "less")
+    sig = fdrcorrection(res2[1])[0]
+    minpct = np.mean(counts[label == i] > 0.5, axis=0) > max(0.1, 1.5/labels.sum())
+    fc = np.mean(counts[label == i], axis=0) / (1e-9+np.mean(counts[label != i], axis=0))
+    lfc = np.log2(fc) > lfcMin
+    sig = sig & lfc & minpct
+    print(sig.sum())
+    res = pd.DataFrame(res2[::-1], columns=consensuses.index[nzCounts], index=["pval", "stat"]).T
+    res["Upreg"] = sig.astype(int)
+    res.to_csv(paths.outputDir + f"rnaseq/TCGA/DE/res_{i}.csv")
+    test = consensuses[nzCounts][sig]
+    test.to_csv(paths.outputDir + f"rnaseq/TCGA/DE/bed_{i}", header=None, sep="\t", index=None)
+    if len(test) == 0:
+        continue
+    pvals = enricherglm.findEnriched(test, background=consensuses)
+    enricherglm.plotEnrichs(pvals)
+    enricherglm.clusterTreemap(pvals, score="-log10(pval)", 
+                                output=paths.outputDir + f"rnaseq/TCGA/DE/great_{i}.pdf")
 # %%
 feat = countModel.residuals[:, hv]
 decomp, model = rnaseqFuncs.permutationPA_PCA(feat, max_rank=2000, returnModel=True)
@@ -98,8 +146,8 @@ dat = go.Scattergl(x=embedding[:,0],y=embedding[:,1], mode="markers",
 layout = dict(height=800, width=1200)
 fig = go.Figure(dat, layout=layout)
 fig.show()
-fig.write_image(paths.outputDir + "rnaseq/global/umap_samples.pdf")
-fig.write_html(paths.outputDir + "rnaseq/global/umap_samples.pdf" + ".html")
+fig.write_image(paths.outputDir + "rnaseq/TCGA/umap_samples.pdf")
+fig.write_html(paths.outputDir + "rnaseq/TCGA/umap_samples.pdf" + ".html")
 # %%
 import plotly.express as px
 #%%
@@ -137,7 +185,7 @@ xScale = plt.xlim()[1] - plt.xlim()[0]
 yScale = plt.ylim()[1] - plt.ylim()[0]
 # plt.gca().set_aspect(xScale/yScale)
 plt.axis('off')
-plt.savefig(paths.outputDir + "rnaseq/global/umap_all_tumors_plus_normal.png")
+plt.savefig(paths.outputDir + "rnaseq/TCGA/umap_all_tumors_plus_normal.png")
 plt.show()
 plt.figure(dpi=500)
 plt.axis('off')
@@ -146,7 +194,7 @@ for i in np.unique(cancerType):
     legend = Patch(color=palette[i], label=eq[i][5:])
     patches.append(legend)
 plt.legend(handles=patches)
-plt.savefig(paths.outputDir + "rnaseq/global/umap_all_tumors_lgd.png", bbox_inches="tight")
+plt.savefig(paths.outputDir + "rnaseq/TCGA/umap_all_tumors_lgd.png", bbox_inches="tight")
 plt.title(f"Balanced accuracy on {len(np.unique(cancerType))} cancers : {acc}")
 plt.show()
 
@@ -179,14 +227,14 @@ plt.gca().set_aspect(2.0)
 plt.yticks(np.arange(len(eq))+0.5, eq[colOrder], rotation=0)
 plt.xticks([],[])
 plt.xlabel(f"{len(zNorm)} Pol II clusters")
-plt.savefig(paths.outputDir + "rnaseq/global/signalPerClustPerAnnot.pdf", bbox_inches="tight")
+plt.savefig(paths.outputDir + "rnaseq/TCGA/signalPerClustPerAnnot.pdf", bbox_inches="tight")
 plt.show()
 plt.figure(figsize=(6, 1), dpi=300)
 norm = mpl.colors.Normalize(vmin=0, vmax=np.percentile(zClip, 95))
 cb = mpl.colorbar.ColorbarBase(plt.gca(), sns.color_palette("vlag", as_cmap=True), norm, orientation='horizontal')
 cb.set_label("95th percentile Z-score")
 plt.tight_layout()
-plt.savefig(paths.outputDir + "rnaseq/global/signalPerClustPerAnnot_colorbar.pdf")
+plt.savefig(paths.outputDir + "rnaseq/TCGA/signalPerClustPerAnnot_colorbar.pdf")
 plt.show()
 # %%
 # HC 
@@ -196,7 +244,7 @@ colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.anscombeResidua
 vals = countModel.normed
 plot_utils.plotHC(vals.T, eq[cancerType], vals.T,  
                     rowOrder=rowOrder, colOrder=colOrder, hq=True)
-plt.savefig(paths.outputDir + "rnaseq/global/HM_all.pdf", bbox_inches="tight")
+plt.savefig(paths.outputDir + "rnaseq/TCGA/HM_all.pdf", bbox_inches="tight")
 # %%
 # HC 
 rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
@@ -205,6 +253,6 @@ colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.anscombeResidua
 vals = countModel.normed
 plot_utils.plotHC(vals.T[hv & outliers], eq[cancerType], vals.T[hv & outliers],  
                     rowOrder=rowOrder, colOrder=colOrder, hq=True)
-plt.savefig(paths.outputDir + "rnaseq/global/HM_hv.pdf", bbox_inches="tight")
+plt.savefig(paths.outputDir + "rnaseq/TCGA/HM_hv.pdf", bbox_inches="tight")
 
 # %%

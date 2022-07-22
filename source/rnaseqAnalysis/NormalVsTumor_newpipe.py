@@ -10,7 +10,7 @@ import pandas as pd
 import seaborn as sns
 import umap
 from lib import rnaseqFuncs
-from lib.pyGREATglm import pyGREAT
+from lib.pyGREAT_normal import pyGREAT
 from lib.utils import matrix_utils, plot_utils
 from matplotlib.patches import Patch
 from matplotlib.ticker import FormatStrFormatter
@@ -25,9 +25,13 @@ sortedIdx = ["chr1", 'chr2','chr3','chr4','chr5','chr6',
               'chr7','chr8','chr9', 'chr10', 'chr11','chr12','chr13','chr14','chr15','chr16','chr17',
               'chr18','chr19','chr20','chr21','chr22','chrX','chrY']
 chrFile = chrFile.loc[sortedIdx]
-enricher = pyGREAT("/scratch/pdelangen/projet_these/data_clean/GO_files/hsapiens.GO:BP.name.gmt", geneFile=paths.gencode)
+'''
+enricher = pyGREAT(paths.GOfile,
+                          geneFile=paths.gencode,
+                          chrFile=paths.genomeFile)
+'''
 # %%
-allAnnots = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnotation.tsv", 
+allAnnots = pd.read_csv(paths.tcgaData + "/perFileAnnotation.tsv", 
                         sep="\t", index_col=0)
 consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
 try:
@@ -42,12 +46,13 @@ studiedConsensusesCase = dict()
 cases = allAnnots["project_id"].unique()
 # %%
 for case in cases:
+    case="TCGA-ESCA"
     print(case)
     # Select only relevant files and annotations
-    annotation = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnotation.tsv", 
+    annotation = pd.read_csv(paths.tcgaData + "/perFileAnnotation.tsv", 
                             sep="\t", index_col=0)
     annotation = annotation[annotation["project_id"] == case]
-    dlFiles = os.listdir(paths.countDirectory + "500centroid/")
+    dlFiles = os.listdir(paths.countsTCGA + "500centroid/")
     dlFiles = [f for f in dlFiles if f.endswith(".txt.gz")]
     ids = np.array([f.split(".")[0] for f in dlFiles])
     inAnnot = np.isin(ids, annotation.index)
@@ -71,9 +76,9 @@ for case in cases:
     for f in dlFiles:
         try:
             fid = f.split(".")[0]
-            status = pd.read_csv(paths.countDirectory + "500centroid/" + fid + ".counts.summary",
+            status = pd.read_csv(paths.countsTCGA + "500centroid/" + fid + ".counts.summary",
                                 header=None, index_col=0, sep="\t", skiprows=1).T
-            counts.append(pd.read_csv(paths.countDirectory + "500centroid/" + f, header=None, skiprows=2).values)
+            counts.append(pd.read_csv(paths.countsTCGA + "500centroid/" + f, header=None, skiprows=2).values.astype("int32"))
             status = status.drop("Unassigned_Unmapped", axis=1)
             allReads.append(status.values.sum())
             order.append(fid)
@@ -100,7 +105,7 @@ for case in cases:
 
     counts = allCounts
     # Remove undected Pol II probes
-    nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=2)
+    nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=3)
     countsNz = allCounts[:, nzCounts]
     studiedConsensusesCase[case] = nzCounts
     # Scran normalization
@@ -232,9 +237,10 @@ for case in cases:
         patches.append(legend)
     plt.legend(handles=patches, prop={'size': 7})
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/UMAP_samples.pdf")
-    # plt.show()
+    plt.show()
     plt.close()
     # Predictive model on PCA space
+    from scipy.stats import ttest_ind, mannwhitneyu
     predictions = np.zeros(len(labels), dtype=int)
     for train, test in StratifiedKFold(10, shuffle=True, random_state=42).split(decomp, labels):
         # Fit power transform on train data only
@@ -257,6 +263,7 @@ for case in cases:
         df.columns = ["Normal Tissue True", "Tumor True"]
         df.index = ["Normal Tissue predicted", "Tumor predicted"]
         print(df, file=f)
+    break
 # %%
 # Summary predictive metrics plots
 def plotMetrics(summaryTab, metricName):

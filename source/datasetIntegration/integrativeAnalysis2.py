@@ -23,7 +23,7 @@ merger = pickle.load(open(paths.outputDir + "merger", "rb"))
 '''
 # %%
 # First merge peaks and generate data matrix
-merger = peakMerger(paths.genomeFile, outputPath=paths.outputDir)
+merger = peakMerger(paths.genomeFile)
 merger.mergePeaks(paths.peaksFolder, inferCenter=params.inferCenter, 
                   minOverlap=params.minOverlap, fileFormat=params.fileFormat)
 merger.writePeaks()
@@ -39,19 +39,20 @@ plot_utils.plotHC(merger.matrix, labels, merger.matrix, annotationPalette=paths.
 plt.savefig(paths.outputDir + "pseudoHC.pdf")
 # %%
 # UMAP of samples
-merger.umap(transpose=True, metric="yule", altMatrix=merger.matrix.T[:, highVar], 
-            annotationFile=paths.annotationFile, annotationPalette=paths.polIIannotationPalette, 
-            reDo=True)
+merger.umap(transpose=True, metric="yule", altMatrix=merger.matrix.T[:, highVar], annotationFile=paths.annotationFile, annotationPalette=paths.polIIannotationPalette, reDo=True)
 # %%
 # Clustering samples
-merger.clusterize(transpose=True, metric="yule", restarts=100, annotationFile=paths.annotationFile, annotationPalette=paths.polIIannotationPalette)
+merger.clusterize(transpose=True, restarts=100, annotationFile=paths.annotationFile, annotationPalette=paths.polIIannotationPalette)
+# %%
 # %%
 # UMAP of consensus peaks
-merger.umap(transpose=False, metric="dice", altMatrix=merger.matrix, annotationFile=paths.annotationFile, reDo=True, annotationPalette=paths.polIIannotationPalette)
+from scipy.sparse import csr_matrix
+merger.umap(transpose=False, metric="jaccard", altMatrix=merger.matrix, 
+            annotationFile=paths.annotationFile, reDo=True, annotationPalette=paths.polIIannotationPalette)
 # %% 
 # Clustering consensus peaks
-merger.clusterize(transpose=False, metric="dice", restarts=10, annotationFile=paths.annotationFile,
-                  reDo=False, annotationPalette=paths.polIIannotationPalette)
+merger.clusterize(transpose=False, metric="jaccard", restarts=10, annotationFile=paths.annotationFile,
+                  reDo=True, annotationPalette=paths.polIIannotationPalette)
 
 # %%
 # Intersect enrichments

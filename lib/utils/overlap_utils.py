@@ -4,7 +4,7 @@ import pyranges as pr
 from scipy.stats import hypergeom
 from statsmodels.stats.multitest import fdrcorrection
 import matplotlib.pyplot as plt
-from lib.utils import plot_utils
+from . import plot_utils
 from rpy2.robjects.packages import importr
 from rpy2.robjects import numpy2ri
 numpy2ri.activate()
