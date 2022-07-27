@@ -19,7 +19,6 @@ from settings import params, paths
 from statsmodels.stats.multitest import fdrcorrection
 
 # %%
-# %%
 allAnnots = pd.read_csv(paths.tcgaAnnot, 
                         sep="\t", index_col=0)
 consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
@@ -35,7 +34,7 @@ studiedConsensusesCase = dict()
 cases = allAnnots["project_id"].unique()
 # %%
 # Compute DE, UMAP, and predictive model CV per cancer
-case = "TCGA-ESCA"
+case = "TCGA-KICH"
 print(case)
 # Select only relevant files and annotations
 annotation = pd.read_csv(paths.tcgaAnnot, 
@@ -83,7 +82,7 @@ geneTableAnnot = geneTableAnnot[~geneTableAnnot.index.duplicated(keep='first')]
 used = geneTableAnnot.loc[annotation["Sample ID"]]["File ID"]
 used = used[~used.index.duplicated(keep='first')]
 usedTable = geneTable[used].astype("int32").iloc[:-5].T
-nzCounts = rnaseqFuncs.filterDetectableGenes(usedTable.values, readMin=1, expMin=2)
+nzCounts = rnaseqFuncs.filterDetectableGenes(usedTable.values, readMin=1, expMin=3)
 usedTable = usedTable.loc[:, nzCounts]
 # %%
 # Get size factors
@@ -91,13 +90,13 @@ sf = rnaseqFuncs.deseqNorm(usedTable.values)
 sf /= sf.mean()
 # %%
 # Compute NB model and residuals
-countModel = rnaseqFuncs.RnaSeqModeler().fit(usedTable.values, sf)
+countModel = rnaseqFuncs.RnaSeqModeler().fit(usedTable.values, sf, maxThreads=40)
 hv = countModel.hv
 
 # %%
 # PCA on residuals
 feat = countModel.residuals[:, hv]
-decomp, model = rnaseqFuncs.permutationPA_PCA(feat, returnModel=True)
+decomp = rnaseqFuncs.permutationPA_PCA(feat)
 labels = geneTableAnnot.loc[used.index]["Sample Type"] == "Solid Tissue Normal"
 labels = np.array(labels).astype(int)
 matrix_utils.looKnnCV(decomp, labels, "correlation", 1)
@@ -110,44 +109,86 @@ plt.scatter(embedding[:, 0], embedding[:, 1], c=labels)
 # Find matching 
 hasAnnot = np.isin(used.index.values, annotation["Sample ID"].values)
 # %%
-# Compute NB model and residuals for Pol II probes
-nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=2)
+# Detectable Pol II probes in dataset
+nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=3)
 allCounts = allCounts[:, nzCounts]
-countModelPol2 = rnaseqFuncs.RnaSeqModeler().fit(allCounts, sf[hasAnnot])
 # %%
-polII_tail = pd.read_csv("/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2/dist_to_genes/pol2_5000_TES_ext.bed", sep="\t")
+# Compute NB model and residuals
+countModel2 = rnaseqFuncs.RnaSeqModeler().fit(allCounts, sf, maxThreads=40)
+hv2 = countModel2.hv
+
+# %%
+# PCA on residuals
+feat = countModel2.residuals[:, hv2]
+decomp2 = rnaseqFuncs.permutationPA_PCA(feat)
+labels = geneTableAnnot.loc[used.index]["Sample Type"] == "Solid Tissue Normal"
+labels = np.array(labels).astype(int)
+matrix_utils.looKnnCV(decomp2, labels, "correlation", 1)
+# Plot UMAP
+embedding = umap.UMAP(n_neighbors=30, min_dist=0.3, random_state=0, low_memory=False, 
+                      metric="correlation").fit_transform(decomp2)
+plt.scatter(embedding[:, 0], embedding[:, 1], c=labels)
+# %%
+def associationComputations(countTable, geneCounts, sf, assocTable, ensemblToID):
+    # Find ensembl ID
+    geneStableID = [id.split(".")[0] for id in usedTable.columns]
+    usedTable.columns = geneStableID
+    valid = np.isin(assocTable["gene_name"].values, ensemblToID.index)
+    assocTable_cv = assocTable[valid]
+    assocTable_cv["ensID"] = ensemblToID.loc[assocTable_cv["gene_name"].values].values
+    valid = np.isin(assocTable_cv["ensID"].values, geneStableID)
+    assocTable_cv = assocTable_cv[valid]
+    # Find associated gene, re-associate due to removed probes, compute normalized counts
+    nzRemap = pd.Series(data=np.arange(nzCounts.sum()), index=np.arange(len(consensuses))[nzCounts])
+    inMap = np.isin(assocTable_cv["Name"].values, np.arange(len(consensuses))[nzCounts])
+    selected = nzRemap.loc[assocTable_cv["Name"].values[inMap]]
+    x = (countTable/sf.reshape(-1,1))[:, selected]
+    resScaled = geneCounts/sf.reshape(-1,1)
+    tabResiduals = pd.DataFrame(resScaled, columns=geneStableID)
+    y = tabResiduals.loc[:, assocTable_cv["ensID"].values[inMap]].values
+    # Distribution of correlations between tail of gene Pol II and associated gene 
+    from scipy.spatial.distance import correlation
+    from scipy.stats import rankdata, spearmanr, pearsonr
+    xrank = rankdata(x, axis=0)
+    yrank = rankdata(y, axis=0)
+    correlations = np.array([pearsonr(xrank[:, i],yrank[:, i]) for i in range(y.shape[1])])
+    fdrCorr = fdrcorrection(correlations[:, 1])[0]
+    firstSig = np.argmax(fdrCorr)
+    threshold = correlations[firstSig][0]
+    if fdrCorr.sum() == 0:
+        n = len(yrank)
+        dist = beta(n/2 - 1, n/2 - 1, loc=-1, scale=2)
+        threshold = dist.ppf(0.025/n)
+    plt.figure(dpi=500)
+    plt.hist(correlations[:, 0], 50, density=True)
+    plt.vlines([threshold, -threshold], plt.ylim()[0], plt.ylim()[1], colors=[1,0,0], linestyles="dashed")
+    plt.xlabel("Distribution of per Pol II probe / tailed gene\nspearman correlation of expression.")
+    plt.title("Correlation between gene and tail of gene Pol II probes (5kb)")
+    print(pearsonr(xrank.ravel(), yrank.ravel()))
+    # Distribution of correlations between tail of gene Pol II and RANDOMIZED gene 
+    from scipy.spatial.distance import correlation
+    from scipy.stats import rankdata, beta, pearsonr
+    permutedY = np.random.permutation(y)
+    xrank = rankdata(x, axis=0)
+    yrank = rankdata(permutedY, axis=0)
+    correlations = np.array([pearsonr(xrank[:, i],yrank[:, i]) for i in range(y.shape[1])])
+    fdrCorr = fdrcorrection(correlations[:, 1])[0]
+    firstSig = np.argmax(fdrCorr)
+    threshold = correlations[firstSig, 0]
+    if fdrCorr.sum() == 0:
+        n = len(yrank)
+        dist = beta(n/2 - 1, n/2 - 1, loc=-1, scale=2)
+        threshold = dist.ppf(0.025/n)
+    print(pearsonr(xrank.ravel(), yrank.ravel()))
+    plt.figure(dpi=500)
+    plt.hist(correlations[:, 0], 50, density=True)
+    plt.vlines([threshold, -threshold], plt.ylim()[0], plt.ylim()[1], colors=[1,0,0], linestyles="dashed")
+    plt.xlabel("Distribution of per Pol II probe / random gene\nspearman correlation of expression.")
+    plt.title("Correlation between gene and tail of gene Pol II probes (5kb)")
+# %%
+# Load tail of gene pol 2
+polII_tail = pd.read_csv(paths.outputDir + "/dist_to_genes/pol2_5000_TSS_ext.bed", sep="\t")
 ensemblToID = pd.read_csv("/shared/projects/pol2_chipseq/pol2_interg_default/data/ensembl_toGeneId.tsv", sep="\t", index_col="Gene name")
 ensemblToID = ensemblToID[~ensemblToID.index.duplicated(keep='first')]
-# %%
-geneStableID = [id.split(".")[0] for id in usedTable.columns]
-usedTable.columns = geneStableID
-valid = np.isin(polII_tail["gene_name"].values, ensemblToID.index)
-polII_tail_cv = polII_tail[valid]
-polII_tail_cv["ensID"] = ensemblToID.loc[polII_tail_cv["gene_name"].values].values
-valid = np.isin(polII_tail_cv["ensID"].values, geneStableID)
-polII_tail_cv = polII_tail_cv[valid]
-# %%
-x = countModelPol2.residuals[:, polII_tail_cv["Name"].values]
-tabResiduals = pd.DataFrame(countModel.residuals, columns=geneStableID)
-y = tabResiduals.loc[:, polII_tail_cv["ensID"].values].values
-# %%
-from scipy.spatial.distance import correlation
-from scipy.stats import rankdata, spearmanr, pearsonr
-xrank = rankdata(x, axis=0)
-yrank = rankdata(y, axis=0)
-correlations = 1-np.array([correlation(xrank[:, i],yrank[:, i]) for i in range(y.shape[1])])
-plt.figure(dpi=500)
-plt.hist(correlations, 20)
-plt.xlabel("Distribution of per Pol II probe spearman correlation")
-plt.title("Correlation between gene and tail of gene Pol II probes (5kb)")
-# %%
-pearsonr(xrank.ravel(), yrank.ravel())
-# %%
-np.random.seed(42)
-subset = np.random.choice(len(x.ravel()), 200000)
-plt.figure(dpi=500)
-plt.scatter(x.ravel()[subset], y.ravel()[subset],s=0.1,linewidth=0.0)
-plt.xlabel("Pol II probe pearson residuals")
-plt.ylabel("Nearest gene pearson residuals")
-
+associationComputations(allCounts, usedTable.values, sf, polII_tail, ensemblToID)
 # %%

@@ -109,7 +109,7 @@ enricherglm.clusterTreemap(enrichs, output="test.pdf")
 '''
 try:
     os.mkdir(paths.outputDir + "dist_to_genes/")
-except KeyboardInterrupt:
+except FileExistsError:
     pass
 # %%
 gencode = enricherglm.txList
@@ -135,40 +135,7 @@ plt.title("All Interg Pol II")
 plt.savefig(paths.outputDir + "dist_to_genes/genedist_log_100.pdf")
 plt.show()
 plt.close()
-# %%
-test = pr.read_bed(paths.outputDir + "rnaseq/TumorVsNormal2/globally_DE.bed").as_df()
-plt.figure(dpi=500)
-dst2 = distPlotter(gencode, test, -1e5,1e5).plot(10000)
-plt.title("DE 'pan-cancer' Pol II")
-plt.savefig(paths.outputDir + "dist_to_genes/genedist_DEcancer.pdf")
-plt.show()
-plt.close()
-# %%
-from scipy.stats import kstest
 
-kstest(np.where(dst.allDists[:, 0] <= 0, dst.allDists[:, 0], dst.allDists[:, 1] + 10000),
-       np.where(dst2.allDists[:, 0] <= 0, dst2.allDists[:, 0], dst2.allDists[:, 1] + 10000))
-# %%
-# KDE plot
-df = np.where(dst.allDists[:, 0] <= 0, dst.allDists[:, 0], dst.allDists[:, 1] + 10000)
-df = pd.DataFrame(df, columns = ["dists"])
-df["subset"] = "All"
-df2 = np.where(dst2.allDists[:, 0] <= 0, dst2.allDists[:, 0], dst2.allDists[:, 1] + 10000)
-df2 = pd.DataFrame(df2, columns = ["dists"])
-df2["subset"] = "DE pan-cancer"
-df = pd.concat([df, df2])
-df.index = np.arange(len(df))
-df = df[np.abs(df["dists"]) < 1.25e5]
-# %%
-import seaborn as sns
-
-plt.figure(dpi=500)
-sns.kdeplot(data=df, bw=0.02, x="dists", hue="subset", clip=(-1e5, 1e5), common_norm=False)
-plt.title("DE 'pan-cancer' Pol II")
-plt.xlabel("Distance to TSS/TES (gene length=10kb)")
-plt.savefig(paths.outputDir + "dist_to_genes/genedistKDE_DEcancer.pdf")
-plt.show()
-plt.close()
 # %%
 # Tag all tail of genes
 tested = [5000,7000,9000]
@@ -179,11 +146,28 @@ for tes_ext in tested:
     tails.loc[tails["Strand"] == "+", ["Start", "End"]] = np.array([tesP, tesP+tes_ext]).T
 
     tesM = tails.loc[tails["Strand"] == "-"]["Start"]
-    tails.loc[tails["Strand"] == "-", ["Start", "End"]] = np.array([tesM-10000, tesM]).T
+    tails.loc[tails["Strand"] == "-", ["Start", "End"]] = np.array([tesM-tes_ext, tesM]).T
     tailedPol2 = consensusesPr.join(pr.PyRanges(tails), False, apply_strand_suffix=False).as_df()
     tailedPol2.drop(["Start_b", "End_b", "Strand"], axis=1, inplace=True)
     uniqueGenes = tailedPol2["gene_name"].unique()
     tailedPol2.to_csv(paths.outputDir + f"dist_to_genes/pol2_{tes_ext}_TES_ext.bed", sep="\t", index=False)
     pd.DataFrame(uniqueGenes).to_csv(paths.outputDir + f"dist_to_genes/genes_{len(uniqueGenes)}_unique_{tes_ext}_TES_ext.csv", index=None, columns=None)
+    
+# %%
+# Tag all starts of genes
+tested = [5000,7000,9000]
+for tes_ext in tested:
+    tails = gencode.copy()
+
+    tesP = tails.loc[tails["Strand"] == "+"]["End"]
+    tails.loc[tails["Strand"] == "+", ["Start", "End"]] = np.array([tesP-tes_ext, tesP]).T
+
+    tesM = tails.loc[tails["Strand"] == "-"]["Start"]
+    tails.loc[tails["Strand"] == "-", ["Start", "End"]] = np.array([tesM, tesM + tes_ext]).T
+    tailedPol2 = consensusesPr.join(pr.PyRanges(tails), False, apply_strand_suffix=False).as_df()
+    tailedPol2.drop(["Start_b", "End_b", "Strand"], axis=1, inplace=True)
+    uniqueGenes = tailedPol2["gene_name"].unique()
+    tailedPol2.to_csv(paths.outputDir + f"dist_to_genes/pol2_{tes_ext}_TSS_ext.bed", sep="\t", index=False)
+    pd.DataFrame(uniqueGenes).to_csv(paths.outputDir + f"dist_to_genes/genes_{len(uniqueGenes)}_unique_{tes_ext}_TSS_ext.csv", index=None, columns=None)
     
 # %%

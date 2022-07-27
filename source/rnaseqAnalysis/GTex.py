@@ -26,6 +26,7 @@ except FileExistsError:
 # %%
 annotation = pd.read_csv("/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/GTex/tsvs/sample.tsv", 
                         sep="\t", index_col="specimen_id")
+
 colors = pd.read_csv("/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/GTex/colors.txt", 
                         sep="\t", index_col="tissue_site_detail")
 dlFiles = os.listdir(countDir + "BG/")
@@ -70,19 +71,21 @@ nzCounts = rnaseqFuncs.filterDetectableGenes(counts, readMin=1, expMin=3)
 counts = counts[:, nzCounts]
 
 # %%
-sf = rnaseqFuncs.scranNorm(counts)
+# sf = rnaseqFuncs.scranNorm(counts)
+sf = np.sum(counts, axis=1)
+sf = sf / np.mean(sf)
 # %%
 from sklearn.preprocessing import StandardScaler
 design = np.ones((len(counts), 1))
-ischemicTime = annotation.loc[order]["total_ischemic_time"].values.reshape(-1,1)
-ischemicTime = StandardScaler().fit_transform(ischemicTime)
+ischemicTime = annotation.loc[order]["total_ischemic_time"].fillna(annotation.loc[order]["total_ischemic_time"].median())
+ischemicTime = StandardScaler().fit_transform(ischemicTime.values.reshape(-1,1))
 design = np.concatenate([design, ischemicTime], axis=1)
 countModel = rnaseqFuncs.RnaSeqModeler().fit(counts, sf, maxThreads=32)
 hv = countModel.hv
 
 # %%
 feat = countModel.residuals[:, hv]
-decomp = rnaseqFuncs.permutationPA_PCA(feat, 1, max_rank=1000, whiten=True, returnModel=False)
+decomp = rnaseqFuncs.permutationPA_PCA(feat, 3, max_rank=1000, returnModel=False)
 matrix_utils.looKnnCV(decomp, ann, "correlation", 5)
 # %%
 # Plot UMAP of samples for visualization
@@ -104,7 +107,7 @@ fig.write_html(paths.outputDir + "rnaseq/gtex_rnaseq/umap_samples.pdf" + ".html"
 # %%
 import plotly.express as px
 df = pd.DataFrame(embedding, columns=["x","y"])
-df["Ischemic time"] = annotation.loc[order]["total_ischemic_time"].values
+df["Ischemic time"] = ischemicTime
 fig = px.scatter(df, x="x", y="y", color="Ischemic time", width=1200, height=800)
 fig.show()
 

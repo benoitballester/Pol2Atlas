@@ -75,7 +75,7 @@ hv = countModel.hv
 # %%
 feat = countModel.residuals[:, hv]
 # feat = StandardScaler().fit_transform(np.log(1+counts[:, hv]/sf[:, None]))
-decomp = rnaseqFuncs.permutationPA_PCA(feat, whiten=True, max_rank=250)
+decomp = rnaseqFuncs.permutationPA_PCA(feat, max_rank=250)
 matrix_utils.looKnnCV(decomp, ann, "correlation",1)
 # %%
 # Plot UMAP of samples for visualization

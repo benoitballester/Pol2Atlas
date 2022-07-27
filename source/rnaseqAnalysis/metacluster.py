@@ -86,10 +86,12 @@ annot, palette, colors = plot_utils.applyPalette(df["Annot"],
                                                  paths.polIIannotationPalette, ret_labels=True)
 palettePlotly = [f"rgb({int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)})" for c in palette]
 colormap = dict(zip(annot, palettePlotly))     
-fig = px.scatter(df, x="x", y="y", color="Annot", color_discrete_map=colormap,
+fig = px.scatter(df, x="x", y="y", color="Annot", color_discrete_map=colormap, symbol="Orig",
                 hover_data=['Orig', "State"], width=1200, height=800)
 fig.update_traces(marker=dict(size=100/np.sqrt(len(df))))
 fig.show()
+fig.write_image(paths.outputDir + "rnaseq/metacluster_umap.pdf")
+fig.write_html(paths.outputDir + "rnaseq/metacluster_umap.pdf" + ".html")
 # %%
 # Heatmap
 metric='yule'

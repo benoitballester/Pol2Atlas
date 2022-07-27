@@ -28,10 +28,10 @@ def findMode(arr):
 
 def statsProcess(alpha, sf, counts, design):
     distrib = NegativeBinomial(alpha=alpha)
-    model = GLM(counts.reshape(-1,1), design, family=distrib, exposure=sf)
-    pred = model.fit().predict()
+    model = GLM(counts.reshape(-1,1), design, family=distrib, exposure=sf).fit()
+    pred = model.predict()
     n = np.clip(1/alpha, 1e-9, 1e9)
-    p = np.clip(pred / (pred + alpha * (pred**2)), 1e-9, 1-1e-9)
+    p = np.clip(pred / (pred + alpha * (pred**2)), 1e-10, 1-1e-10)
     distrib = nbinom(n, p)
     lowerClip = np.maximum(distrib.ppf(0.5*0.05/len(counts)), 0)
     upperClip = np.maximum(distrib.isf(0.5*0.05/len(counts)), 0)
@@ -39,7 +39,7 @@ def statsProcess(alpha, sf, counts, design):
     sd = np.sqrt(pred + alpha * pred**2)
     rp = (clippedCounts-pred) / sd
     # Compute pvalues
-    p = np.minimum(distrib.sf(counts-1), distrib.cdf(counts))*2.0
+    p = np.minimum(distrib.sf(counts-1), distrib.cdf(counts+1))*2.0
     p = np.sum(fdrcorrection(p, 0.05)[0]) < 2
     return rp.astype("float32"), float(p)
 
@@ -47,7 +47,7 @@ def fitModels(counts, sfs, m, design):
     warnings.filterwarnings("error")
     try:
         model = discrete_model.NegativeBinomial(counts.reshape(-1,1), design, exposure=sfs)
-        fit = model.fit(method="nm", ftol=1e-9, maxiter=500, disp=False, skip_hessian=True)
+        fit = model.fit([0]*design.shape[1] + [10.0], method="nm", ftol=1e-9, maxiter=500, disp=False, skip_hessian=True)
     except:
         return -1
     warnings.filterwarnings("default")
@@ -69,7 +69,7 @@ class RnaSeqModeler:
         Fit the model
         '''
         if design is None:
-            design = np.ones_like(sf)
+            design = np.ones([len(sf),1], dtype="float32")
         # Setup size factors
         self.counts = counts
         self.scaled_sf = sf/np.mean(sf)
@@ -85,7 +85,7 @@ class RnaSeqModeler:
         with Parallel(n_jobs=maxThreads, verbose=verbose, batch_size=512, max_nbytes=None) as pool:
            fittedParams = pool(delayed(fitModels)(self.counts[:, i], self.scaled_sf, m[i], design) for i in shuffled)
         alphas = np.array(fittedParams)
-        valid = alphas > 0.0
+        valid = alphas > 1e-3
         # Estimate NB overdispersion in function of mean expression
         # Overdispersion can be caused by biological variation as well as technical variation
         # To estimate technical overdispersion, it is assumed that a large fraction of probes are non-DE, and that overdispersion is a function of mean
@@ -243,11 +243,17 @@ def filterDetectableGenes(counts, readMin, expMin):
     return np.sum(counts >= readMin, axis=0) >= expMin
 
 def scranNorm(counts):
-    detected = [np.sum(counts > i, axis=0) for i in range(10)][::-1]
+    detected = [np.sum(counts > i, axis=0) for i in range(5)][::-1]
     mostDetected = np.lexsort(detected)[::-1][:int(counts.shape[1]*0.05+1)]
     with localconverter(ro.default_converter + numpy2ri.converter):
         sf = scran.calculateSumFactors(counts.T[mostDetected])
     return sf
+
+def topFpkmNorm(counts):
+    detected = [np.sum(counts > i, axis=0) for i in range(5)][::-1]
+    mostDetected = np.lexsort(detected)[::-1][:int(counts.shape[1]*0.05+1)]
+    sf = np.sum(counts[:, mostDetected], axis=1)
+    return sf / np.mean(sf)
 
 def deseqNorm(counts):
     gmeans = gmean(counts, axis=0)
