@@ -44,13 +44,13 @@ merger.umap(transpose=True, metric="yule", altMatrix=merger.matrix.T[:, highVar]
             reDo=True)
 # %%
 # Clustering samples
-merger.clusterize(transpose=True, metric="yule", restarts=100, annotationFile=paths.annotationFile, annotationPalette=paths.polIIannotationPalette)
+merger.clusterize(transpose=True, r=0.5, metric="yule", restarts=100, annotationFile=paths.annotationFile, annotationPalette=paths.polIIannotationPalette)
 # %%
 # UMAP of consensus peaks
 merger.umap(transpose=False, metric="dice", altMatrix=merger.matrix, annotationFile=paths.annotationFile, reDo=True, annotationPalette=paths.polIIannotationPalette)
 # %% 
 # Clustering consensus peaks
-merger.clusterize(transpose=False, metric="dice", restarts=10, annotationFile=paths.annotationFile,
+merger.clusterize(transpose=False, r=0.5, metric="dice", restarts=10, annotationFile=paths.annotationFile,
                   reDo=False, annotationPalette=paths.polIIannotationPalette)
 
 # %%
@@ -69,12 +69,12 @@ overlap_utils.computeEnrichForLabels(pr.read_bed(paths.remapFile),
                                     paths.outputDir + "cluster_enrichments/remap")
 # %%
 # Repeats
-overlap_utils.computeEnrichForLabels(pr.read_bed(paths.repeatFile), 
+overlap_utils.computeEnrichForLabels(pr.read_bed(paths.repeatTypeBed), 
                                     merger.consensuses, merger.clustered[0], 
                                     paths.outputDir + "cluster_enrichments/repeats")
 # %%                                
 # DNase meuleman
-dnase = pr.read_bed("/scratch/pdelangen/projet_these/data/annotation/dnaseMeuleman.bed")
+dnase = pr.read_bed(paths.dnaseMeuleman)
 fc, q, p = overlap_utils.computeEnrichForLabels(dnase, 
                                     merger.consensuses, merger.clustered[0], 
                                     paths.outputDir + "cluster_enrichments/dnaseIndex")
@@ -94,13 +94,16 @@ plt.show()
 # %%
 # GO terms
 from lib.pyGREATglm import pyGREAT
-enricher = pyGREAT("/scratch/pdelangen/projet_these/data_clean/GO_files/hsapiens.GO:BP.name.gmt", geneFile=paths.gencode)
-
+enricher = pyGREAT(paths.GOfile,
+                          geneFile=paths.gencode,
+                          chrFile=paths.genomeFile)
 # %%
 # testReg = pd.read_csv(paths.tempDir + "globallyProg.bed", sep="\t", header=None)
 for i in range(np.max(merger.clustered[0])+1):
-    testReg = merger.consensuses[merger.clustered[0]==i]
-    goEnrich = enricher.findEnriched(testReg, merger.consensuses)
+    testReg = merger.consensuses[merger.clustered[0]==i][[0,1,2]]
+    testReg.columns = ["Chromosome", "Start", "End"]
+    testReg = pr.PyRanges(testReg)
+    goEnrich = enricher.findEnriched(testReg, pr.read_bed(paths.outputDir+"consensuses.bed"))
     enricher.plotEnrichs(goEnrich, savePath=paths.outputDir + f"cluster_enrichments/GO_fc_{i}.png")
     enricher.clusterTreemap(goEnrich, output=paths.outputDir + f"cluster_enrichments/GO_treemap_{i}.png")
 # %%

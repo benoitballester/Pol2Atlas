@@ -97,8 +97,8 @@ def plotUmap(points, colors, forceVectorized=False):
         xLimMax = xLimMax + windowSize[0]*0.05
         yLimMin = yLimMin - windowSize[1]*0.05
         yLimMax = yLimMax + windowSize[1]*0.05
-        img = np.zeros((size,size,3))
-        sums = np.zeros((size,size))
+        img = np.zeros((size,size,3), dtype="float32")
+        sums = np.zeros((size,size), dtype="float32")
         # Map points onto pixel grid
         xCoord = ((points[:, 0] - xLimMin)/(xLimMax-xLimMin) * size)
         yCoord = ((points[:, 1] - yLimMin)/(yLimMax-yLimMin) * size)
@@ -189,7 +189,7 @@ def plotHC(matrix, labels, matPct=None, annotationPalette=None, rowOrder="umap",
             raise TypeError("rowOrder must be 'umap' or array-like")
     # Draw pattern-ordered matrix 
     rasterRes = (4000, 2000)
-    rasterMat = resize(matrix[consensuses1D][:, samples1D].astype(float), (matrix.shape[0], 2000), anti_aliasing=False, order=int(matrix.shape[1]>2000))
+    rasterMat = resize(matrix[consensuses1D][:, samples1D].astype("float32"), (matrix.shape[0], 2000), anti_aliasing=False, order=int(matrix.shape[1]>2000))
     rasterMat = resize(rasterMat, rasterRes, anti_aliasing=hq, order=1)
     rasterMat = (rasterMat - np.percentile(rasterMat, 0.5)) / (np.percentile(rasterMat, 99.5) - np.percentile(rasterMat, 0.5))
     # rasterMat = sns.color_palette("viridis", as_cmap=True)(rasterMat.T)[:,:,:3]
@@ -210,20 +210,20 @@ def plotHC(matrix, labels, matPct=None, annotationPalette=None, rowOrder="umap",
     else:
         palette, colors = applyPalette(labels, eq, annotationPalette)
     # Add sample labels
-    sampleLabelCol = np.zeros((matrix.shape[1], 1, 3))
+    sampleLabelCol = np.zeros((matrix.shape[1], 1, 3), dtype="float32")
     for i in range(len(palette)):
         hasAnnot = (annotations[samples1D] == i).nonzero()[0]
         np.add.at(sampleLabelCol, hasAnnot, palette[i])
     sampleLabelCol = resize(sampleLabelCol, (rasterRes[1], int(rasterRes[0]/33.3)), anti_aliasing=hq, order=0)
     # Big stacked barplot
     annotations2 = eq.get_indexer(labelsPct)
-    signalPerCategory = np.zeros((np.max(annotations2)+1, len(matPct)))
+    signalPerCategory = np.zeros((np.max(annotations2)+1, len(matPct)), dtype="float32")
     signalPerAnnot = np.array([np.sum(matPct[:, i == annotations2]) for i in range(np.max(annotations2)+1)])
     for i in np.unique(annotations2):
         signalPerCategory[i, :] = np.sum(matPct[:, annotations2 == i], axis=1) / signalPerAnnot[i]
     signalPerCategory /= np.sum(signalPerCategory, axis=0)
-    runningSum = np.zeros(signalPerCategory.shape[1])
-    barPlot = np.zeros((matPct.shape[1], signalPerCategory.shape[1],3))
+    runningSum = np.zeros(signalPerCategory.shape[1], dtype="float32")
+    barPlot = np.zeros((matPct.shape[1], signalPerCategory.shape[1],3), dtype="float32")
     fractCount = signalPerCategory/np.sum(signalPerCategory, axis=0)*matPct.shape[1]
     for i, c in enumerate(fractCount):
         for j, f in enumerate(c):
@@ -466,9 +466,9 @@ def manhattanPlot(coords, chrInfo, pvalues, es, maxLogP=30, threshold="fdr", yla
     fractPos = (chrInfo.values.ravel()/np.sum(chrInfo.values).ravel())
     offsets = np.insert(np.cumsum(fractPos),0,0)
     for i, c in enumerate(chrInfo.index):
-        usedIdx = coords[0] == c
+        usedIdx = coords.iloc[:, 0] == c
         coordSubset = coords[usedIdx]
-        x = offsets[i] + (coordSubset[1]*0.5 + coordSubset[2]*0.5)/chrInfo.loc[c].values * fractPos[i]
+        x = offsets[i] + (coordSubset.iloc[:,1]*0.5 + coordSubset.iloc[:,2]*0.5)/chrInfo.loc[c].values * fractPos[i]
         y = np.clip(-np.log10(pvalues[usedIdx]),0, maxLogP)
         ax.scatter(x,y, s=1.0, linewidths=0)
     ax.set_xticks(offsets[:-1]+0.5*fractPos, chrInfo.index, rotation=90, fontsize=8)

@@ -21,19 +21,6 @@ for f in filesEncode:
     indices[name] = vals
 
 # %%
-filesPol2 = os.listdir(paths.outputDir + "enrichedPerAnnot/")
-filesPol2 = [f for f in filesPol2 if not f.endswith("_qvals.bed")]
-for f in filesPol2:
-    name = "Pol2_" + f[:-4]
-    try:
-        bed = pd.read_csv(paths.outputDir + "enrichedPerAnnot/" + f, header=None, sep="\t")
-        if len(bed) < 100:
-            continue
-        indices[name] = bed[3].values
-    except pd.errors.EmptyDataError:
-        continue
-# matPolII = pd.DataFrame(matEncode, index=[f"Pol2_f[4:-4]" for f in filesEncode])
-# %%
 
 # Files GTex
 filesEncode = os.listdir(paths.outputDir + "rnaseq/gtex_rnaseq/DE/")
@@ -90,8 +77,8 @@ fig = px.scatter(df, x="x", y="y", color="Annot", color_discrete_map=colormap, s
                 hover_data=['Orig', "State"], width=1200, height=800)
 fig.update_traces(marker=dict(size=100/np.sqrt(len(df))))
 fig.show()
-fig.write_image(paths.outputDir + "rnaseq/metacluster_umap.pdf")
-fig.write_html(paths.outputDir + "rnaseq/metacluster_umap.pdf" + ".html")
+fig.write_image(paths.outputDir + "rnaseq/metacluster_umap_noPol2.pdf")
+fig.write_html(paths.outputDir + "rnaseq/metacluster_umap_noPol2.pdf" + ".html")
 # %%
 # Heatmap
 metric='yule'
@@ -108,8 +95,8 @@ fig = px.imshow(dst, width=2580, height=1440)
 fig.update_layout(yaxis_nticks=len(dst),
                   xaxis_nticks=len(dst))
 fig.show()
-fig.write_image(paths.outputDir + "rnaseq/metacluster.pdf")
-fig.write_html(paths.outputDir + "rnaseq/metacluster.pdf" + ".html")
+fig.write_image(paths.outputDir + "rnaseq/metacluster_noPol2.pdf")
+fig.write_html(paths.outputDir + "rnaseq/metacluster_noPol2.pdf" + ".html")
 # %%
 # Matching vs non-matching
 from scipy.stats import mannwhitneyu
@@ -130,35 +117,10 @@ sns.boxplot(data=yuleDf, x="Annotation", y="Yule coefficient", showfliers=False)
 sns.stripplot(data=yuleDf, x="Annotation", y="Yule coefficient", s=1.0, dodge=True, jitter=0.4, linewidths=1.0)
 pval = mannwhitneyu(yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Not matching'], yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Matching'])[1]
 plt.title(f"pval={pval}")
-plt.savefig(paths.outputDir + "rnaseq/yule_matching.pdf")
+plt.savefig(paths.outputDir + "rnaseq/yule_matching_noPol2.pdf")
 plt.show()
 # %%
 fig = px.strip(data_frame=yuleDf, x="Annotation", y="Yule coefficient",hover_data=["M1", "M2"])
 fig.show()
 # %%
-# Pol 2 Matching vs non-matching
-import matplotlib.pyplot as plt
-import seaborn as sns
-vals = []
-tissues = pd.Series(dst.index).str.split("_", expand=True)
-for i in range(len(dst)):
-    for j in range(1+i, len(dst)):
-        if tissues[0][i] == "Pol2":
-            if tissues[1][i] == tissues[1][j]:
-                print(dst.index[i], dst.columns[j])
-                vals.append([dst.iloc[i,j], "Matching", dst.index[i], dst.index[j]])
-            else:
-                vals.append([dst.iloc[i,j],"Not matching", dst.index[i], dst.index[j]])
-yuleDf = pd.DataFrame(vals, columns=["Yule coefficient", "Annotation", "M1", "M2"])
-plt.figure(dpi=500)
-sns.boxplot(data=yuleDf, x="Annotation", y="Yule coefficient", showfliers=False)
-sns.stripplot(data=yuleDf, x="Annotation", y="Yule coefficient", s=1.0, dodge=True, jitter=0.4, linewidths=1.0)
-pval = mannwhitneyu(yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Not matching'], yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Matching'])[1]
-plt.title(f"pval={pval}")
-plt.savefig(paths.outputDir + "rnaseq/yule_matching_pol2.pdf")
-plt.show()
-# %%
-fig = px.strip(data_frame=yuleDf, x="Annotation", y="Yule coefficient",hover_data=["M1", "M2"])
-fig.show()
-# %%
-dst.to_csv(paths.outputDir + "rnaseq/heatmapMetacluster.csv")
+dst.to_csv(paths.outputDir + "rnaseq/heatmapMetacluster_noPol2.csv")

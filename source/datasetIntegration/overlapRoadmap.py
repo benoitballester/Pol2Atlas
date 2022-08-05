@@ -1,6 +1,9 @@
 # %%
 import pyranges as pr
 import pandas as pd
+import os
+import sys
+sys.path.append("./")
 from settings import params, paths
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
@@ -22,7 +25,7 @@ consensusesPr = pr.PyRanges(consensusesPr)
 clusts = np.loadtxt(paths.outputDir + "clusterConsensuses_Labels.txt").astype(int)
 
 # Find roadmap files
-roadmapPath = "/scratch/pdelangen/projet_these/data_clean/roadmap_chromatin_states/"
+roadmapPath = paths.roadmapPath
 roadmapBeds = os.listdir(roadmapPath)
 roadmapBeds = [f for f in roadmapBeds if f.endswith(".bed.gz")]
 epigenomes = [f.split("_")[0] for f in roadmapBeds]
@@ -86,8 +89,8 @@ def enrichForClust(clust, roadmapGroup, name, consensusEpigenomeMat, epigenomeMe
                     edgecolor="black",alpha=1.0, s=2, linewidth=0.1, order=order)
     # Show statistical significance
     for k in df1PerCat.keys():
-        epigenomes1 = df1PerCat[k]["Proportions"].values.astype("float")
-        epigenomes2 = df2PerCat[k]["Proportions"].values.astype("float")
+        # epigenomes1 = df1PerCat[k]["Proportions"].values.astype("float")
+        # epigenomes2 = df2PerCat[k]["Proportions"].values.astype("float")
         prop1 = df1PerCat[k]["Proportions"].values.astype("float")
         prop2 = df2PerCat[k]["Proportions"].values.astype("float")
         try:
@@ -102,10 +105,10 @@ def enrichForClust(clust, roadmapGroup, name, consensusEpigenomeMat, epigenomeMe
         if p < 0.05:
             sig = min(int(-np.log10(p+1e-300)), 4)
         
-        medianDiff = np.mean(maxProp2) - np.mean(maxProp1)
-        maxVal = max(maxProp1.max(), maxProp2.max())
+        meanDiff = np.mean(prop2) - np.mean(prop1)
+        maxVal = max(prop1.max(), prop2.max())
         txt = "- "
-        if medianDiff > 0:
+        if meanDiff > 0:
             txt = "+"
         plt.text(pos, maxVal+0.01, sig*txt, ha="center", fontsize=8, fontweight="heavy")
     plt.legend(fontsize=8)
@@ -115,10 +118,10 @@ def enrichForClust(clust, roadmapGroup, name, consensusEpigenomeMat, epigenomeMe
     plt.show()
     plt.close()
     
-enrichForClust(4, "Blood & T-cell", "Lymphoid", consensusEpigenomeMat, epigenomeMetadata, chrStateMap)
-enrichForClust(6, "ESC", "Embryonic", consensusEpigenomeMat, epigenomeMetadata, chrStateMap)
-enrichForClust(9, "Heart", "Cardiovascular", consensusEpigenomeMat, epigenomeMetadata, chrStateMap)
-enrichForClust(18, "Brain", "Nervous", consensusEpigenomeMat, epigenomeMetadata, chrStateMap)
+enrichForClust(5, "Blood & T-cell", "Lymphoid", consensusEpigenomeMat, epigenomeMetadata, chrStateMap)
+enrichForClust(4, "ESC", "Embryonic", consensusEpigenomeMat, epigenomeMetadata, chrStateMap)
+enrichForClust(10, "Heart", "Cardiovascular", consensusEpigenomeMat, epigenomeMetadata, chrStateMap)
+enrichForClust(24, "Muscle", "Muscle", consensusEpigenomeMat, epigenomeMetadata, chrStateMap)
 # %%
 usedEpigenomes = epigenomeMetadata["GROUP"] == "ESC"
 df1 = computeProps(consensusEpigenomeMat[np.logical_not(clusts==9)][:, (usedEpigenomes)], 

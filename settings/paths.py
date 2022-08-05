@@ -7,20 +7,37 @@ polIIannotationPalette = "/shared/projects/pol2_chipseq/pol2_interg_default/data
 # ---------- Required for peak integrative analysis ---------- 
 peaksFolder = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/peaksInterg/"
 remapFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/remap2020_nr.bed"
-repeatFile = "/shared/projects/pol2_chipseq/pol2_interg_default/oldBackup/temp_POL2_lenient/repeatBedType.bed"
 GOfile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/GO_files/hsapiens.GO:BP.name.gmt"
 gencode = "/shared/projects/pol2_chipseq/pol2_interg_default/data/annotation/gencode.v38.annotation.gtf"
 # ---------- Required for GWAS LDSC ---------- 
 ldscFilesPath = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/ldsc/"
+sumstatsFolder = "/shared/projects/pol2_chipseq/pol2_interg_default/data/GWAS/ldsc_sumstats/"
 ldscSingularity = "/shared/projects/pol2_chipseq/pol2_interg_default/data/singularity/s-ldsc/envSingularityLDSC.img"
 liftoverPath = "/shared/projects/pol2_chipseq/pol2_interg_default/data/liftover/"
+
+# ---------- ROADMAP & Histones & Cons---------- 
+roadmapPath = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/roadmap_chromatin_states/"
+histonePathHeart27Ac = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/H3K27Ac_Chipseq/h3k27ac_heart_left_ventricule.bigWig"
+histonePathLiver27Ac = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/H3K27Ac_Chipseq/h3k27ac_liver.bigWig"
+histonePathTcell27Ac = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/H3K27Ac_Chipseq/h3k27ac_T_cells.bigWig"
+histonePathHeart27Me3 = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/Dnase/ENCFF169GLM_heart.bigWig"
+histonePathLiver27Me3 = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/Dnase/ENCFF556YQA_liver.bigWig"
+histonePathTcell27Me3 = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/Dnase/ENCFF677BPI_Tcells.bigWig"
+consFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/cons/hg38.phyloP100way.bw"
 # ---------- Pol II specific ---------- 
 # You will likely not need this for your analyses
 bedtoolsPath = "/home/pdelangen/bedtools"
 encodeBlacklist = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/hg38-blacklist.v2.bed"
-
-
-
+# ---------- Genome annotation files ---------- 
+ccrePath = "/shared/projects/pol2_chipseq/pol2_interg_default/data/annotation/GRCh38-ccREsFix.bed"
+lncpediaPath = "/shared/projects/pol2_chipseq/pol2_interg_default/data/annotation/lncipedia_5_2_hg38.bed"
+repeatFamilyBed = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/repeats/repeatBedFamily.bed"
+repeatClassBed ="/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/repeats/repeatBedClass.bed"
+repeatTypeBed = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/repeats/repeatBedType.bed"
+f5Enh ="/shared/projects/pol2_chipseq/pol2_interg_default/data/annotation/F5.hg38.enhancers.bed"
+f5Cage = "/shared/projects/pol2_chipseq/pol2_interg_default/data/annotation/hg38_fair+new_CAGE_peaks_phase1and2.bed"
+dnaseMeuleman = "/shared/projects/pol2_chipseq/pol2_interg_default/data/annotation/dnaseMeuleman.bed"
+remapCrms = "/shared/projects/pol2_chipseq/pol2_interg_default/data/annotation/crm.bed"
 # ---------- Required to download counts from TCGA ---------- 
 tokenPath = "/shared/projects/pol2_chipseq/pol2_interg_default/data/tcga/token.txt"
 manifest = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/gdc_manifest.2021-09-22.txt"
@@ -42,3 +59,5 @@ countsGTEx = "/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2/rnase
 GTExAnnot = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/GTex/tsvs/sample.tsv"
 atlasPath = "/shared/projects/pol2_chipseq/pol2_interg_default/temp_POL2_lenient_largerTSS_latestGENCODE/POLR2A_Inter_500.saf"
 tableDirectory = outputDir + "rnaseq"
+# ---------- Required for scRNA-seq analysis ---------- 
+pbmc10k = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/10k_pbmcs/"

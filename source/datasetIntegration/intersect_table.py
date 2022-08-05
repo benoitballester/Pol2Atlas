@@ -1,10 +1,14 @@
 # %%
-from lib.utils import overlap_utils
+import sys
+
 import numpy as np
 import pandas as pd
 import pyranges as pr
-from sklearn.preprocessing import LabelEncoder
+from lib.utils import overlap_utils
+
+sys.path.append("./")
 from settings import params, paths
+from sklearn.preprocessing import LabelEncoder
 
 consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
 intersectTab = consensuses[[0,1,2,3,4]]
@@ -32,41 +36,41 @@ def addAnnotation(summits, tab, colName, inputBed, showCol="Name"):
 # %%
 # Encode CCREs
 addAnnotation(consensusesPr, intersectTab, "Encode CCREs", 
-              "/scratch/pdelangen/projet_these/data/annotation/GRCh38-ccREsFix.bed")
+              paths.ccrePath)
 # %%
 # lncpedia
 addAnnotation(consensusesPr, intersectTab, "lncpedia", 
-              "/scratch/pdelangen/projet_these/data/annotation/lncipedia_5_2_hg38.bed")
+              paths.lncpediaPath)
 # %%
 # Repeat Family
 addAnnotation(consensusesPr, intersectTab, "Repeat Family", 
-              "/scratch/pdelangen/projet_these/oldBackup/temp_POL2_lenient/repeatBedFamily.bed")
+              paths.repeatFamilyBed)
 # %%
 # Repeat Class
 addAnnotation(consensusesPr, intersectTab, "Repeat Class", 
-              "/scratch/pdelangen/projet_these/oldBackup/temp_POL2_lenient/repeatBedClass.bed")
+              paths.repeatClassBed)
 # %%
 # Repeat Type
 addAnnotation(consensusesPr, intersectTab, "Repeat Type", 
-              "/scratch/pdelangen/projet_these/oldBackup/temp_POL2_lenient/repeatBedType.bed")              
+              paths.repeatTypeBed)              
 # %%
 # Fantom eRNA
 addAnnotation(consensusesPr, intersectTab, "Fantom 5 bidirectionnal enhancers", showCol=None,
-              inputBed="/scratch/pdelangen/projet_these/data/annotation/F5.hg38.enhancers.bed")
+              inputBed=paths.f5Enh)
 # %%
 # Fantom TSS
 addAnnotation(consensusesPr, intersectTab, "Fantom 5 TSSs", showCol=None,
-              inputBed="/scratch/pdelangen/projet_these/data/annotation/hg38_fair+new_CAGE_peaks_phase1and2.bed")
+              inputBed=paths.f5Cage)
 # %%
 # Dnase meuleman
 addAnnotation(consensusesPr, intersectTab, "DNase meuleman", 
-              inputBed="/scratch/pdelangen/projet_these/data/annotation/dnaseMeuleman.bed")
+              inputBed=paths.dnaseMeuleman)
 # %%
 # CRM remap
 addAnnotation(consensusesPr, intersectTab, "ReMap CRM", showCol="Score",
-              inputBed="/scratch/pdelangen/projet_these/data/annotation/crm.bed")
+              inputBed=paths.remapCrms)
 # %%
-intersectTab.to_csv(paths.tempDir + "intersectIntergPol2.tsv", sep="\t", index=None)
+intersectTab.to_csv(paths.outputDir + "intersectIntergPol2.tsv", sep="\t", index=None)
 
 
 # %%

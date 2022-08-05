@@ -1,41 +1,46 @@
 # %%
 import os
 import sys
+
 sys.path.append("./")
 sys.setrecursionlimit(10000)
 import catboost
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pyranges as pr
 import seaborn as sns
 import umap
 from lib import rnaseqFuncs
-from lib.pyGREAT_normal import pyGREAT
+from lib.pyGREATglm import pyGREAT
 from lib.utils import matrix_utils, plot_utils
 from matplotlib.patches import Patch
 from matplotlib.ticker import FormatStrFormatter
 from scipy.cluster import hierarchy
+from scipy.stats import mannwhitneyu
 from settings import paths
 from sklearn.metrics import (balanced_accuracy_score, confusion_matrix,
                              precision_score, recall_score)
 from sklearn.model_selection import StratifiedKFold
+from statsmodels.stats.multitest import fdrcorrection
+consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", header=None, sep="\t")
+consensuses.columns = ["Chromosome", "Start", "End", "Name", "Score", "Strand", "ThickStart", "ThickEnd"]
 
 chrFile = pd.read_csv(paths.genomeFile, sep="\t", index_col=0, header=None)
 sortedIdx = ["chr1", 'chr2','chr3','chr4','chr5','chr6',
               'chr7','chr8','chr9', 'chr10', 'chr11','chr12','chr13','chr14','chr15','chr16','chr17',
               'chr18','chr19','chr20','chr21','chr22','chrX','chrY']
 chrFile = chrFile.loc[sortedIdx]
-'''
+
 enricher = pyGREAT(paths.GOfile,
                           geneFile=paths.gencode,
                           chrFile=paths.genomeFile)
-'''
+
 # %%
 allAnnots = pd.read_csv(paths.tcgaData + "/perFileAnnotation.tsv", 
                         sep="\t", index_col=0)
-consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
 try:
-    os.mkdir(paths.outputDir + "rnaseq/TumorVsNormal2/")
+    os.mkdir(paths.outputDir + "rnaseq/TumorVsNormal/")
 except FileExistsError:
     pass
 perCancerDE = pd.DataFrame()
@@ -46,7 +51,6 @@ studiedConsensusesCase = dict()
 cases = allAnnots["project_id"].unique()
 # %%
 for case in cases:
-    case="TCGA-ESCA"
     print(case)
     # Select only relevant files and annotations
     annotation = pd.read_csv(paths.tcgaData + "/perFileAnnotation.tsv", 
@@ -96,7 +100,7 @@ for case in cases:
         print(case, "not enough samples")
         continue
     try:
-        os.mkdir(paths.outputDir + "rnaseq/TumorVsNormal2/" + case)
+        os.mkdir(paths.outputDir + "rnaseq/TumorVsNormal/" + case)
     except FileExistsError:
         pass
     allReads = np.array(allReads)
@@ -120,89 +124,99 @@ for case in cases:
     # Plot PC 1 and 2
     plt.figure(dpi=500)
     plt.scatter(decomp[:, 0], decomp[:, 1], c=labels)
-    plt.savefig(paths.outputDir + f"rnaseq/TumorVsNormal2/" + case + "/PCA.pdf")
+    plt.savefig(paths.outputDir + f"rnaseq/TumorVsNormal/" + case + "/PCA.pdf")
     plt.show()
     plt.close()
     # Find DE genes using DESeq2
-    res = rnaseqFuncs.deseqDE(countsNz, sf, labels, order)
-    allDE = consensuses[nzCounts][res["padj"].values < 0.05]
-    allDE[4] = -np.log10(res["padj"].values[res["padj"].values < 0.05])
-    allDE.to_csv(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/allDE.bed", sep="\t", header=None, index=None)
-    enrichedBP = enricher.findEnriched(consensuses[nzCounts][res["padj"].values < 0.05], consensuses[nzCounts])
-    enricher.plotEnrichs(enrichedBP, savePath=paths.outputDir + f"rnaseq/TumorVsNormal2/{case}/DE_greatglm.pdf")
+    pctThreshold = 0.1
+    lfcMin = 0.25
+    res = rnaseqFuncs.mannWhitneyDE(countModel.residuals, labels)[0]
+    sig, padj = fdrcorrection(res)
+    minpctM = np.mean(countsNz[labels == 1] > 0.5, axis=0) > max(0.1, 1.5/labels.sum())
+    minpctP = np.mean(countsNz[labels == 0] > 0.5, axis=0) > max(0.1, 1.5/(1-labels).sum())
+    minpct = minpctM | minpctP
+    fc = np.mean(countModel.normed[labels == 1], axis=0) / (1e-9+np.mean(countModel.normed[labels == 0], axis=0))
+    lfc = np.abs(np.log2(fc)) > lfcMin
+    sig = sig & lfc & minpct
+    print(sig.sum())
+
+    allDE = consensuses[nzCounts][sig]
+    allDE["Score"] = -np.log10(padj[sig])
+    allDE.to_csv(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/allDE.bed", sep="\t", header=None, index=None)
+    enrichedBP = enricher.findEnriched(consensuses[nzCounts][sig], consensuses)
+    enricher.plotEnrichs(enrichedBP, savePath=paths.outputDir + f"rnaseq/TumorVsNormal/{case}/DE_greatglm.pdf")
     if len(enrichedBP) > 1:
-        enricher.clusterTreemap(enrichedBP, output=paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/DE_great_revigo.pdf")
-    enrichedBP.to_csv(paths.outputDir + f"rnaseq/TumorVsNormal2/" + case + "/DE_greatglm.tsv", sep="\t")
+        enricher.clusterTreemap(enrichedBP, output=paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/DE_great_revigo.pdf")
+    enrichedBP.to_csv(paths.outputDir + f"rnaseq/TumorVsNormal/" + case + "/DE_greatglm.tsv", sep="\t")
     # Manhattan plot
-    res.index = consensuses[nzCounts].index
-    orderP = np.argsort(res["pvalue"].values)[::-1]
-    threshold = -np.log10(res["pvalue"].values[orderP][np.searchsorted(res["padj"].values[orderP] < 0.05, True)])
-    fig, ax = plot_utils.manhattanPlot(consensuses[nzCounts], chrFile, res["pvalue"].values, es=None, threshold=threshold)
-    fig.savefig(paths.outputDir + f"rnaseq/TumorVsNormal2/" + case + "/manhattan_DE.pdf")
+    orderP = np.argsort(res)[::-1]
+    threshold = -np.log10(res[orderP][np.searchsorted(padj[orderP] < 0.05, True)])
+    fig, ax = plot_utils.manhattanPlot(consensuses[nzCounts], chrFile, res, es=None, threshold=threshold)
+    fig.savefig(paths.outputDir + f"rnaseq/TumorVsNormal/" + case + "/manhattan_DE.pdf")
     # Plot heatmap and dendrograms
     rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
     colOrder, colLink = matrix_utils.threeStagesHClinkage(residuals.T, "correlation")
     plt.figure(dpi=500)
     hierarchy.dendrogram(colLink, p=10, truncate_mode="level", color_threshold=-1)
     plt.axis('off')
-    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/dendrogram_col.pdf")
+    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/dendrogram_col.pdf")
     plt.close()
     # Plot dendrograms
     plt.figure(dpi=500)
     hierarchy.dendrogram(rowLink, p=10, truncate_mode="level", color_threshold=-1, orientation="left")
     plt.axis('off')
-    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/dendrogram_row.pdf")
+    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/dendrogram_row.pdf")
     plt.close()
     clippedSQ= np.log(countsNorm+1)
     plot_utils.plotHC(clippedSQ.T, np.array(["Cancer","Normal"])[1-labels], countsNorm.T,  
                     rowOrder=rowOrder, colOrder=colOrder)
-    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/heatmap.pdf")
+    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/heatmap.pdf")
     plt.close()
     # Plot heatmap and dendrograms (hv)
     colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.residuals.T[hv], "correlation")
     plt.figure(dpi=500)
     hierarchy.dendrogram(colLink, p=10, truncate_mode="level", color_threshold=-1)
     plt.axis('off')
-    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/dendrogram_col_hv.pdf")
+    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/dendrogram_col_hv.pdf")
     plt.close()
     # Plot dendrograms
     plt.figure(dpi=500)
     hierarchy.dendrogram(rowLink, p=10, truncate_mode="level", color_threshold=-1, orientation="left")
     plt.axis('off')
-    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/dendrogram_row_hv.pdf")
+    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/dendrogram_row_hv.pdf")
     clippedSQ= np.log(countsNorm+1)
     plot_utils.plotHC(clippedSQ.T[hv], np.array(["Cancer","Normal"])[1-labels], countsNorm.T[hv],  
                     rowOrder=rowOrder, colOrder=colOrder)
-    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/heatmap_hv.pdf")
+    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/heatmap_hv.pdf")
     plt.close()
     # Plot heatmap and dendrograms (DE)
-    colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.residuals.T[res["padj"].values < 0.05], "correlation")
+    colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.residuals.T[sig], "correlation")
     plt.figure(dpi=500)
     hierarchy.dendrogram(colLink, p=10, truncate_mode="level", color_threshold=-1)
     plt.axis('off')
-    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/dendrogram_col_DE.pdf")
+    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/dendrogram_col_DE.pdf")
     plt.close()
     # Plot dendrograms
     plt.figure(dpi=500)
     hierarchy.dendrogram(rowLink, p=10, truncate_mode="level", color_threshold=-1, orientation="left")
     plt.axis('off')
-    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/dendrogram_row_DE.pdf")
+    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/dendrogram_row_DE.pdf")
     plt.close()
-    clippedSQ= np.log(countsNorm+1)
-    plot_utils.plotHC(clippedSQ.T[res["padj"].values < 0.05], np.array(["Cancer","Normal"])[1-labels], countsNorm.T[res["padj"].values < 0.05],  
+    clippedSQ = np.log(countsNorm+1)
+    plot_utils.plotHC(clippedSQ.T[sig], np.array(["Cancer","Normal"])[1-labels], countsNorm.T[sig],  
                     rowOrder=rowOrder, colOrder=colOrder)
-    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/heatmap_DE.pdf")
+    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/heatmap_DE.pdf")
     plt.close()
     # Plot DE signal
     orderCol = np.argsort(labels)
-    meanNormal = np.mean(residuals[labels == 0][:, res["padj"].values < 0.05], axis=0)
-    meanTumor = np.mean(residuals[labels == 1][:, res["padj"].values < 0.05], axis=0)
+    meanNormal = np.mean(residuals[labels == 0][:, sig], axis=0)
+    meanTumor = np.mean(residuals[labels == 1][:, sig], axis=0)
     diff = meanTumor - meanNormal
     orderRow = np.argsort(diff)
     # Only DE
     plt.figure(dpi=500)
-    plot_utils.plotDeHM(residuals[:, res["padj"].values < 0.05][orderCol][:, orderRow], labels[orderCol], np.ones(np.sum(res["padj"].values < 0.05)))
-    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/DE_plot_only_DE.pdf")
+    plot_utils.plotDeHM(residuals[:, sig][orderCol][:, orderRow], labels[orderCol], np.ones(np.sum(sig)))
+    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/DE_plot_only_DE.pdf")
     plt.close()
     # All Pol II
     orderCol = np.argsort(labels)
@@ -211,18 +225,18 @@ for case in cases:
     diff = meanTumor - meanNormal
     orderRow = np.argsort(diff)
     plt.figure(dpi=500)
-    plot_utils.plotDeHM(residuals[orderCol][:, orderRow], labels[orderCol], (res["padj"].values < 0.05).astype(float)[orderRow])
-    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/DE_plot.pdf")
+    plot_utils.plotDeHM(residuals[orderCol][:, orderRow], labels[orderCol], (sig).astype(float)[orderRow])
+    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/DE_plot.pdf")
     # plt.show()
     plt.close()
     perCancerDE[case] = np.zeros(allCounts.shape[1])
-    perCancerDE[case][nzCounts] = np.where(res["padj"].values > 0.05, 0.0, np.sign(diff))
-    upreg = consensuses[nzCounts][(res["padj"].values < 0.05) & (diff > 0)]
-    upreg[4] = -np.log10(res["padj"].values[(res["padj"].values < 0.05) & (diff > 0)])
-    upreg.to_csv(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/DE_upreg.bed", sep="\t", header=None, index=None)
-    downreg = consensuses[nzCounts][(res["padj"].values < 0.05) & (diff < 0)]
-    downreg[4] = -np.log10(res["padj"].values[(res["padj"].values < 0.05) & (diff < 0)])
-    downreg.to_csv(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/DE_downreg.bed", sep="\t", header=None, index=None)
+    perCancerDE[case][nzCounts] = np.where(sig, np.sign(diff), 0.0)
+    upreg = consensuses[nzCounts][sig & (diff > 0)]
+    upreg["Score"] = -np.log10(padj[sig & (diff > 0)])
+    upreg.to_csv(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/DE_upreg.bed", sep="\t", header=None, index=None)
+    downreg = consensuses[nzCounts][sig & (diff < 0)]
+    downreg["Score"] = -np.log10(padj[sig & (diff < 0)])
+    downreg.to_csv(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/DE_downreg.bed", sep="\t", header=None, index=None)
     # UMAP plot
     # Plot UMAP of samples for visualization
     embedding = umap.UMAP(n_neighbors=30, min_dist=0.3,
@@ -236,11 +250,11 @@ for case in cases:
         legend = Patch(color=palette[i], label=["Normal", "Cancer"][i])
         patches.append(legend)
     plt.legend(handles=patches, prop={'size': 7})
-    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/UMAP_samples.pdf")
+    plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/UMAP_samples.pdf")
     plt.show()
     plt.close()
     # Predictive model on PCA space
-    from scipy.stats import ttest_ind, mannwhitneyu
+    from scipy.stats import mannwhitneyu, ttest_ind
     predictions = np.zeros(len(labels), dtype=int)
     for train, test in StratifiedKFold(10, shuffle=True, random_state=42).split(decomp, labels):
         # Fit power transform on train data only
@@ -252,7 +266,7 @@ for case in cases:
         # Predict on test data
         x_test = decomp[test]
         predictions[test] = model.predict(x_test)
-    with open(paths.outputDir + "rnaseq/TumorVsNormal2/" + case + "/" +  f"classifier_{case}.txt", "w") as f:
+    with open(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/" +  f"classifier_{case}.txt", "w") as f:
         print("Weighted accuracy :", balanced_accuracy_score(labels, predictions), file=f)
         wAccs[case] = [balanced_accuracy_score(labels, predictions)]
         recalls[case] = [recall_score(labels, predictions)]
@@ -263,7 +277,7 @@ for case in cases:
         df.columns = ["Normal Tissue True", "Tumor True"]
         df.index = ["Normal Tissue predicted", "Tumor predicted"]
         print(df, file=f)
-    break
+
 # %%
 # Summary predictive metrics plots
 def plotMetrics(summaryTab, metricName):
@@ -278,13 +292,13 @@ def plotMetrics(summaryTab, metricName):
     plt.gca().spines['right'].set_visible(False)
     plt.gca().spines['top'].set_visible(False)
 plotMetrics(wAccs, "Balanced accuracy")
-plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/predictiveWeightedAccuracies.pdf", bbox_inches="tight")
+plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/predictiveWeightedAccuracies.pdf", bbox_inches="tight")
 plt.close()
 plotMetrics(recalls, "Recall")
-plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/predictiveRecalls.pdf", bbox_inches="tight")
+plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/predictiveRecalls.pdf", bbox_inches="tight")
 plt.close()
 plotMetrics(precisions, "Precision")
-plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/predictivePrecisions.pdf", bbox_inches="tight")
+plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/predictivePrecisions.pdf", bbox_inches="tight")
 plt.close()
 # %%
 # Plot # of DE Pol II Cancer vs Normal
@@ -298,7 +312,7 @@ plt.xlabel("# of DE Pol II Cancer vs Normal")
 plt.ylabel("Cancer type")
 plt.gca().spines['right'].set_visible(False)
 plt.gca().spines['top'].set_visible(False)
-plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/DE_countPerCancer.pdf", bbox_inches="tight")
+plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/DE_countPerCancer.pdf", bbox_inches="tight")
 plt.show()
 plt.close()
 # Log Scale
@@ -313,7 +327,7 @@ plt.ylabel("Cancer type")
 plt.gca().spines['right'].set_visible(False)
 plt.gca().spines['top'].set_visible(False)
 plt.gca().xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
-plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal2/DE_countPerCancer_log.pdf", bbox_inches="tight")
+plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/DE_countPerCancer_log.pdf", bbox_inches="tight")
 plt.show()
 plt.close()
 
@@ -329,13 +343,13 @@ for c in cases:
         mat = np.clip(-perCancerDE,0,1).astype("int32")
     consensusDECount = np.sum(mat, axis=1).astype("int32")
     # Compute null distribution of DE Pol II
-    countsRnd = np.zeros(mat.shape[1])
+    countsRnd = np.zeros(mat.shape[1]+1)
     nPerm = 100
     for i in range(nPerm):
         shuffledDF = np.zeros_like(mat)
         for j, cancer in enumerate(mat.columns):
             # Permute only on detected Pol II
-            shuffledDF[studiedConsensusesCase[cancer], j] = np.random.permutation(mat.iloc[studiedConsensusesCase[cancer], j])
+            shuffledDF[:, j] = np.random.permutation(mat.iloc[:, j])
         s = np.sum(shuffledDF, axis=1)
         counts = np.bincount(s)/nPerm
         countsRnd[:counts.shape[0]] += counts
@@ -348,15 +362,15 @@ for c in cases:
             break
     studied = np.sum(mat, axis=1) >= threshold
     plt.figure(figsize=(6,4), dpi=300)
-    plt.hist(consensusDECount, np.arange(consensusDECount.max()+1))
-    plt.hist(s, np.arange(consensusDECount.max()+1), alpha=0.5)
+    plt.hist(consensusDECount, np.arange(consensusDECount.max()+1.5))
+    plt.hist(s, np.arange(consensusDECount.max()+1.5), alpha=0.5)
     plt.xlabel(f"{c} in x cancers")
     plt.ylabel("# of Pol II")
     plt.legend(["Observed", "Expected"])
     plt.vlines(threshold + 0.0, plt.ylim()[0], plt.ylim()[1], color="red", linestyles="dashed")
     plt.text(threshold + 0.25, plt.ylim()[1]*0.5 + plt.ylim()[0]*0.5, "FPR < 5%", color="red")
     plt.xticks(np.arange(0,consensusDECount.max()+1)+0.5, np.arange(0,consensusDECount.max()+1))
-    plt.savefig(paths.outputDir + f"rnaseq/TumorVsNormal2/multiple_{c}.pdf", bbox_inches="tight")
+    plt.savefig(paths.outputDir + f"rnaseq/TumorVsNormal/multiple_{c}.pdf", bbox_inches="tight")
     plt.show()
     # Barplot obs
     plt.figure(figsize=(6,1.0), dpi=300)
@@ -382,17 +396,17 @@ for c in cases:
     plt.gca().spines['top'].set_visible(False)
     plt.gca().spines['right'].set_visible(False)
     plt.xlim([0,len(consensuses)*1.05])
-    plt.savefig(paths.outputDir + f"rnaseq/TumorVsNormal2/multiple_{c}_barplot.pdf", bbox_inches="tight")
+    plt.savefig(paths.outputDir + f"rnaseq/TumorVsNormal/multiple_{c}_barplot.pdf", bbox_inches="tight")
     plt.show()
     plt.close()
     globallyDEs = consensuses[studied]
     globallyDEs[4] = np.sum(mat, axis=1)
-    globallyDEs.to_csv(paths.outputDir + f"rnaseq/TumorVsNormal2/globally_{c}.bed", sep="\t", header=None, index=None)
+    globallyDEs.to_csv(paths.outputDir + f"rnaseq/TumorVsNormal/globally_{c}.bed", sep="\t", header=None, index=None)
     enrichs = enricher.findEnriched(consensuses[studied], consensuses)
-    enricher.plotEnrichs(enrichs, savePath=paths.outputDir + f"rnaseq/TumorVsNormal2/globally_{c}_GREAT.pdf")
-    enrichs.to_csv(paths.outputDir + f"rnaseq/TumorVsNormal2/globally_{c}_GREAT.csv", sep="\t")
+    enricher.plotEnrichs(enrichs, savePath=paths.outputDir + f"rnaseq/TumorVsNormal/globally_{c}_GREAT.pdf")
+    enrichs.to_csv(paths.outputDir + f"rnaseq/TumorVsNormal/globally_{c}_GREAT.csv", sep="\t")
     if len(enrichs) > 0:
-        enricher.revigoTreemap(enrichs, paths.outputDir + "rnaseq/TumorVsNormal2/" + f"/globally_{c}_GREAT_revigo.pdf.pdf")
+        enricher.clusterTreemap(enrichs, paths.outputDir + "rnaseq/TumorVsNormal/" + f"/globally_{c}_GREAT_revigo.pdf.pdf")
 
 # %%
 

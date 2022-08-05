@@ -39,6 +39,6 @@ for clust in enrichDF.index:
     plot_utils.enrichBarplot(ax, enrichDF.loc[clust], qvalDf.loc[clust], fcMin=2.0, order_by="fc")
     ax.set_xlabel("Heritability enrichment")
     fig.savefig(f"{paths.outputDir}/cluster_enrichments/ldsc_{clust}.png", bbox_inches="tight")
-    plt.show()
+    # plt.show()
     plt.close()
 # %%

@@ -112,7 +112,8 @@ plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/umap_samples2.pdf")
 plt.show()
 plt.close()
 # %%
-from lib.pyGREAT_normal import pyGREAT as pyGREATglm
+from lib.pyGREATglm import pyGREAT as pyGREATglm
+
 enricherglm = pyGREATglm(paths.GOfile,
                           geneFile=paths.gencode,
                           chrFile=paths.genomeFile)
@@ -124,6 +125,7 @@ except FileExistsError:
     pass
 # %%
 from lib.utils.reusableUtest import mannWhitneyAsymp
+
 tester = mannWhitneyAsymp(countModel.residuals)
 # %%
 pctThreshold = 0.1
@@ -172,7 +174,7 @@ plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_row_dendrogram.pdf
 plt.show()
 plt.close()
 # %%
-clippedSQ = countModel.residuals
+clippedSQ = np.log10(1+countModel.normed)
 plot_utils.plotHC(clippedSQ.T[hv], annotation.loc[order]["Annotation"], (countModel.normed).T[hv],  
                   paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder)
 plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_hvg.pdf")
@@ -184,7 +186,7 @@ hierarchy.dendrogram(colLinkAll, p=10, truncate_mode="level", color_threshold=-1
 plt.axis('off')
 plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/encode_HM_col_dendrogram.pdf")
 plt.show()
-clippedSQ = countModel.residuals
+clippedSQ = np.log10(1+countModel.normed)
 plt.figure(dpi=500)
 plot_utils.plotHC(clippedSQ.T, annotation.loc[order]["Annotation"], (countModel.normed).T,  
                   paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrderAll)
@@ -217,7 +219,8 @@ try:
     os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/polII_vs_rnaseq/")
 except FileExistsError:
     pass
-for test in eq2:
+sharedAnnots = np.intersect1d(eq2, eq)
+for test in sharedAnnots:
     idx1 = list(eq).index(test)
     idx2 = list(eq2).index(test)
     sig1 = signalPerCategory[idx2] + np.random.normal(size=signalPerCategory[idx2].shape)*0.003
@@ -231,7 +234,7 @@ for test in eq2:
     plt.close()
 # %%
 # Boxplot Top 50% pct Pol II vs bottom 50% Pol II Biotype
-for test in eq2:
+for test in sharedAnnots:
     idx1 = list(eq).index(test)
     idx2 = list(eq2).index(test)
     majoritaryPol2 = signalPerCategory[idx2] > 0.5
@@ -270,7 +273,7 @@ def plotHmPol2vsRnaseq(eq, eq2, signalPolIIperAnnot, signalRnaseqPerAnnot, saveP
     resultMat = resultMat[np.sort(y)]
     resultMat = resultMat.loc[np.sort(np.array(x)[matching])]
     plt.figure(dpi=500)
-    sns.heatmap(resultMat, cmap="vlag", vmin=-1.0, vmax=1.0)
+    sns.heatmap(resultMat, cmap="vlag", vmin=-1.0, vmax=1.0, xticklabels=True, yticklabels=True)
     plt.xlabel("Pol II annotations")
     plt.ylabel("ENCODE annotations")
     plt.title("log2(Reads on probe > 50% Pol Biotype / Reads on probe < 50% Pol Biotype)")
@@ -312,7 +315,7 @@ plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/signalPerClustPerAnnot.pdf",
 plt.show()
 plt.figure(figsize=(6, 1), dpi=300)
 norm = mpl.colors.Normalize(vmin=0, vmax=np.percentile(zClip, 95))
-cb = mpl.colorbar.ColorbarBase(plt.gca(), sns.color_palette("vlag", as_cmap=True), norm, orientation='horizontal')
+cb = mpl.colorbar.ColorbarBase(plt.gca(), cmap=sns.color_palette("vlag", as_cmap=True), norm=norm, orientation='horizontal')
 cb.set_label("95th percentile Z-score")
 plt.tight_layout()
 # plt.savefig(paths.outputDir + "rnaseq/encode_rnaseq/signalPerClustPerAnnot_colorbar.pdf")
@@ -325,7 +328,7 @@ signalTopCat = -rnaseqPerCategory[(topCat,range(len(topCat)))]
 colOrder = np.lexsort((signalTopCat, topCat))
 meanNormed = countModel.normed/np.mean(countModel.normed, axis=0)
 epsilon = 1/np.nanmax(np.log(meanNormed), axis=0)
-clippedSQ= countModel.residuals
+clippedSQ = np.log10(1+countModel.normed)
 plt.figure(dpi=500)
 plot_utils.plotHC(clippedSQ.T, annotation.loc[order]["Annotation"], countModel.normed.T,  
                   paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder)
@@ -338,7 +341,7 @@ topCat = signalPerCategory.argmax(axis=0)
 signalTopCat = -signalPerCategory[(topCat,range(len(topCat)))]
 top50 = signalTopCat < -0.51
 colOrder = np.lexsort((signalTopCat[top50], topCat[top50]))
-clippedSQ= countModel.residuals
+clippedSQ = np.log10(1+countModel.normed)
 plt.figure(dpi=500)
 plot_utils.plotHC(clippedSQ.T[top50], annotation.loc[order]["Annotation"],
                   mtx[top50],
@@ -354,7 +357,7 @@ signalTopCat = -rnaseqPerCategory[(topCat,range(len(topCat)))]
 colOrder = np.lexsort((signalTopCat, topCat))
 meanNormed = countModel.normed/np.mean(countModel.normed, axis=0)
 epsilon = 1/np.nanmax(np.log(meanNormed), axis=0)
-clippedSQ= countModel.residuals
+clippedSQ = np.log10(1+countModel.normed)
 plt.figure(dpi=500)
 plot_utils.plotHC(clippedSQ.T, annotation.loc[order]["Annotation"],
                   mtx,
@@ -374,7 +377,7 @@ signalTopCat = -rnaseqPerCategory[(topCat,range(len(topCat)))]
 colOrder = np.lexsort((signalTopCat[top50], topCat[top50]))
 meanNormed = countModel.normed/np.mean(countModel.normed, axis=0)
 epsilon = 1/np.nanmax(np.log(meanNormed), axis=0)
-clippedSQ = countModel.residuals
+clippedSQ = np.log10(1+countModel.normed)
 plt.figure(dpi=500)
 plot_utils.plotHC(clippedSQ.T[top50], annotation.loc[order]["Annotation"],
                   mtx[top50],

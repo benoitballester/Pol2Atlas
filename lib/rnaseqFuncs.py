@@ -1,6 +1,7 @@
 from statistics import median
 import warnings
 
+import kneed
 import KDEpy
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,11 +12,12 @@ from joblib import Parallel, delayed
 from rpy2.robjects import numpy2ri, pandas2ri
 from rpy2.robjects.conversion import localconverter
 from rpy2.robjects.packages import importr
-from scipy.stats import chi2, rankdata, mannwhitneyu, gmean, nbinom
+from scipy.stats import chi2, rankdata, mannwhitneyu, gmean, nbinom, norm, shapiro
 from sklearn.decomposition import PCA
 from statsmodels.stats.multitest import fdrcorrection
 from statsmodels.api import GLM
 from statsmodels.genmod.families.family import NegativeBinomial
+from sklearn.preprocessing import StandardScaler
 import pandas as pd
 scran = importr("scran")
 deseq = importr("DESeq2")
@@ -23,36 +25,30 @@ deseq = importr("DESeq2")
 
 def findMode(arr):
     # Finds the modal value of a continuous sample
-    pos, fitted = KDEpy.FFTKDE(bw="silverman").fit(arr).evaluate(10000)
+    pos, fitted = KDEpy.FFTKDE(bw="silverman").fit(arr).evaluate(100000)
     return pos[np.argmax(fitted)]
 
+
 def statsProcess(alpha, sf, counts, design):
-    distrib = NegativeBinomial(alpha=alpha)
-    model = GLM(counts.reshape(-1,1), design, family=distrib, exposure=sf).fit()
-    pred = model.predict()
-    n = np.clip(1/alpha, 1e-9, 1e9)
-    p = np.clip(pred / (pred + alpha * (pred**2)), 1e-10, 1-1e-10)
+    pred = np.mean(counts/sf)*sf
+    n = 1/alpha
+    p = pred / (pred + alpha * (pred**2))
     distrib = nbinom(n, p)
-    lowerClip = np.maximum(distrib.ppf(0.5*0.05/len(counts)), 0)
-    upperClip = np.maximum(distrib.isf(0.5*0.05/len(counts)), 0)
-    clippedCounts = np.clip(counts, lowerClip, upperClip)
-    sd = np.sqrt(pred + alpha * pred**2)
-    rp = (clippedCounts-pred) / sd
-    # Compute pvalues
-    p = np.minimum(distrib.sf(counts-1), distrib.cdf(counts+1))*2.0
-    p = np.sum(fdrcorrection(p, 0.05)[0]) < 2
-    return rp.astype("float32"), float(p)
+    upperBound = np.maximum(distrib.isf(0.05/len(counts)), 0)
+    clipped = np.clip(counts, 0, upperBound)
+    pearson = (clipped - pred) / np.sqrt(pred + alpha * pred**2)
+    chi2p = chi2(len(sf)-design.shape[1]).sf(np.sum(np.square(pearson), axis=0))
+    return pearson.astype("float32"), chi2p
 
 def fitModels(counts, sfs, m, design):
     warnings.filterwarnings("error")
     try:
         model = discrete_model.NegativeBinomial(counts.reshape(-1,1), design, exposure=sfs)
-        fit = model.fit([0]*design.shape[1] + [10.0], method="nm", ftol=1e-9, maxiter=500, disp=False, skip_hessian=True)
+        fit = model.fit([np.log(m)]+ [10.0], method="nm", ftol=1e-9, maxiter=500, disp=False, skip_hessian=True)
     except:
         return -1
     warnings.filterwarnings("default")
     return fit.params[-1]
-
 
 class RnaSeqModeler:
     '''
@@ -64,7 +60,7 @@ class RnaSeqModeler:
         '''
         pass
     
-    def fit(self, counts, sf, design=None, maxThreads=-1, subSampleEst=5000, hv_fdr=0.25, plot=True, verbose=True):
+    def fit(self, counts, sf, design=None, maxThreads=-1, subSampleEst=5000, plot=True, verbose=True):
         '''
         Fit the model
         '''
@@ -72,7 +68,7 @@ class RnaSeqModeler:
             design = np.ones([len(sf),1], dtype="float32")
         # Setup size factors
         self.counts = counts
-        self.scaled_sf = sf/np.mean(sf)
+        self.scaled_sf = (sf/np.mean(sf)).astype("float32")
         self.normed = (counts / self.scaled_sf.reshape(-1,1)).astype("float32")
         # Estimate Negative Binomial parameters per Pol II probe
         fittedParams = []
@@ -84,7 +80,7 @@ class RnaSeqModeler:
         m = np.mean(self.normed, axis=0)
         with Parallel(n_jobs=maxThreads, verbose=verbose, batch_size=512, max_nbytes=None) as pool:
            fittedParams = pool(delayed(fitModels)(self.counts[:, i], self.scaled_sf, m[i], design) for i in shuffled)
-        alphas = np.array(fittedParams)
+        alphas = np.maximum(1e-9, np.array(fittedParams))
         valid = alphas > 1e-3
         # Estimate NB overdispersion in function of mean expression
         # Overdispersion can be caused by biological variation as well as technical variation
@@ -92,7 +88,7 @@ class RnaSeqModeler:
         # The modal value of overdispersion is tracked for each decile of mean expression using a kernel density estimate
         # The median value would overestimate overdispersion as the % of DE probes is unknown
         means = np.mean(self.normed[:, shuffled], axis=0)
-        nQuantiles = 25
+        nQuantiles = 20
         pcts = np.linspace(0,100,nQuantiles+1)
         centers = (pcts * 0.5 + np.roll(pcts,1)*0.5)[1:]/100
         quantiles = np.percentile(means, pcts)
@@ -100,10 +96,15 @@ class RnaSeqModeler:
         digitized = np.digitize(means, quantiles)
         regressed = []
         for i in np.arange(1,nQuantiles+1):
-            regressed.append(findMode(alphas[valid & (digitized == i)]))
+            if (valid & (digitized == i)).sum() > 5:
+                regressed.append(findMode(alphas[valid & (digitized == i)]))
+            else:
+                regressed.append(-1)
         regressed = np.array(regressed).ravel()
+        for i in np.arange(len(regressed)-1)[::-1]:
+            regressed[i] = np.maximum(regressed[i], regressed[i+1])
         self.means = np.mean(self.normed, axis=0)
-        fittedAlpha = si.interp1d(centers, regressed, bounds_error=False, fill_value="extrapolate")
+        fittedAlpha = si.interp1d(centers, regressed, bounds_error=False, fill_value=(regressed[0], regressed[-1]))
         self.regAlpha = fittedAlpha((rankdata(self.means)-0.5)/len(self.means))
         # Dispatch accross multiple processes
         with Parallel(n_jobs=maxThreads, verbose=verbose, batch_size=512, max_nbytes=None) as pool:
@@ -112,8 +113,19 @@ class RnaSeqModeler:
         # Unpack results
         self.residuals = np.array([i[0] for i in stats]).T
         self.pvals = np.array([i[1] for i in stats]).ravel()
-        self.hv = fdrcorrection(self.pvals, hv_fdr)[0]
+        '''
+        ssr = np.nan_to_num(np.sum(np.square(self.residuals), axis=0))
+        order = np.argsort(ssr)[::-1]
+        kneedle = kneed.KneeLocator(np.arange(len(order)), ssr[order], S=np.sqrt(len(ssr)/5), curve="convex", direction="decreasing", online=True)
+        self.hv = order[:kneedle.elbow]
+        '''
+        self.hv = fdrcorrection(self.pvals)[0]
         if plot:
+            '''
+            kneedle.plot_knee()
+            plt.xlabel("SSR rank")
+            plt.ylabel("Sum of squared pearson residuals")
+            '''
             plt.figure(dpi=500)
             plt.plot(self.regAlpha[np.argsort(np.mean(self.normed, axis=0))])
             plt.scatter(np.argsort(np.argsort(np.mean(self.normed[:, shuffled], axis=0)))*self.normed.shape[1]/len(alphas), alphas, s=0.5, linewidths=0, c="red")
@@ -206,10 +218,13 @@ def permutationPA_PCA(X, perm=3, alpha=0.01, solver="randomized", whiten=False,
 
     # Compute p values
     pvals = np.ones(len(dstat_obs))
+    delta = np.zeros(len(dstat_obs))
     for i in range(len(dstat_obs)):
         pvals[i] = np.mean(dstat_null[:, i] >= dstat_obs[i])
+        delta[i] = dstat_obs[i] /np.mean(dstat_null[:, i])
     for i in range(1, len(dstat_obs)):
         pvals[i] = 1.0-(1.0-pvals[i - 1])*(1.0-pvals[i])
+     
     # estimate rank
     r_est = max(sum(pvals <= alpha),mincomp)
     if r_est == max_rank:
@@ -234,9 +249,9 @@ def permutationPA_PCA(X, perm=3, alpha=0.01, solver="randomized", whiten=False,
         plt.xlim(1,r_est*1.2)
         plt.show()
     if returnModel:
-        return decompRef[:, :r_est], ref
+        return decompRef[:, :r_est+1], ref
     else:
-        return decompRef[:, :r_est]
+        return decompRef[:, :r_est+1]
 
 
 def filterDetectableGenes(counts, readMin, expMin):
@@ -273,7 +288,7 @@ def deseqDE(counts, sf, labels, colNames, parallel=False):
     res["padj"] = np.nan_to_num(res["padj"], nan=1.0)
     return res
 
-def mannWhitneyDE(vals, sf, labels, colNames, parallel=False):
+def mannWhitneyDE(vals, labels):
     countsC1 = vals[labels == 0]
     countsC2 = vals[labels == 1]
     delta = np.mean(countsC2, axis=0) - np.mean(countsC1, axis=0)

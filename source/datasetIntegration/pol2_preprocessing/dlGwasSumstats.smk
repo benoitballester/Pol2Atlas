@@ -6,8 +6,8 @@ sys.path.append("./")
 from settings import params, paths
 
 
-manifest = pandas.read_csv(parameters.dataPath + "GWAS/LDSC Sumstat Manifest for Neale UKB GWAS - ukb31063_ldsc_sumstat_manifest.tsv", sep="\t")
-lookupTable = pandas.read_csv(parameters.dataPath + "GWAS/LDSC Sumstat Manifest for Neale UKB GWAS - ukb31063_ldsc_sumstat_manifest.tsv", sep="\t", header=None)[[0,1]]
+manifest = pandas.read_csv(paths.dataPath + "GWAS/LDSC Sumstat Manifest for Neale UKB GWAS - ukb31063_ldsc_sumstat_manifest.tsv", sep="\t")
+lookupTable = pandas.read_csv(paths.dataPath + "GWAS/LDSC Sumstat Manifest for Neale UKB GWAS - ukb31063_ldsc_sumstat_manifest.tsv", sep="\t", header=None)[[0,1]]
 availableFiles = set(lookupTable[0].values)
 phenotypeList = []
 downloads = []
@@ -33,19 +33,19 @@ for dl, out in zip(downloads, outputFiles):
 
 rule all:
     input:
-        expand(parameters.dataPath + "GWAS/ldsc_sumstats/{o}", o=outputFiles)
+        expand(paths.dataPath + "GWAS/ldsc_sumstats/{o}", o=outputFiles)
 
 
 rule dlGWAS:
     threads:
         1
     output:
-        parameters.dataPath + "GWAS/ldsc_sumstats/{outputFiles}"
+        paths.dataPath + "GWAS/ldsc_sumstats/{outputFiles}"
     params:
         dlList = lambda wildcard: dlEq[wildcard[0]]
     shell:
        """
-       wget {params.dlList} -O {parameters.dataPath}GWAS/ldsc_sumstats/{wildcards.outputFiles}; 
+       wget {params.dlList} -O {paths.dataPath}GWAS/ldsc_sumstats/{wildcards.outputFiles}; 
        """
 
 

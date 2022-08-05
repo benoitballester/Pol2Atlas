@@ -128,7 +128,13 @@ class pyGREAT:
         self.txList = reversedTx.copy()
         # Apply infered regulatory logic
         self.geneRegulatory = regLogicGREAT(5000, 1000, 1000000)(reversedTx, self.chrInfo)
-        self.geneRegulatory.drop("Strand", 1)
+        goPerGene = pd.DataFrame(self.mat.T[self.mat.T > 0.5].stack().index.tolist())
+        goPerGene.columns = [self.gtfGeneCol, "Name"]
+        self.geneRegulatory = self.geneRegulatory.merge(goPerGene, on=self.gtfGeneCol)
+        self.geneRegulatory = self.geneRegulatory.drop(["gene_name","Strand"], 1)
+        self.geneRegulatory.columns = ["Chromosome","Start","End","Name"]
+        self.geneRegulatory = pr.PyRanges(self.geneRegulatory)
+        self.geneRegulatory = self.geneRegulatory.merge(by="Name")
 
     def findEnriched(self, query, background=None, minGenes=3, cores=-1):
         """
@@ -152,62 +158,15 @@ class pyGREAT:
         """
         # First compute intersections count for each gene
         # And expected intersection count for each gene
-        regPR = pr.PyRanges(self.geneRegulatory.rename({self.gtfGeneCol:"Name"}, axis=1))
-        if background is not None:
-            intersectBg = overlap_utils.countOverlapPerCategory(regPR, overlap_utils.dfToPrWorkaround(background, useSummit=False))
-        else:
-            genomeSize = np.sum(self.chrInfo).values[0]
-            intersectBg = (self.geneRegulatory["End"]-self.geneRegulatory["Start"])/genomeSize
-            intersectBg = np.maximum(intersectBg, 1/genomeSize)
-            intersectBg.index = self.geneRegulatory["gene_name"]
-            intersectBg = intersectBg.groupby(intersectBg.index).sum()
-        intersectQuery = overlap_utils.countOverlapPerCategory(regPR, overlap_utils.dfToPrWorkaround(query, useSummit=False))
-        queryCounts = intersectBg.copy() * 0
-        queryCounts.loc[intersectQuery.index] = intersectQuery
-        obsGenes = np.isin(queryCounts.index, self.mat.columns)
-        queryGenes = np.isin(intersectQuery.index, self.mat.columns)
-        obsMatrix = self.mat[queryCounts.index[obsGenes]].copy()
-        if background is not None:
-            expected = intersectBg.loc[obsMatrix.columns]
-            observed = pd.DataFrame(queryCounts.loc[queryCounts.index[obsGenes]])
-            endog = pd.merge(observed, expected, right_index = True, left_index = True)
-        else: 
-            expected = intersectBg.loc[obsMatrix.columns]
-            observed = pd.DataFrame(queryCounts.loc[queryCounts.index[obsGenes]])
-            endog = observed.copy()
-            endog[1] = len(query)
-        # Trim GOs under cutoff
-        trimmed = obsMatrix[intersectQuery.index[queryGenes]].sum(axis=1) >= minGenes
-        # Setup parallel computation settings
-        if cores == -1:
-            cores = maxCores
-        maxBatch = len(obsMatrix[trimmed])
-        maxBatch = int(0.25*maxBatch/cores)+1
-        hitsPerGO = np.sum(obsMatrix * observed.values.ravel()[None, :], axis=1)
-        # Fit a Binomial GLM for each annotation, and evaluate wald test p-value for each gene annotation
-        with Parallel(n_jobs=cores, batch_size=maxBatch, max_nbytes=None, mmap_mode=None) as pool:
-            if background is not None:
-                results = pool(delayed(fitBinomModel)(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows())
-                # results = [fitBinomModel(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows()]
-            else:
-                # results = pool(delayed(fitBinomModelNoBg)(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows())
-                results = pool(delayed(fitBinomModelNoBg)(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows())
-        results = pd.DataFrame(results)
-        results.set_index(0, inplace=True)
-        results.columns = ["P(Beta > 0)", "Beta"]
-        results.dropna(inplace=True)
-        qvals = results["P(Beta > 0)"].copy()
-        qvals.loc[:] = fdrcorrection(qvals, method="negcorr")[1]
-        results["BH corrected p-value"] = qvals
-        results["-log10(qval)"] = -np.log10(qvals)
-        results["-log10(pval)"] = -np.log10(results["P(Beta > 0)"])
-        results["FC"] = np.exp(results["Beta"])
-        results["Name"] = [self.goMap[i] for i in results.index]
-        results["Total hits"] = hitsPerGO
-        results.sort_values(by="P(Beta > 0)", inplace=True)
+        results = overlap_utils.computeEnrichVsBg(self.geneRegulatory, background, query)
+        results = pd.DataFrame(results).T
+        results.columns = ["Pvalue", "FC", "BH corrected p-value", "k", "n"]
+        results["-log10(pval)"] = -np.log10(results["Pvalue"])
+        results["-log10(qval)"] = -np.log10(results["BH corrected p-value"])
         return results
 
-    def plotEnrichs(self, enrichDF, title="", by="P(Beta > 0)", alpha=0.05, topK=10, savePath=None):
+
+    def plotEnrichs(self, enrichDF, title="", by="Pvalue", alpha=0.05, topK=10, savePath=None):
         """
         Draw Enrichment barplots
 
@@ -244,7 +203,7 @@ class pyGREAT:
         sig = enrichDF[enrichDF["BH corrected p-value"] < alpha]
         clusters = matrix_utils.graphClustering(self.mat.loc[sig.index], 
                                                 metric, k=int(1.0+0.5*np.sqrt(len(sig))), r=resolution, snn=True, 
-                                                approx=False, restarts=10)
+                                                approx=True, restarts=10)
         sig["Cluster"] = clusters
         sig["Name"] = [customwrap(self.goMap[i]) for i in sig.index]
         representatives = pd.Series(dict([(i, sig["Name"][sig[score][sig["Cluster"] == i].idxmax()]) for i in np.unique(sig["Cluster"])]))
@@ -256,7 +215,7 @@ class pyGREAT:
                         width=800, height=800)
         fig.update_layout(margin = dict(t=2, l=2, r=2, b=2),
                         font_size=30)
-        fig.show()
+        # fig.show()
         if output is not None:
             fig.write_image(output)
             fig.write_html(output + ".html")

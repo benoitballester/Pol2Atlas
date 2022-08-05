@@ -159,9 +159,9 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
 
 # %%
 # Plot for encode
-annotation = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/encode_total_rnaseq_annot_0.tsv", 
+annotation = pd.read_csv(paths.encodeAnnot, 
                         sep="\t", index_col=0)
-countDir = "/scratch/pdelangen/projet_these/outputPol2/rnaseq/encode_counts/"
+countDir = paths.countsENCODE
 dlFiles = os.listdir(countDir + "BG/")
 dlFiles = [f for f in dlFiles if f.endswith(".txt.gz")]
 counts = []
@@ -174,7 +174,7 @@ for f in dlFiles:
         countsBG.append(pd.read_csv(countDir + "BG/" + f, header=None, skiprows=2).values)
         status = pd.read_csv(countDir + "500centroid/" + id + ".counts.summary",
                              header=None, index_col=0, sep="\t", skiprows=1).T
-        counts.append(pd.read_csv(countDir + "500centroid/" + f, header=None, skiprows=2).values)
+        counts.append(pd.read_csv(countDir + "500centroid/" + f, header=None, skiprows=2).values.astype("int32"))
         status = status.drop("Unassigned_Unmapped", axis=1)
         allReads.append(status.values.sum())
         order.append(id)
@@ -193,9 +193,9 @@ bgCounts = np.concatenate(countsBG, axis=1).T
 plotReadDistribs(allReads, allCounts, bgCounts, suffix="ENCODE")
 # %%
 # Plot TCGA
-annotation = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/perFileAnnotation.tsv", 
+annotation = pd.read_csv(paths.tcgaData + "/perFileAnnotation.tsv", 
                         sep="\t", index_col=0)
-dlFiles = os.listdir(paths.countDirectory + "BG/")
+dlFiles = os.listdir(paths.countsTCGA + "BG/")
 dlFiles = [f for f in dlFiles if f.endswith(".txt.gz")]
 counts = []
 countsBG = []
@@ -204,10 +204,10 @@ order = []
 for f in np.array(dlFiles):
     try:
         id = f.split(".")[0]
-        countsBG.append(pd.read_csv(paths.countDirectory + "BG/" + f, header=None, skiprows=2).values)
-        status = pd.read_csv(paths.countDirectory + "500centroid/" + id + ".counts.summary",
+        countsBG.append(pd.read_csv(paths.countsTCGA + "BG/" + f, header=None, skiprows=2).values.astype("int32"))
+        status = pd.read_csv(paths.countsTCGA + "500centroid/" + id + ".counts.summary",
                              header=None, index_col=0, sep="\t", skiprows=1).T
-        counts.append(pd.read_csv(paths.countDirectory + "500centroid/" + f, header=None, skiprows=2).values)
+        counts.append(pd.read_csv(paths.countsTCGA + "500centroid/" + f, header=None, skiprows=2).values.astype("int32"))
         status = status.drop("Unassigned_Unmapped", axis=1)
         allReads.append(status.values.sum())
         order.append(id)
@@ -218,5 +218,38 @@ allCounts = np.concatenate(counts, axis=1).T
 bgCounts = np.concatenate(countsBG, axis=1).T
 plotReadDistribs(allReads, allCounts, bgCounts, suffix="TCGA")
 
-
 # %%
+# %%
+annotation = pd.read_csv(paths.gtexData + "/tsvs/sample.tsv", 
+                        sep="\t", index_col="specimen_id")
+
+colors = pd.read_csv(paths.gtexData + "colors.txt", 
+                        sep="\t", index_col="tissue_site_detail")
+dlFiles = os.listdir(countDir + "BG/")
+dlFiles = [f for f in dlFiles if f.endswith(".txt.gz")]
+counts = []
+countsBG = []
+allReads = []
+order = []
+allStatus = []
+for f in dlFiles:
+    try:
+        id = ".".join(f.split(".")[:-3])
+        countsBG.append(pd.read_csv(paths.countDirectory + "BG/" + f, header=None, skiprows=2).values.astype("int32"))
+        status = pd.read_csv(countDir + "500centroid/" + id + ".counts.summary",
+                                header=None, index_col=0, sep="\t", skiprows=1).T
+        counts.append(pd.read_csv(countDir + "500centroid/" + f, header=None, skiprows=2).values.astype("int32"))
+        allStatus.append(status)
+        status = status.drop("Unassigned_Unmapped", axis=1)
+        allReads.append(status.values.sum())
+        order.append(f.split(".")[0])
+    except:
+        print(f, "missing")
+        continue
+allReads = np.array(allReads)
+counts = np.concatenate(counts, axis=1).T
+ann, eq = pd.factorize(annotation.loc[order]["tissue_type"])
+allReads = np.array(allReads)
+allCounts = np.concatenate(counts, axis=1).T
+bgCounts = np.concatenate(countsBG, axis=1).T
+plotReadDistribs(allReads, allCounts, bgCounts, suffix="GTEx")

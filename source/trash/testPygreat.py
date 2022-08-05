@@ -18,7 +18,7 @@ consensuses.columns = ["Chromosome", "Start", "End", "Name"]
 consensusesPr = pr.PyRanges(consensuses)
 clusts = np.loadtxt(paths.outputDir + "clusterConsensuses_Labels.txt").astype(int)
 # %%
-from lib.pyGREAT_normal import pyGREAT as pyGREATglm
+from lib.pyGREAT_topGenes import pyGREAT as pyGREATglm
 enricherglm = pyGREATglm(paths.GOfile,
                           geneFile=paths.gencode,
                           chrFile=paths.genomeFile)
@@ -63,12 +63,31 @@ reg = regLogicGREAT(5000,1000,1000000)(enricherglm.txList,
 reg.to_csv(paths.tempDir + "reggreat.bed", header=None, index=None, sep="\t")
 '''
 # %%
-inclust = clusts == 7
+inclust = clusts == 6
 queryClust = pr.PyRanges(consensuses[inclust])
-# queryClust = pr.read_bed(paths.outputDir + "rnaseq/Survival2/globally_prognostic.bed")
+# queryClust = pr.read_bed('/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2/rnaseq/Survival2/globally_prognostic.bed')
 pvals = enricherglm.findEnriched(queryClust, background=consensusesPr)
 enricherglm.plotEnrichs(pvals)
 enricherglm.clusterTreemap(pvals, score="-log10(pval)", metric="yule")
+# %%
+from scipy.stats import hypergeom
+detected = np.intersect1d(list(pvals.index), enricherglm.mat.columns)
+detectedMat = enricherglm.mat[detected]
+N = detectedMat.shape[1]
+sig = pvals.index[pvals["BH corrected p-value"] < 0.25]
+sig = np.intersect1d(list(sig), detectedMat.columns)
+n = len(sig)
+stats = dict()
+K = detectedMat.sum(axis=1)
+k = detectedMat[sig].sum(axis=1)
+p = hypergeom(N, K, n).sf(k-1)
+stats = pd.DataFrame(p, index=detectedMat.index, columns=["Pvalue"])[(k > 0) & (K >= 3)]
+# %%
+stats["BH corrected p-value"] = 1.0
+stats["BH corrected p-value"] = fdrcorrection(stats["Pvalue"])[1]
+stats["-log10(pval)"] = -np.log10(stats["Pvalue"])
+print(stats.sort_values("Pvalue")[:50])
+enricherglm.clusterTreemap(stats, alpha=0.25, score="-log10(pval)", metric="yule")
 # %%
 class distPlotter:
     def __init__(self, gencode, query):

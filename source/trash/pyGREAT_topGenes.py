@@ -128,15 +128,19 @@ class pyGREAT:
         self.txList = reversedTx.copy()
         # Apply infered regulatory logic
         self.geneRegulatory = regLogicGREAT(5000, 1000, 1000000)(reversedTx, self.chrInfo)
-        goPerGene = pd.DataFrame(self.mat.T[self.mat.T > 0.5].stack().index.tolist())
-        goPerGene.columns = [self.gtfGeneCol, "Name"]
-        self.geneRegulatory = self.geneRegulatory.merge(goPerGene, on=self.gtfGeneCol)
+        self.goPerGene = pd.DataFrame(self.mat.T[self.mat.T > 0.5].stack().index.tolist())
+        self.goPerGene.columns = [self.gtfGeneCol, "Name"]
+        self.geneRegOnly = self.geneRegulatory.copy()
+        self.geneRegOnly.drop(["Strand"], 1, inplace=True)
+
+        self.geneRegOnly.columns = ["Chromosome","Start","End","Name"]
+        self.geneRegulatory = self.geneRegulatory.merge(self.goPerGene, on=self.gtfGeneCol)
         self.geneRegulatory = self.geneRegulatory.drop(["gene_name","Strand"], 1)
         self.geneRegulatory.columns = ["Chromosome","Start","End","Name"]
         self.geneRegulatory = pr.PyRanges(self.geneRegulatory)
         self.geneRegulatory = self.geneRegulatory.merge(by="Name")
 
-    def findEnriched(self, query, background=None, minGenes=3, cores=-1):
+    def findEnriched(self, query, background=None):
         """
         Find enriched terms in genes near query.
 
@@ -158,12 +162,17 @@ class pyGREAT:
         """
         # First compute intersections count for each gene
         # And expected intersection count for each gene
-        results = overlap_utils.computeEnrichVsBg(self.geneRegulatory, background, query)
+        results = overlap_utils.computeEnrichVsBg(pr.PyRanges(self.geneRegOnly), background, query)
         results = pd.DataFrame(results).T
         results.columns = ["Pvalue", "FC", "BH corrected p-value", "k", "n"]
+        qval = np.ones(len(results))
+        filtered = (results["k"] > 0) & (results["n"] > 3)
+        qvalCorr = fdrcorrection(results["Pvalue"][filtered])[1]
+        qval[filtered] = qvalCorr
+        results["BH corrected p-value"] = qval
         results["-log10(pval)"] = -np.log10(results["Pvalue"])
         results["-log10(qval)"] = -np.log10(results["BH corrected p-value"])
-        return results
+        return results.sort_values("Pvalue")
 
 
     def plotEnrichs(self, enrichDF, title="", by="Pvalue", alpha=0.05, topK=10, savePath=None):
@@ -201,9 +210,9 @@ class pyGREAT:
 
     def clusterTreemap(self, enrichDF, alpha=0.05, score="-log10(qval)", metric="yule", resolution=1.0, output=None):
         sig = enrichDF[enrichDF["BH corrected p-value"] < alpha]
-        clusters = matrix_utils.graphClustering(self.mat.loc[sig.index], 
+        clusters = matrix_utils.graphClustering(self.mat.loc[sig.index]==1, 
                                                 metric, k=int(1.0+0.5*np.sqrt(len(sig))), r=resolution, snn=True, 
-                                                approx=True, restarts=10)
+                                                approx=False, restarts=10)
         sig["Cluster"] = clusters
         sig["Name"] = [customwrap(self.goMap[i]) for i in sig.index]
         representatives = pd.Series(dict([(i, sig["Name"][sig[score][sig["Cluster"] == i].idxmax()]) for i in np.unique(sig["Cluster"])]))

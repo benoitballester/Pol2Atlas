@@ -1,14 +1,20 @@
 # %%
 # Pol II only, Run this after the integrative analysis
-from lib.peakMerge import peakMerger
-from lib.utils import overlap_utils, matrix_utils, plot_utils
-import numpy as np
-from settings import params, paths
-import pyranges as pr
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+import sys
 
+import numpy as np
+from lib.peakMerge import peakMerger
+from lib.utils import matrix_utils, overlap_utils, plot_utils
+
+sys.path.append("./")
+import os
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import pyranges as pr
+import seaborn as sns
+from settings import params, paths
+from scipy.io import mmread
 donutSize = 0.3
 target = "POLR2A"
 listFiles = os.listdir(paths.peaksFolder)
@@ -34,7 +40,8 @@ plot_utils.donutPlot(donutSize, counts, counts.sum(), annots,
           counts.sum(), target + " ChIP-seq", palette, fName=outputDir + "expBiotype", showPct=False)
 # %%
 plt.figure(dpi=300, figsize=(3,2))
-distribPeaks = np.sum(merger.matrix, 1)
+mat = mmread(paths.outputDir + "matrix.mtx")
+distribPeaks = np.array(mat.sum(axis=1)).ravel()
 maxVal = int(np.percentile(distribPeaks,95))
 n, bins, _ = plt.hist(np.clip(distribPeaks, 0, maxVal), np.arange(0, 1+maxVal))
 plt.text(bins[-2]*0.5+bins[-1]*0.5, n[-1] + 0.05*plt.ylim()[1], 

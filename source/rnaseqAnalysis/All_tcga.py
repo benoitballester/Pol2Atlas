@@ -2,6 +2,8 @@
 import numpy as np
 import pandas as pd
 import os
+import sys
+sys.path.append("./")
 import matplotlib.pyplot as plt
 from settings import params, paths
 from lib import rnaseqFuncs
@@ -70,22 +72,20 @@ try:
     os.mkdir(paths.outputDir + "rnaseq/TCGA/DE/")
 except FileExistsError:
     pass
-consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
 # %%
-from lib.pyGREAT_normal import pyGREAT as pyGREATglm
+from lib.pyGREATglm import pyGREAT as pyGREATglm
 enricherglm = pyGREATglm(paths.GOfile,
                           geneFile=paths.gencode,
                           chrFile=paths.genomeFile)
 consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
-
+consensuses.columns = ["Chromosome", "Start", "End", "Name", "Score", "Strand", "ThickStart", "ThickEnd"]
 try:
     os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/DE/")
 except FileExistsError:
     pass
 # %%
 from lib.utils.reusableUtest import mannWhitneyAsymp
-residualUnclipped = counts.astype("float32") - countModel.means*sf.reshape(-1,1)
-tester = mannWhitneyAsymp(residualUnclipped)
+tester = mannWhitneyAsymp(countModel.residuals)
 # %%
 pctThreshold = 0.1
 lfcMin = 0.25
@@ -204,8 +204,8 @@ clustsPol2 = np.loadtxt(paths.outputDir + "clusterConsensuses_Labels.txt",dtype=
 nClusts = np.max(clustsPol2)+1
 nAnnots = len(eq)
 zScores = np.zeros((nClusts, nAnnots))
-avg1Read = np.mean(countModel.anscombeResiduals, axis=0) > 1
-filteredMat = np.log(1+countModel.anscombeResiduals)[:, avg1Read]
+avg1Read = np.mean(countModel.residuals, axis=0) > 1
+filteredMat = np.log(1+countModel.residuals)[:, avg1Read]
 for i in range(nAnnots):
     hasAnnot = cancerType == i
     sd = np.std(np.percentile(filteredMat[hasAnnot], 95, axis=0))
@@ -239,7 +239,7 @@ plt.show()
 # %%
 # HC 
 rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
-colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.anscombeResiduals.T, "correlation")
+colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.residuals.T, "correlation")
 # Plot Heatmap
 vals = countModel.normed
 plot_utils.plotHC(vals.T, eq[cancerType], vals.T,  
@@ -248,10 +248,10 @@ plt.savefig(paths.outputDir + "rnaseq/TCGA/HM_all.pdf", bbox_inches="tight")
 # %%
 # HC 
 rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
-colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.anscombeResiduals.T[hv & outliers], "correlation")
+colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.residuals.T[hv], "correlation")
 # Plot Heatmap
 vals = countModel.normed
-plot_utils.plotHC(vals.T[hv & outliers], eq[cancerType], vals.T[hv & outliers],  
+plot_utils.plotHC(vals.T[hv], eq[cancerType], vals.T[hv],  
                     rowOrder=rowOrder, colOrder=colOrder, hq=True)
 plt.savefig(paths.outputDir + "rnaseq/TCGA/HM_hv.pdf", bbox_inches="tight")
 

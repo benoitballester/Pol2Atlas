@@ -20,9 +20,9 @@ def dfToPrWorkaround(df, useSummit=True):
                             starts=df.iloc[:,6].values.ravel(), 
                             ends=df.iloc[:,7].values.ravel())
     else:
-        return pr.PyRanges(chromosomes=df.iloc[:,0].values.ravel(), 
-                            starts=df.iloc[:,1].values.ravel(), 
-                            ends=df.iloc[:,2].values.ravel())
+        return pr.PyRanges(chromosomes=df.loc[:, "Chromosome"].values.ravel(), 
+                            starts=df.loc[:, "Start"].values.ravel(), 
+                            ends=df.loc[:, "End"].values.ravel())
 
 def getIntersected(query, catalog):
     pass

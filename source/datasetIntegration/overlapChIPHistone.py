@@ -1,15 +1,7 @@
 # %%
 import pandas as pd
 import numpy as np
-import deeptools.heatmapper 
 from settings import params, paths
-
-histonePathHeart27Ac = "/scratch/pdelangen/projet_these/data_clean/H3K27Ac_Chipseq/h3k27ac_heart_left_ventricule.bigWig"
-histonePathLiver27Ac = "/scratch/pdelangen/projet_these/data_clean/H3K27Ac_Chipseq//h3k27ac_liver.bigWig"
-histonePathTcell27Ac = "/scratch/pdelangen/projet_these/data_clean/H3K27Ac_Chipseq//h3k27ac_T_cells.bigWig"
-histonePathHeart27Me3 = "/scratch/pdelangen/projet_these/data_clean/Dnase/ENCFF169GLM_heart.bigWig"
-histonePathLiver27Me3 = "/scratch/pdelangen/projet_these/data_clean/Dnase/ENCFF556YQA_liver.bigWig"
-histonePathTcell27Me3 = "/scratch/pdelangen/projet_these/data_clean/Dnase/ENCFF677BPI_Tcells.bigWig"
 
 allPeaks = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
 allPeaks = allPeaks[[0,6,7]] # Summits only
@@ -33,13 +25,13 @@ def subSampleFromClust(peaks, clusts=None, query=None, invert=False, s=10000, su
     return outputPath
 
 beds = []
-beds.append(subSampleFromClust(allPeaks, clusts=clusts, query=9))
-beds.append(subSampleFromClust(allPeaks, clusts=clusts, query=15))
-beds.append(subSampleFromClust(allPeaks, clusts=clusts, query=4))
+beds.append(subSampleFromClust(allPeaks, clusts=clusts, query=10))
+beds.append(subSampleFromClust(allPeaks, clusts=clusts, query=20))
+beds.append(subSampleFromClust(allPeaks, clusts=clusts, query=5))
 # %%
 import subprocess
 cmd = f"""computeMatrix reference-point \
-        -S {histonePathHeart27Ac} {histonePathLiver27Ac} {histonePathTcell27Ac} {histonePathHeart27Me3} {histonePathLiver27Me3} {histonePathTcell27Me3} \
+        -S {paths.histonePathHeart27Ac} {paths.histonePathLiver27Ac} {paths.histonePathTcell27Ac} {paths.histonePathHeart27Me3} {paths.histonePathLiver27Me3} {paths.histonePathTcell27Me3} \
         -R {" ".join(beds)} \
         -b 5000 -a 5000 -p 50 \
         -o {paths.tempDir}cardiovascularVsNotCard.mat"""
@@ -100,9 +92,8 @@ shuffledReg = pd.read_csv(paths.tempDir + "background.bed", sep="\t", header=Non
 meanPos = (shuffledReg[2]*0.5 + shuffledReg[1]*0.5).astype(int)
 shuffledReg[[1,2]] = np.array([meanPos, meanPos+1]).T
 # %%
-consFile = "/scratch/pdelangen/projet_these/data_clean/cons/hg38.phyloP100way.bw"
 cmd = f"""computeMatrix reference-point \
-        -S {consFile} \
+        -S {paths.consFile} \
         -R {subSampleFromClust(allPeaks,s=50000)} \
         -b 5000 -a 5000 -p max \
         --missingDataAsZero \
@@ -114,9 +105,8 @@ cmdPlot = f"""plotHeatmap -m {paths.tempDir}polII.mat \
              -o {paths.outputDir}/epigenetic/consNoClust.pdf"""
 subprocess.run(cmdPlot.split())
 # %%
-consFile = "/scratch/pdelangen/projet_these/data_clean/cons/hg38.phyloP100way.bw"
 cmd = f"""computeMatrix reference-point \
-        -S {consFile} \
+        -S {paths.consFile} \
         -R {subSampleFromClust(shuffledReg,s=50000, suffix="Random")} \
         -b 5000 -a 5000 -p max \
         --missingDataAsZero \
