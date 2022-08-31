@@ -3,6 +3,8 @@
 import numpy as np
 import pandas as pd
 import os
+import sys
+sys.path.append("./")
 import matplotlib.pyplot as plt
 from settings import params, paths
 from lib import rnaseqFuncs
@@ -14,7 +16,7 @@ import seaborn as sns
 import umap
 from statsmodels.stats.multitest import fdrcorrection
 from scipy.stats import wilcoxon
-
+from scipy.sparse import csc_array, coo_array, vstack
 
 try:
     os.mkdir(paths.outputDir + "rnaseq/count_distrib/")
@@ -26,8 +28,12 @@ palette = sns.color_palette()
 def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False):
     # Plot average percentage of total reads per kb
     sf = np.sqrt(allReads.shape[0]/510)
-    pctReadsBG_ENCODE = np.mean(bgCounts/allReads[:, None], axis=1)
-    pctReadsPol2_ENCODE = np.mean(allCounts/allReads[:, None], axis=1)
+    normReadsBG = bgCounts.copy()
+    normReadsBG.data = normReadsBG.data / np.take(allReads, normReadsBG.indices)
+    normReadsPolII = allCounts.copy()
+    normReadsPolII.data = normReadsPolII.data / np.take(allReads, normReadsPolII.indices)
+    pctReadsBG_ENCODE = (normReadsBG).mean(axis=1)
+    pctReadsPol2_ENCODE = (normReadsPolII).mean(axis=1)
     dfPctReads = pd.DataFrame(data=np.concatenate([pctReadsBG_ENCODE, pctReadsPol2_ENCODE])*1e6,
                             columns=["Reads per 10m mapped reads per kb"])
     dfPctReads["Regions"] = [f"{suffix}, control"]*len(pctReadsBG_ENCODE) + [f"{suffix}, Pol II Interg"]*len(pctReadsPol2_ENCODE)                         
@@ -42,14 +48,13 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
     plt.savefig(paths.outputDir + f"rnaseq/count_distrib/readsPerMappedreads_{suffix}.pdf", bbox_inches="tight")
     plt.show()
     # Plot count sparsity (% of 0 counts)
-    normReadsBG = bgCounts/allReads[:, None]
-    normReadsPolII = allCounts/allReads[:, None]
+    print(normReadsBG)
     cutoffs = [0.0, 1e-7, 1e-6, 1e-5]
     labels = ["", "per 10 million", "per 1 million", "per 100 000"]
-    sparsityBG_ENCODE = np.concatenate([np.mean(normReadsBG > c, axis=1) for c in cutoffs])
-    sparsityPol2_ENCODE = np.concatenate([np.mean(normReadsPolII > c, axis=1) for c in cutoffs])
-    labelsBG = np.array([[f"1 read {l} mapped reads"] * len(normReadsBG) for l in labels]).ravel()
-    labelsPolII = np.array([[f"1 read {l} mapped reads"] * len(normReadsPolII) for l in labels]).ravel()
+    sparsityBG_ENCODE = np.concatenate([(normReadsBG > c).mean(axis=1) for c in cutoffs])
+    sparsityPol2_ENCODE = np.concatenate([(normReadsPolII > c).mean(axis=1) for c in cutoffs])
+    labelsBG = np.array([[f"1 read {l} mapped reads"] * normReadsBG.shape[0] for l in labels]).ravel()
+    labelsPolII = np.array([[f"1 read {l} mapped reads"] * normReadsPolII.shape[0] for l in labels]).ravel()
     dfSparsity = pd.DataFrame(data=np.concatenate([sparsityBG_ENCODE, sparsityPol2_ENCODE]),
                             columns=["Fraction of non zero counts"])
     dfSparsity["Threshold"] = np.concatenate([labelsBG, labelsPolII])
@@ -67,8 +72,8 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
     from scipy.stats import mannwhitneyu
     # Plot non zero cpm read distribution
     if plotAllCounts:
-        cpmBg = (bgCounts/allReads[:, None]*1e6).ravel()
-        cpmPol2 = (allCounts/allReads[:, None]*1e6).ravel()
+        cpmBg = (normReadsBG*1e6).ravel()
+        cpmPol2 = (normReadsPolII*1e6).ravel()
         nzBg = cpmBg[cpmBg > 1e-15]
         nzPolII = cpmPol2[cpmPol2 > 1e-15]
         largestPct = np.maximum(np.max(nzBg), np.max(nzPolII))
@@ -105,7 +110,7 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
         plt.show()
         plt.close()
     # Fraction of intergenic counts on Pol II probes
-    pctPerSample = np.sum(allCounts, axis=1) / (np.sum(allCounts, axis=1) + np.sum(bgCounts, axis=1))
+    pctPerSample = allCounts.sum(axis=1) / (allCounts.sum(axis=1) + bgCounts.sum(axis=1))
     plt.figure(dpi=500)
     sns.boxplot(data=pctPerSample, orient="h", showfliers=False)
     sns.stripplot(data=pctPerSample, jitter=0.33, dodge=True, 
@@ -117,8 +122,9 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
     plt.vlines(allCounts.shape[1]/bgCounts.shape[1], plt.ylim()[0], plt.ylim()[1], color="red", linestyles="dashed")
     plt.savefig(paths.outputDir + f"rnaseq/count_distrib/boxplot_pctInterg_{suffix}.pdf", bbox_inches="tight")
     plt.show()
+    print("c")
     # Fraction of mapped reads
-    pctPerSample = np.sum(allCounts, axis=1) / allReads[None, :] * 100
+    pctPerSample = allCounts.sum(axis=1) / allReads[None, :] * 100
     plt.figure(dpi=500)
     sns.boxplot(data=pctPerSample, orient="h", showfliers=False)
     sns.stripplot(data=pctPerSample, jitter=0.33, dodge=True, 
@@ -127,8 +133,7 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
     plt.xlabel("Percentage of mapped reads in Pol II probes")
     plt.savefig(paths.outputDir + f"rnaseq/count_distrib/boxplot_pctmapped_{suffix}.pdf", bbox_inches="tight")
     plt.show()
-    normReadsBG = bgCounts/allReads[:, None]
-    normReadsPolII = allCounts/allReads[:, None]
+    print("a")
     pctPerSample = np.sum(normReadsPolII > 1e-7, axis=1) / (np.sum(normReadsPolII > 1e-7, axis=1) + np.sum(normReadsBG > 1e-7, axis=1))
     # Fraction of mapped reads
     pctPerSample = np.sum(allCounts, axis=1) / allReads[None, :] * 100
@@ -141,9 +146,8 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
     plt.xlabel("Percentage of mapped reads in Pol II probes")
     plt.savefig(paths.outputDir + f"rnaseq/count_distrib/boxplot_pctmapped_fixed_scale_{suffix}.pdf", bbox_inches="tight")
     plt.show()
-    normReadsBG = bgCounts/allReads[:, None]
-    normReadsPolII = allCounts/allReads[:, None]
-    pctPerSample = np.sum(normReadsPolII > 1e-7, axis=1) / (np.sum(normReadsPolII > 1e-7, axis=1) + np.sum(normReadsBG > 1e-7, axis=1))
+    print("b")
+    pctPerSample = (normReadsPolII > 1e-7).sum(axis=1) / ((normReadsPolII > 1e-7).sum(axis=1) + (normReadsBG > 1e-7).sum(axis=1))
     # Pct of > 1 read per 10m mapped reads
     plt.figure(dpi=500)
     sns.boxplot(data=pctPerSample, orient="h", showfliers=False)
@@ -171,10 +175,11 @@ order = []
 for f in dlFiles:
     try:
         id = f.split(".")[0]
-        countsBG.append(pd.read_csv(countDir + "BG/" + f, header=None, skiprows=2).values)
+        countsBG.append(coo_array(pd.read_csv(countDir + "BG/" + f, header=None, skiprows=2).values).T)
         status = pd.read_csv(countDir + "500centroid/" + id + ".counts.summary",
                              header=None, index_col=0, sep="\t", skiprows=1).T
-        counts.append(pd.read_csv(countDir + "500centroid/" + f, header=None, skiprows=2).values.astype("int32"))
+        values = pd.read_csv(countDir + "500centroid/" + f, header=None, skiprows=2).values
+        counts.append(coo_array(values).T)
         status = status.drop("Unassigned_Unmapped", axis=1)
         allReads.append(status.values.sum())
         order.append(id)
@@ -188,8 +193,8 @@ for f in dlFiles:
             countsBG.pop(-1)
         continue
 allReads = np.array(allReads)
-allCounts = np.concatenate(counts, axis=1).T
-bgCounts = np.concatenate(countsBG, axis=1).T
+allCounts = csc_array(vstack(counts))
+bgCounts = csc_array(vstack(countsBG))
 plotReadDistribs(allReads, allCounts, bgCounts, suffix="ENCODE")
 # %%
 # Plot TCGA
@@ -201,31 +206,34 @@ counts = []
 countsBG = []
 allReads = []
 order = []
+i = 0
 for f in np.array(dlFiles):
     try:
+        i += 1
+        if i % 100 == 0:
+            print(i)
         id = f.split(".")[0]
-        countsBG.append(pd.read_csv(paths.countsTCGA + "BG/" + f, header=None, skiprows=2).values.astype("int32"))
+        countsBG.append(coo_array(pd.read_csv(paths.countsTCGA + "BG/" + f, header=None, skiprows=2).values).T)
         status = pd.read_csv(paths.countsTCGA + "500centroid/" + id + ".counts.summary",
                              header=None, index_col=0, sep="\t", skiprows=1).T
-        counts.append(pd.read_csv(paths.countsTCGA + "500centroid/" + f, header=None, skiprows=2).values.astype("int32"))
+        counts.append(coo_array(pd.read_csv(paths.countsTCGA + "500centroid/" + f, header=None, skiprows=2).values).T)
         status = status.drop("Unassigned_Unmapped", axis=1)
         allReads.append(status.values.sum())
         order.append(id)
     except:
         continue
 allReads = np.array(allReads)
-allCounts = np.concatenate(counts, axis=1).T
-bgCounts = np.concatenate(countsBG, axis=1).T
+allCounts = csc_array(vstack(counts))
+bgCounts = csc_array(vstack(countsBG))
 plotReadDistribs(allReads, allCounts, bgCounts, suffix="TCGA")
-
 # %%
-# %%
+# Plot GTEx
 annotation = pd.read_csv(paths.gtexData + "/tsvs/sample.tsv", 
                         sep="\t", index_col="specimen_id")
 
 colors = pd.read_csv(paths.gtexData + "colors.txt", 
                         sep="\t", index_col="tissue_site_detail")
-dlFiles = os.listdir(countDir + "BG/")
+dlFiles = os.listdir(paths.countsGTEx + "BG/")
 dlFiles = [f for f in dlFiles if f.endswith(".txt.gz")]
 counts = []
 countsBG = []
@@ -235,10 +243,10 @@ allStatus = []
 for f in dlFiles:
     try:
         id = ".".join(f.split(".")[:-3])
-        countsBG.append(pd.read_csv(paths.countDirectory + "BG/" + f, header=None, skiprows=2).values.astype("int32"))
-        status = pd.read_csv(countDir + "500centroid/" + id + ".counts.summary",
+        countsBG.append(coo_array(pd.read_csv(paths.countsGTEx + "BG/" + f, header=None, skiprows=2).values).T)
+        status = pd.read_csv(paths.countsGTEx + "500centroid/" + id + ".counts.summary",
                                 header=None, index_col=0, sep="\t", skiprows=1).T
-        counts.append(pd.read_csv(countDir + "500centroid/" + f, header=None, skiprows=2).values.astype("int32"))
+        counts.append(coo_array(pd.read_csv(paths.countsGTEx + "500centroid/" + f, header=None, skiprows=2).values).T)
         allStatus.append(status)
         status = status.drop("Unassigned_Unmapped", axis=1)
         allReads.append(status.values.sum())
@@ -246,10 +254,11 @@ for f in dlFiles:
     except:
         print(f, "missing")
         continue
-allReads = np.array(allReads)
-counts = np.concatenate(counts, axis=1).T
+
 ann, eq = pd.factorize(annotation.loc[order]["tissue_type"])
 allReads = np.array(allReads)
-allCounts = np.concatenate(counts, axis=1).T
-bgCounts = np.concatenate(countsBG, axis=1).T
+allCounts = csc_array(vstack(counts))
+bgCounts = csc_array(vstack(countsBG))
 plotReadDistribs(allReads, allCounts, bgCounts, suffix="GTEx")
+
+# %%

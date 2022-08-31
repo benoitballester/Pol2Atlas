@@ -406,7 +406,7 @@ for c in cases:
     enricher.plotEnrichs(enrichs, savePath=paths.outputDir + f"rnaseq/TumorVsNormal/globally_{c}_GREAT.pdf")
     enrichs.to_csv(paths.outputDir + f"rnaseq/TumorVsNormal/globally_{c}_GREAT.csv", sep="\t")
     if len(enrichs) > 0:
-        enricher.clusterTreemap(enrichs, paths.outputDir + "rnaseq/TumorVsNormal/" + f"/globally_{c}_GREAT_revigo.pdf.pdf")
+        enricher.clusterTreemap(enrichs, output=paths.outputDir + "rnaseq/TumorVsNormal/" + f"/globally_{c}_GREAT_revigo.pdf.pdf")
 
 # %%
 

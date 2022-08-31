@@ -18,7 +18,7 @@ import fastcluster
 import sklearn.metrics as metrics
 import scipy.stats as ss
 
-countDir = "/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2/rnaseq/gtex_counts/"
+countDir = paths.countsGTEx
 try:
     os.mkdir(paths.outputDir + "rnaseq/gtex_rnaseq/")
 except FileExistsError:

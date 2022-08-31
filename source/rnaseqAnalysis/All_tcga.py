@@ -87,6 +87,7 @@ except FileExistsError:
 from lib.utils.reusableUtest import mannWhitneyAsymp
 tester = mannWhitneyAsymp(countModel.residuals)
 # %%
+
 pctThreshold = 0.1
 lfcMin = 0.25
 orig = annotation["Project ID"]
@@ -117,6 +118,7 @@ for i in label.unique():
     enricherglm.plotEnrichs(pvals)
     enricherglm.clusterTreemap(pvals, score="-log10(pval)", 
                                 output=paths.outputDir + f"rnaseq/TCGA/DE/great_{i}.pdf")
+
 # %%
 feat = countModel.residuals[:, hv]
 decomp, model = rnaseqFuncs.permutationPA_PCA(feat, max_rank=2000, returnModel=True)
@@ -194,8 +196,8 @@ for i in np.unique(cancerType):
     legend = Patch(color=palette[i], label=eq[i][5:])
     patches.append(legend)
 plt.legend(handles=patches)
-plt.savefig(paths.outputDir + "rnaseq/TCGA/umap_all_tumors_lgd.png", bbox_inches="tight")
 plt.title(f"Balanced accuracy on {len(np.unique(cancerType))} cancers : {acc}")
+plt.savefig(paths.outputDir + "rnaseq/TCGA/umap_all_tumors_lgd.png", bbox_inches="tight")
 plt.show()
 
 # %%

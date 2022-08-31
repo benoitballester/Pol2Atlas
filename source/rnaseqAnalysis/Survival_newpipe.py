@@ -131,9 +131,9 @@ for case in cases:
     nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=3)
     countsNz = allCounts[:, nzCounts]
     sf = rnaseqFuncs.scranNorm(countsNz)
-    countModel = rnaseqFuncs.RnaSeqModeler().fit(countsNz, sf)         
-    residuals = countModel.residuals
-    countsNorm = countModel.normed
+    # No need to compute full pearson for survival(no need to rescale/compute variance)      
+    residuals = countsNz/sf.reshape(-1, 1)
+    residuals = residuals - np.mean(residuals, axis=0)
     df = pd.DataFrame()
     df["Dead"] = np.logical_not(survived[np.isin(timeToEvent.index, order)])
     df["TTE"] = timeToEvent.loc[order].values
@@ -145,8 +145,8 @@ for case in cases:
     notDropped = []
     print(f"Cox regression on {residuals.shape[1]} peaks")
     # Parallelize Cox regression across available cores using joblib
-    batchSize = min(512, int(residuals.shape[1]/len(os.sched_getaffinity(0))))
-    with Parallel(n_jobs=-1, verbose=1, batch_size=batchSize) as pool:
+    batchSize = min(512, int(residuals.shape[1]/40))
+    with Parallel(n_jobs=40, verbose=1, batch_size=batchSize) as pool:
         stats = pool(delayed(computeCoxReg)(residuals[:, i], df, i) for i in range(residuals.shape[1]))
     stats = pd.concat(stats)
     stats.index = np.arange(counts.shape[1])[nzCounts]
@@ -165,7 +165,7 @@ for case in cases:
         enrichedGREAT = enricher.findEnriched(progConsensuses, consensuses)
         enrichedGREAT.to_csv(paths.outputDir + "rnaseq/Survival/" + case + "/GREATenriched.csv", sep="\t")
         enricher.plotEnrichs(enrichedGREAT, savePath=paths.outputDir + "rnaseq/Survival/" + case + "/GREATenriched.pdf")
-        if len(enrichedGREAT) > 0:
+        if len(enrichedGREAT[enrichedGREAT["BH corrected p-value"] < 0.05]) > 0:
             enricher.clusterTreemap(enrichedGREAT, output=paths.outputDir + "rnaseq/Survival/" + case + "/GREATenriched_revigo.pdf")
     studiedConsensusesCase[case] = nzCounts.nonzero()[0]
     progPerCancer[case] = np.zeros(allCounts.shape[1])
@@ -174,7 +174,6 @@ for case in cases:
     threshold = -np.log10(pvals[orderP][np.searchsorted(pvals[orderP] < 0.05, True)])
     fig, ax = plot_utils.manhattanPlot(consensuses[nzCounts], chrFile, pvals, es=None, threshold=threshold)
     fig.savefig(paths.outputDir + f"rnaseq/Survival/" + case + "/manhattan_prog.pdf")
-
 # %%
 # Plot # of DE Pol II Cancer vs Normal
 DEperCancer = pd.DataFrame(np.sum(np.abs(progPerCancer), axis=0)).T
@@ -243,7 +242,7 @@ enrichs = enricher.findEnriched(consensuses[studied], consensuses)
 enricher.plotEnrichs(enrichs, savePath=paths.outputDir + "rnaseq/Survival/globally_prognostic_GREAT.pdf")
 enrichs.to_csv(paths.outputDir + f"rnaseq/Survival/globally_prognostic_GREAT.csv", sep="\t")
 if len(enrichs) > 1:
-    enricher.revigoTreemap(enrichs, paths.outputDir + "rnaseq/Survival/globally_prognostic_GREAT_revigo.pdf")
+    enricher.clusterTreemap(enrichs, output=paths.outputDir + "rnaseq/Survival/globally_prognostic_GREAT_revigo.pdf")
 fig, ax = plot_utils.manhattanPlot(consensuses[nzCounts], chrFile, 
                                    pvals, es=None, threshold=threshold)
 fig.savefig(paths.outputDir + f"rnaseq/Survival/manhattan_progCount.pdf")
