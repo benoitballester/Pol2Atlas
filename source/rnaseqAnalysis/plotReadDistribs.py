@@ -23,7 +23,7 @@ try:
 except FileExistsError:
     pass
 palette = sns.color_palette()
-# %%
+
 # %%
 def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False):
     # Plot average percentage of total reads per kb

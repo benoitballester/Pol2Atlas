@@ -18,7 +18,7 @@ consensuses.columns = ["Chromosome", "Start", "End", "Name"]
 consensusesPr = pr.PyRanges(consensuses)
 clusts = np.loadtxt(paths.outputDir + "clusterConsensuses_Labels.txt").astype(int)
 # %%
-from lib.pyGREAT_topGenes import pyGREAT as pyGREATglm
+from lib.pyGREATglm import pyGREAT as pyGREATglm
 enricherglm = pyGREATglm(paths.GOfile,
                           geneFile=paths.gencode,
                           chrFile=paths.genomeFile)

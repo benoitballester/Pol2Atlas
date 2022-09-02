@@ -84,10 +84,9 @@ try:
 except FileExistsError:
     pass
 # %%
+# 1 vs All DE analysis (markers)
 from lib.utils.reusableUtest import mannWhitneyAsymp
 tester = mannWhitneyAsymp(countModel.residuals)
-# %%
-
 pctThreshold = 0.1
 lfcMin = 0.25
 orig = annotation["Project ID"]
@@ -120,15 +119,18 @@ for i in label.unique():
                                 output=paths.outputDir + f"rnaseq/TCGA/DE/great_{i}.pdf")
 
 # %%
+# Compute PCA
 feat = countModel.residuals[:, hv]
 decomp, model = rnaseqFuncs.permutationPA_PCA(feat, max_rank=2000, returnModel=True)
 # %%
+# UMAP
 import umap
 from lib.utils.plot_utils import plotUmap, getPalette
 from matplotlib.patches import Patch
 embedding = umap.UMAP(n_neighbors=30, min_dist=0.5, random_state=0, low_memory=False, 
                       metric="correlation").fit_transform(decomp)
 # %%
+# Plot UMAP
 import plotly.express as px
 import plotly.graph_objects as go
 df = pd.DataFrame(embedding, columns=["x","y"])
@@ -153,6 +155,7 @@ fig.write_html(paths.outputDir + "rnaseq/TCGA/umap_samples.pdf" + ".html")
 # %%
 import plotly.express as px
 #%%
+# Predictive model
 import catboost
 from sklearn.model_selection import train_test_split, StratifiedKFold
 project_id = annotation["project_id"]
@@ -168,13 +171,12 @@ for train, test in StratifiedKFold(10, shuffle=True, random_state=42).split(deco
     # Scale and predict on test data
     x_test = decomp[test]
     pred[test] = model.predict(x_test).ravel()
-# %%
 from sklearn.metrics import accuracy_score, recall_score, precision_score, confusion_matrix,balanced_accuracy_score
 acc = balanced_accuracy_score(cancerType, pred)
 # %%
+# Legend of UMAP + balanced accuracy
 from lib.utils.plot_utils import plotUmap, getPalette
 from matplotlib.patches import Patch
-
 
 plt.figure(dpi=500)
 palette, colors = getPalette(cancerType)
@@ -201,7 +203,7 @@ plt.savefig(paths.outputDir + "rnaseq/TCGA/umap_all_tumors_lgd.png", bbox_inches
 plt.show()
 
 # %%
-
+'''
 clustsPol2 = np.loadtxt(paths.outputDir + "clusterConsensuses_Labels.txt",dtype=int)[nzCounts]
 nClusts = np.max(clustsPol2)+1
 nAnnots = len(eq)
@@ -217,7 +219,6 @@ for i in range(nAnnots):
         notInClust = np.logical_not(clustsPol2 == j)
         observed = np.mean(np.percentile(filteredMat[hasAnnot][:, inClust], 95, axis=0))
         zScores[j, i] = (observed-expected)/sd
-# %%
 import matplotlib as mpl
 rowOrder, colOrder = matrix_utils.HcOrder(zScores)
 rowOrder = np.loadtxt(paths.outputDir + "clusterBarplotOrder.txt").astype(int)
@@ -238,6 +239,7 @@ cb.set_label("95th percentile Z-score")
 plt.tight_layout()
 plt.savefig(paths.outputDir + "rnaseq/TCGA/signalPerClustPerAnnot_colorbar.pdf")
 plt.show()
+'''
 # %%
 # HC 
 rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
@@ -248,7 +250,7 @@ plot_utils.plotHC(vals.T, eq[cancerType], vals.T,
                     rowOrder=rowOrder, colOrder=colOrder, hq=True)
 plt.savefig(paths.outputDir + "rnaseq/TCGA/HM_all.pdf", bbox_inches="tight")
 # %%
-# HC 
+# HC (hv probes only)
 rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
 colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.residuals.T[hv], "correlation")
 # Plot Heatmap

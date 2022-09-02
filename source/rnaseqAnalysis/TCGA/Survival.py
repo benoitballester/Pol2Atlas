@@ -28,6 +28,7 @@ from statsmodels.stats.multitest import fdrcorrection
 scran = importr("scran")
 np.random.seed(42)
 # %%
+# Setup go enrichments and chromosome info
 chrFile = pd.read_csv(paths.genomeFile, sep="\t", index_col=0, header=None)
 sortedIdx = ["chr1", 'chr2','chr3','chr4','chr5','chr6',
               'chr7','chr8','chr9', 'chr10', 'chr11','chr12','chr13','chr14','chr15','chr16','chr17',
@@ -41,6 +42,7 @@ enricher = pyGREAT(paths.GOfile,
 import pyranges as pr
 
 # %%
+# Load dataset annotations
 allAnnots = pd.read_csv(paths.tcgaData + "/perFileAnnotation.tsv", 
                         sep="\t", index_col=0)
 consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
@@ -61,7 +63,7 @@ def computeCoxReg(expr, survDF, i):
         dfI = survDF.copy()
         dfI[i] = expr
         cph = ll.CoxPHFitter(penalizer=1e-6)
-        cph.fit(dfI, duration_col="TTE", event_col="Dead", robust=True)
+        cph.fit(dfI, duration_col="TTE", event_col="Dead", robust=False)
         stats = cph.summary
         if np.isnan(stats["p"].values[0]):
             raise ValueError('Pval is NaN')
@@ -73,6 +75,7 @@ def computeCoxReg(expr, survDF, i):
                                 index=[i])
         dummyDF.index.name = "covariate"
         return dummyDF
+# For each cancer
 for case in cases:
     print(case)
     # Select only relevant files and annotations
@@ -131,9 +134,10 @@ for case in cases:
     nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=3)
     countsNz = allCounts[:, nzCounts]
     sf = rnaseqFuncs.scranNorm(countsNz)
-    # No need to compute full pearson for survival(no need to rescale/compute variance)      
-    residuals = countsNz/sf.reshape(-1, 1)
-    residuals = residuals - np.mean(residuals, axis=0)
+    # No need to compute full pearson for survival(no need to rescale/compute variance) 
+    countModel = rnaseqFuncs.RnaSeqModeler().fit(countsNz, sf)     
+    residuals = countModel.residuals
+    normed = countModel.normed
     df = pd.DataFrame()
     df["Dead"] = np.logical_not(survived[np.isin(timeToEvent.index, order)])
     df["TTE"] = timeToEvent.loc[order].values
@@ -161,7 +165,7 @@ for case in cases:
     progConsensuses["Score"] = stats["exp(coef)"].loc[progConsensuses["Name"].astype(int)]
     progConsensuses.to_csv(paths.outputDir + "rnaseq/Survival/" + case + "/prognostic.bed", sep="\t", header=None, index=None)
     stats.to_csv(paths.outputDir + "rnaseq/Survival/" + case + "/stats.csv", sep="\t")
-    if len(progConsensuses) > 0:
+    if len(progConsensuses) > 1:
         enrichedGREAT = enricher.findEnriched(progConsensuses, consensuses)
         enrichedGREAT.to_csv(paths.outputDir + "rnaseq/Survival/" + case + "/GREATenriched.csv", sep="\t")
         enricher.plotEnrichs(enrichedGREAT, savePath=paths.outputDir + "rnaseq/Survival/" + case + "/GREATenriched.pdf")
@@ -203,9 +207,9 @@ plt.savefig(paths.outputDir + "rnaseq/Survival/prog_countPerCancer_log.pdf", bbo
 plt.show()
 plt.close()
 # %%
+# Compute null distribution of DE Pol II
 mat = np.abs(progPerCancer).astype("int32")
 consensusDECount = np.sum(mat, axis=1).astype("int32")
-# Compute null distribution of DE Pol II
 countsRnd = np.zeros(mat.shape[1]+1)
 nPerm = 100
 for i in range(nPerm):
@@ -235,13 +239,15 @@ plt.text(threshold + 0.25, plt.ylim()[1]*0.5 + plt.ylim()[0]*0.5, "FPR < 5%", co
 plt.xticks(np.arange(0,consensusDECount.max()+1)+0.5, np.arange(0,consensusDECount.max()+1))
 plt.savefig(paths.outputDir + f"rnaseq/Survival/multiple_prognostic.pdf", bbox_inches="tight")
 plt.show()
+consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", header=None, sep="\t")
 globallyDEs = consensuses[studied]
 globallyDEs[4] = np.sum(mat, axis=1)
+consensuses.columns = ["Chromosome", "Start", "End", "Name", "Score", "Strand", "ThickStart", "ThickEnd"]
 globallyDEs.to_csv(paths.outputDir + f"rnaseq/Survival/globally_prognostic.bed", sep="\t", header=None, index=None)
 enrichs = enricher.findEnriched(consensuses[studied], consensuses)
 enricher.plotEnrichs(enrichs, savePath=paths.outputDir + "rnaseq/Survival/globally_prognostic_GREAT.pdf")
 enrichs.to_csv(paths.outputDir + f"rnaseq/Survival/globally_prognostic_GREAT.csv", sep="\t")
-if len(enrichs) > 1:
+if len(enrichedGREAT[enrichedGREAT["BH corrected p-value"] < 0.05]) > 0:
     enricher.clusterTreemap(enrichs, output=paths.outputDir + "rnaseq/Survival/globally_prognostic_GREAT_revigo.pdf")
 fig, ax = plot_utils.manhattanPlot(consensuses[nzCounts], chrFile, 
                                    pvals, es=None, threshold=threshold)
@@ -271,9 +277,10 @@ for i, cons in globallyDEs.iterrows():
     plt.figure()
     plot_utils.forestPlot(df)
     plt.savefig(paths.outputDir + f"rnaseq/Survival/global_forestPlots/{coord}.pdf", bbox_inches="tight")
-    plt.show()
+    # plt.show()
     plt.close()
 # %%
+# Globally DE heatmap
 globallyDEs = pd.read_csv(paths.outputDir + f"rnaseq/Survival/globally_prognostic.bed", sep="\t", header=None)
 ids = globallyDEs[3]
 coefPerCancer = []
@@ -295,10 +302,8 @@ for i, c in enumerate(cases):
     obsCases.append(c)
 coefPerCancer = np.array(coefPerCancer).T
 qvalsPerCancer = np.array(qvalsPerCancer).T
-# %%
 coefPerCancer = pd.DataFrame(coefPerCancer.T, index=obsCases)
 sig = pd.DataFrame(np.where(qvalsPerCancer < 0.05, "*", " ").T, index=obsCases)
-# %%
 plt.figure(dpi=500)
 orderCol = np.argsort(coefPerCancer.mean(axis=0))[::-1]
 orderRow = np.argsort(np.abs(coefPerCancer).mean(axis=1))[::-1]

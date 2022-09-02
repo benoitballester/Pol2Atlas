@@ -35,6 +35,7 @@ except FileExistsError:
     pass
 
 # %%
+# Scanpy params
 sc.settings.verbosity = 3             # verbosity: errors (0), warnings (1), info (2), hints (3)
 sc.logging.print_header()
 sc.settings.set_figure_params(dpi=80, facecolor='white')
@@ -49,7 +50,7 @@ adata = sc.read_10x_mtx(
     cache=True)  
 
 sc.pl.highest_expr_genes(adata, n_top=20, )
-
+# QC
 adata.var['mt'] = adata.var_names.str.startswith('MT-')  # annotate the group of mitochondrial genes as 'mt'
 sc.pp.calculate_qc_metrics(adata, qc_vars=['mt'], percent_top=None, log1p=False, inplace=True)
 
@@ -81,13 +82,13 @@ decomp = rnaseqFuncs.permutationPA_PCA(feat, 3, max_rank=100, returnModel=False)
 embedding = umap.UMAP(n_neighbors=30, min_dist=0.3, random_state=0, low_memory=False, metric="correlation").fit_transform(decomp)
 
 import matplotlib.pyplot as plt
-
+# Plot UMAP with read information
 plt.figure(dpi=500)
 readsPerCell = np.sum(counts, axis=1)
 readsPerCell = readsPerCell-np.min(readsPerCell)
 plt.scatter(embedding[:, 0], embedding[:, 1], s=1.0, linewidths=0, c=np.sqrt(readsPerCell/readsPerCell.max()))
 plt.show()
-
+# Cluster
 labelsGenes = matrix_utils.graphClustering(decomp, metric="correlation", approx=False, restarts=10, snn=True).astype("str")
 colors = sns.color_palette("tab20")
 palettePlotly = [f"rgb({int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)})" for c in colors]
@@ -131,6 +132,7 @@ for i in np.unique(matchinglabels):
     if len(test) == 0:
         continue
 # %%
+# Plot top markers
 for clustID in np.unique(labelsGenes):
     gridSize = (4,4)
     fig, axs = plt.subplots(gridSize[0], gridSize[1], dpi=500)
@@ -146,6 +148,7 @@ for clustID in np.unique(labelsGenes):
         axs[xi][yi].set_title(gene, fontsize=6)
     fig.savefig(paths.outputDir + "scrnaseq/markerGenes/" + clustID + ".png", bbox_inches="tight", dpi=500)
 # %%
+# Manually curated labels
 clustGeneLabels = {"0":"CD14+ Monocytes",
                    "1":"Naive CD4 T-Cells",
                    "2":"Naive CD8 T-Cells",
@@ -313,6 +316,7 @@ for i in np.unique(matchinglabels):
     if len(test) == 0:
         continue
 # %%
+# Plot top markers for Pol II probes
 for clustID in np.unique(matchinglabels):
     gridSize = (4,4)
     fig, axs = plt.subplots(gridSize[0], gridSize[1], dpi=500)

@@ -53,19 +53,7 @@ for f in dlFiles:
 allReads = np.array(allReads)
 counts = np.concatenate(counts, axis=1).T
 ann, eq = pd.factorize(annotation.loc[order]["tissue_type"])
-# %% 
-'''
-# Plot FPKM expr per annotation
-palette = pd.read_csv(paths.polIIannotationPalette, sep=",")
-palette = dict([(d["Annotation"], (d["r"],d["g"],d["b"])) for r,d in palette.iterrows()])
-fpkmExpr = np.sum(counts/allReads[:, None], axis=1)*100
-df = pd.DataFrame(data=np.concatenate([fpkmExpr[:, None], annotation.loc[order]["tissue_type"].ravel()[:, None]], axis=1), columns=["Percentage of mapped reads", "Annotation"])
-plt.figure(figsize=(6,4), dpi=500)
-sns.boxplot(data=df, x="Percentage of mapped reads", y="Annotation", showfliers=False)
-sns.stripplot(data=df, x="Percentage of mapped reads", y="Annotation", dodge=True, 
-                edgecolor="black", jitter=1/3, alpha=1.0, s=2, linewidth=0.1)
-plt.savefig(paths.outputDir + "rnaseq/gtex_rnaseq/pctmapped_per_annot.pdf", bbox_inches="tight")
-'''
+
 # %%
 nzCounts = rnaseqFuncs.filterDetectableGenes(counts, readMin=1, expMin=3)
 counts = counts[:, nzCounts]
