@@ -50,11 +50,12 @@ for f in dlFiles:
         continue
 allReads = np.array(allReads)
 allCounts = np.concatenate(counts, axis=1).T
-ann, eq = pd.factorize(annotation.loc[order]["Annotation"], sort=True)
+annTxt = annotation.loc[order]["Annotation"]
+ann, eq = pd.factorize(annTxt, sort=True)
 # %% 
 # Plot FPKM expr per annotation
 fpkmExpr = np.sum(allCounts/allReads[:, None], axis=1)*100
-df = pd.DataFrame(data=np.concatenate([fpkmExpr[:, None], annotation.loc[order]["Annotation"].ravel()[:, None]], axis=1), columns=["Percentage of mapped reads", "Annotation"])
+df = pd.DataFrame(data=np.concatenate([fpkmExpr[:, None], annTxt.ravel()[:, None]], axis=1), columns=["Percentage of mapped reads", "Annotation"])
 plt.figure(figsize=(6,4), dpi=500)
 sns.boxplot(data=df, x="Percentage of mapped reads", y="Annotation", showfliers=False)
 sns.stripplot(data=df, x="Percentage of mapped reads", y="Annotation", dodge=True, 
@@ -79,7 +80,7 @@ decomp = rnaseqFuncs.permutationPA_PCA(feat, max_rank=250)
 matrix_utils.looKnnCV(decomp, ann, "correlation",1)
 # %%
 # Plot UMAP of samples for visualization
-embedding = umap.UMAP(n_neighbors=30, min_dist=0.5, random_state=42, low_memory=False, metric="correlation").fit_transform(decomp)
+embedding = umap.UMAP(n_neighbors=30, min_dist=0.5, random_state=42, low_memory=False, metric="correlation").fit_transform(feat)
 # %%
 import plotly.express as px
 
@@ -125,7 +126,6 @@ except FileExistsError:
     pass
 # %%
 from lib.utils.reusableUtest import mannWhitneyAsymp
-
 tester = mannWhitneyAsymp(countModel.residuals)
 # %%
 pctThreshold = 0.1
@@ -133,15 +133,23 @@ lfcMin = 0.25
 for i in np.unique(ann):
     print(eq[i])
     labels = (ann == i).astype(int)
-    res2 = tester.test(labels, "less")
+    res2 = ss.ttest_ind(countModel.residuals[ann == i], countModel.residuals[ann != i], axis=0,
+                    alternative="greater")
+    # res2 = tester.test(labels, "less")
     sig = fdrcorrection(res2[1])[0]
     minpct = np.mean(counts[ann == i] > 0.5, axis=0) > max(0.1, 1.5/labels.sum())
-    fc = np.mean(counts[ann == i], axis=0) / (1e-9+np.mean(counts[ann != i], axis=0))
+    fc = np.mean(countModel.normed[ann == i], axis=0) / (1e-9+np.mean(countModel.normed[ann != i], axis=0))
     lfc = np.log2(fc) > lfcMin
+    print(sig.sum())
     sig = sig & lfc & minpct
     print(sig.sum())
     res = pd.DataFrame(res2[::-1], columns=consensuses.index[nzCounts], index=["pval", "stat"]).T
+    res["Upreg"] = 1-sig.astype(int)
+    res["lfc"] = -np.log2(fc)
+    orderDE = np.lexsort(res[["lfc","pval","Upreg"]].values.T)
+    res["lfc"] = np.log2(fc)
     res["Upreg"] = sig.astype(int)
+    res = res.iloc[orderDE]
     res.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/res_{eq[i]}.csv")
     test = consensuses[nzCounts][sig]
     test.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/bed_{eq[i]}", header=None, sep="\t", index=None)

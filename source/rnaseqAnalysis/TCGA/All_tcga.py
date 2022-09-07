@@ -86,7 +86,8 @@ except FileExistsError:
 # %%
 # 1 vs All DE analysis (markers)
 from lib.utils.reusableUtest import mannWhitneyAsymp
-tester = mannWhitneyAsymp(countModel.residuals)
+import scipy.stats as ss
+# tester = mannWhitneyAsymp(countModel.normed)
 pctThreshold = 0.1
 lfcMin = 0.25
 orig = annotation["Project ID"]
@@ -99,11 +100,13 @@ label = orig.str.cat(state,sep="_")
 for i in label.unique():
     print(i)
     labels = (label == i).astype(int)
-    res2 = tester.test(labels, "less")
+    res2 = ss.ttest_ind(countModel.residuals[label == i], countModel.residuals[label != i], axis=0,
+                        alternative="greater")
     sig = fdrcorrection(res2[1])[0]
-    minpct = np.mean(counts[label == i] > 0.5, axis=0) > max(0.1, 1.5/labels.sum())
-    fc = np.mean(counts[label == i], axis=0) / (1e-9+np.mean(counts[label != i], axis=0))
+    minpct = np.mean(counts[label == i] > 0.5, axis=0) > max(pctThreshold, 1.5/labels.sum())
+    fc = np.mean(countModel.normed[label == i], axis=0) / (1e-9+np.mean(countModel.normed[label != i], axis=0))
     lfc = np.log2(fc) > lfcMin
+    print(sig.sum())
     sig = sig & lfc & minpct
     print(sig.sum())
     res = pd.DataFrame(res2[::-1], columns=consensuses.index[nzCounts], index=["pval", "stat"]).T
@@ -113,10 +116,11 @@ for i in label.unique():
     test.to_csv(paths.outputDir + f"rnaseq/TCGA/DE/bed_{i}", header=None, sep="\t", index=None)
     if len(test) == 0:
         continue
+    """     
     pvals = enricherglm.findEnriched(test, background=consensuses)
     enricherglm.plotEnrichs(pvals)
     enricherglm.clusterTreemap(pvals, score="-log10(pval)", 
-                                output=paths.outputDir + f"rnaseq/TCGA/DE/great_{i}.pdf")
+                                output=paths.outputDir + f"rnaseq/TCGA/DE/great_{i}.pdf") """
 
 # %%
 # Compute PCA

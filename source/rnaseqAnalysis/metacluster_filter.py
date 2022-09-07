@@ -8,7 +8,7 @@ import pandas as pd
 from statsmodels.stats.multitest import fdrcorrection
 from settings import paths
 
-figPath = paths.outputDir + "rnaseq/metacluster/"
+figPath = paths.outputDir + "rnaseq/metacluster_10pct/"
 try:
     os.mkdir(figPath)
 except FileExistsError:
@@ -77,12 +77,14 @@ for i, k in enumerate(indices.keys()):
 mat = csr_matrix((data, (rows, cols)), shape=(len(indices), np.max(cols)+1), dtype=bool)
 mat = pd.DataFrame(mat.todense(), index=indices.keys())
 mat = mat.loc[mat.sum(axis=1)>100]
-mat = mat.loc[:, mat.sum(axis=0) >= 1]
+mat = mat.loc[:, (mat.mean(axis=0) <= 0.1) & (mat.sum(axis=0) >= 1)]
+from sklearn.feature_extraction.text import TfidfTransformer
+tf = TfidfTransformer(norm=None, smooth_idf=False).fit_transform(mat.values).toarray()
 # %%
 # UMAP
 import umap
 from lib.utils import plot_utils
-embedding = umap.UMAP(n_neighbors=15, min_dist=0.0, metric="yule", random_state=42).fit_transform(mat)
+embedding = umap.UMAP(min_dist=0.0, metric="yule", random_state=42).fit_transform(mat)
 import plotly.express as px
 df = pd.DataFrame(embedding, columns=["x","y"])
 tissue = pd.Series(mat.index).str.split("_", expand=True)

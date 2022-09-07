@@ -827,6 +827,7 @@ class peakMerger:
         perAnnotQvals = dict()
         # For each annotation
         for i in range(len(eq)):
+            print(eq[i])
             hasAnnot = annotations == i
             N = self.matrix[:, hasAnnot].sum()
             n = np.sum(self.matrix, axis=1)
@@ -842,7 +843,8 @@ class peakMerger:
                 qvals = multipletests(pvals, method=multitesting, alpha=alpha)[1]
             else:
                 qvals = multitesting(pvals)[1]
-            sig = qvals < alpha
+            sig = (qvals < alpha) & (k >= 2)
+            print(sig.sum())
             sigConsensuses = self.consensuses.iloc[sig]
             if self.outputPath is not None:
                 try:

@@ -18,6 +18,11 @@ from scipy.stats import chi2, rankdata
 from settings import params, paths
 from statsmodels.stats.multitest import fdrcorrection
 
+folder = paths.outputDir + "dist_to_genes/corr_expr/"
+try:
+    os.mkdir(paths.outputDir + "dist_to_genes/corr_expr/")
+except:
+    pass
 # %%
 allAnnots = pd.read_csv(paths.tcgaAnnot, 
                         sep="\t", index_col=0)
@@ -129,7 +134,9 @@ embedding = umap.UMAP(n_neighbors=30, min_dist=0.3, random_state=0, low_memory=F
                       metric="correlation").fit_transform(decomp2)
 plt.scatter(embedding[:, 0], embedding[:, 1], c=labels)
 # %%
-def associationComputations(countTable, geneCounts, sf, assocTable, ensemblToID):
+import plotly.express as px
+np.random.seed(0)
+def associationComputations(countTable, geneCounts, sf, assocTable, ensemblToID, pearsonG=None, pearsonP=None):
     # Find ensembl ID
     geneStableID = [id.split(".")[0] for id in usedTable.columns]
     usedTable.columns = geneStableID
@@ -150,6 +157,7 @@ def associationComputations(countTable, geneCounts, sf, assocTable, ensemblToID)
     from scipy.spatial.distance import correlation
     from scipy.stats import rankdata, spearmanr, pearsonr
     xrank = rankdata(x, axis=0)
+
     yrank = rankdata(y, axis=0)
     correlations = np.array([pearsonr(xrank[:, i],yrank[:, i]) for i in range(y.shape[1])])
     fdrCorr = fdrcorrection(correlations[:, 1])[0]
@@ -164,7 +172,21 @@ def associationComputations(countTable, geneCounts, sf, assocTable, ensemblToID)
     plt.vlines([threshold, -threshold], plt.ylim()[0], plt.ylim()[1], colors=[1,0,0], linestyles="dashed")
     plt.xlabel("Distribution of per Pol II probe / tailed gene\nspearman correlation of expression.")
     plt.title("Correlation between gene and tail of gene Pol II probes (5kb)")
+    plt.savefig(folder + "corr_tail.pdf")
     print(pearsonr(xrank.ravel(), yrank.ravel()))
+    plt.show()
+    plt.close()
+    print(x.shape)
+    print(y.shape)
+    print(correlations.shape)
+    # Corr expr / correlation
+    fig = px.scatter(x=np.log(np.mean(y, axis=0)), y=correlations[:, 0],
+                title=str(spearmanr(np.log(np.mean(y, axis=0)), correlations[:, 0])),
+                labels=dict(x="Gene log(mean norm expression)", y="Spearman r"),
+                marginal_x="histogram", trendline="lowess", trendline_color_override="red")
+    fig.show()
+    fig.write_image(folder+"expr_vs_corr.pdf")
+    fig.write_html(folder + "expr_vs_corr.pdf" + ".html")
     # Distribution of correlations between tail of gene Pol II and RANDOMIZED gene 
     from scipy.spatial.distance import correlation
     from scipy.stats import rankdata, beta, pearsonr
@@ -185,7 +207,15 @@ def associationComputations(countTable, geneCounts, sf, assocTable, ensemblToID)
     plt.vlines([threshold, -threshold], plt.ylim()[0], plt.ylim()[1], colors=[1,0,0], linestyles="dashed")
     plt.xlabel("Distribution of per Pol II probe / random gene\nspearman correlation of expression.")
     plt.title("Correlation between gene and tail of gene Pol II probes (5kb)")
-# %%
+    plt.savefig(folder + "corr_tail_permute.pdf")
+    fig = px.scatter(x=np.log(np.mean(permutedY, axis=0)), y=correlations[:, 0],
+            title=str(spearmanr(np.log(np.mean(y, axis=0)), correlations[:, 0])),
+            labels=dict(x="Gene log(mean norm expression)", y="Spearman r"),
+            marginal_x="histogram", trendline="lowess", trendline_color_override="red")
+    fig.show()
+    fig.write_image(folder+"expr_vs_corr_permute.pdf")
+    fig.write_html(folder + "expr_vs_corr_permute.pdf" + ".html")
+
 # Load tail of gene pol 2
 polII_tail = pd.read_csv(paths.outputDir + "/dist_to_genes/pol2_5000_TSS_ext.bed", sep="\t")
 ensemblToID = pd.read_csv("/shared/projects/pol2_chipseq/pol2_interg_default/data/ensembl_toGeneId.tsv", sep="\t", index_col="Gene name")

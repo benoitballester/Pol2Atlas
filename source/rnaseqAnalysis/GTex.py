@@ -131,15 +131,22 @@ lfcMin = 0.25
 for i in np.unique(ann):
     print(eq[i])
     labels = (ann == i).astype(int)
-    res2 = tester.test(labels, "less")
+    res2 = ss.ttest_ind(countModel.residuals[ann == i], countModel.residuals[ann != i], axis=0,
+                    alternative="greater")
     sig = fdrcorrection(res2[1])[0]
+    print(sig.sum())
     minpct = np.mean(counts[ann == i] > 0.5, axis=0) > max(0.1, 1.5/labels.sum())
-    fc = np.mean(counts[ann == i], axis=0) / (1e-9+np.mean(counts[ann != i], axis=0))
+    fc = np.mean(countModel.normed[ann == i], axis=0) / (1e-9+np.mean(countModel.normed[ann != i], axis=0))
     lfc = np.log2(fc) > lfcMin
     sig = sig & lfc & minpct
     print(sig.sum())
     res = pd.DataFrame(res2[::-1], columns=consensuses.index[nzCounts], index=["pval", "stat"]).T
+    res["Upreg"] = 1-sig.astype(int)
+    res["lfc"] = -np.log2(fc)
+    order = np.lexsort(res[["lfc","pval","Upreg"]].values.T)
+    res["lfc"] = np.log2(fc)
     res["Upreg"] = sig.astype(int)
+    res = res.iloc[order]
     res.to_csv(paths.outputDir + f"rnaseq/gtex_rnaseq/DE/res_{eq[i]}.csv")
     test = consensuses[nzCounts][sig]
     test.to_csv(paths.outputDir + f"rnaseq/gtex_rnaseq/DE/bed_{eq[i]}", header=None, sep="\t", index=None)
