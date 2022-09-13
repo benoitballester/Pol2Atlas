@@ -52,6 +52,7 @@ allReads = np.array(allReads)
 allCounts = np.concatenate(counts, axis=1).T
 annTxt = annotation.loc[order]["Annotation"]
 ann, eq = pd.factorize(annTxt, sort=True)
+
 # %% 
 # Plot FPKM expr per annotation
 fpkmExpr = np.sum(allCounts/allReads[:, None], axis=1)*100
@@ -67,21 +68,28 @@ counts = allCounts[:, nzCounts]
 # %%
 sf = rnaseqFuncs.scranNorm(counts).astype("float32")
 # %%
+try:
+    os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/DE/")
+except FileExistsError:
+    pass
+rnaseqFuncs.limma1vsAll(counts, sf, annTxt, np.arange(len(nzCounts))[nzCounts], 
+                        paths.outputDir + "rnaseq/encode_rnaseq/DE/")
+
+# %%
 from lib.rnaseqFuncs import RnaSeqModeler
 
-countModel = RnaSeqModeler().fit(counts, sf, maxThreads=32)
+countModel = RnaSeqModeler().fit(counts, sf)
 
 hv = countModel.hv
-
 # %%
+from sklearn.preprocessing import StandardScaler
 feat = countModel.residuals[:, hv]
-# feat = StandardScaler().fit_transform(np.log(1+counts[:, hv]/sf[:, None]))
 decomp = rnaseqFuncs.permutationPA_PCA(feat, max_rank=250)
-matrix_utils.looKnnCV(decomp, ann, "correlation",1)
+matrix_utils.looKnnCV(decomp, ann, "correlation", 1)
 # %%
 # Plot UMAP of samples for visualization
-embedding = umap.UMAP(n_neighbors=30, min_dist=0.5, random_state=42, low_memory=False, metric="correlation").fit_transform(feat)
-# %%
+embedding = umap.UMAP(n_neighbors=30, min_dist=0.5, random_state=42, low_memory=False, metric="correlation").fit_transform(decomp)
+
 import plotly.express as px
 
 df = pd.DataFrame(embedding, columns=["x","y"])
@@ -124,34 +132,34 @@ try:
     os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/DE/")
 except FileExistsError:
     pass
-# %%
-from lib.utils.reusableUtest import mannWhitneyAsymp
-tester = mannWhitneyAsymp(countModel.residuals)
+
 # %%
 pctThreshold = 0.1
 lfcMin = 0.25
 for i in np.unique(ann):
     print(eq[i])
-    labels = (ann == i).astype(int)
-    res2 = ss.ttest_ind(countModel.residuals[ann == i], countModel.residuals[ann != i], axis=0,
-                    alternative="greater")
-    # res2 = tester.test(labels, "less")
-    sig = fdrcorrection(res2[1])[0]
-    minpct = np.mean(counts[ann == i] > 0.5, axis=0) > max(0.1, 1.5/labels.sum())
-    fc = np.mean(countModel.normed[ann == i], axis=0) / (1e-9+np.mean(countModel.normed[ann != i], axis=0))
-    lfc = np.log2(fc) > lfcMin
+    labels = ann == i
+    name = eq[i].replace(" ", "_")
+    # labels = np.random.permutation(labels)
+    res2 = pd.read_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/ groups{name} .csv", index_col=0)
+    res2 = res2.iloc[np.argsort(res2.index)]
+    res2["P.Value"] = np.where(res2["logFC"].values > 0, res2["P.Value"]/2, 1-res2["P.Value"]/2)
+    res2["adj.P.Val"] = fdrcorrection(res2["P.Value"])[1]
+    sig = res2["adj.P.Val"] < 0.05
+    minpct = np.mean(counts[labels] > 0.5, axis=0) > max(pctThreshold, 1.5/labels.sum())
+    lfc = res2["logFC"] > lfcMin
     print(sig.sum())
-    sig = sig & lfc & minpct
+    sig = sig & minpct & lfc
     print(sig.sum())
-    res = pd.DataFrame(res2[::-1], columns=consensuses.index[nzCounts], index=["pval", "stat"]).T
+    res = pd.DataFrame(res2[["adj.P.Val", "t"]], columns=consensuses.index[nzCounts], index=["pval", "stat"]).T
     res["Upreg"] = 1-sig.astype(int)
-    res["lfc"] = -np.log2(fc)
-    orderDE = np.lexsort(res[["lfc","pval","Upreg"]].values.T)
-    res["lfc"] = np.log2(fc)
+    res["lfc"] = -res2["logFC"]
+    order = np.lexsort(res[["lfc","pval","Upreg"]].values.T)
+    res["lfc"] = res2["logFC"]
     res["Upreg"] = sig.astype(int)
-    res = res.iloc[orderDE]
+    res = res.iloc[order]
     res.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/res_{eq[i]}.csv")
-    test = consensuses[nzCounts][sig]
+    test = consensuses.iloc[sig.index[sig]]
     test.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/bed_{eq[i]}", header=None, sep="\t", index=None)
     if len(test) == 0:
         continue

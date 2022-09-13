@@ -52,6 +52,7 @@ for f in dlFiles:
         continue
 allReads = np.array(allReads)
 counts = np.concatenate(counts, axis=1).T
+annTxt = annotation.loc[order]["tissue_type"]
 ann, eq = pd.factorize(annotation.loc[order]["tissue_type"])
 
 # %%
@@ -60,6 +61,9 @@ counts = counts[:, nzCounts]
 
 # %%
 sf = rnaseqFuncs.scranNorm(counts)
+# %%
+rnaseqFuncs.limma1vsAll(counts, sf, annTxt, np.arange(len(nzCounts))[nzCounts], 
+                        paths.outputDir + "rnaseq/gtex_rnaseq/DE/")
 # %%
 from sklearn.preprocessing import StandardScaler
 design = np.ones((len(counts), 1))

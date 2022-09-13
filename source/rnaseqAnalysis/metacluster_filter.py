@@ -84,7 +84,7 @@ tf = TfidfTransformer(norm=None, smooth_idf=False).fit_transform(mat.values).toa
 # UMAP
 import umap
 from lib.utils import plot_utils
-embedding = umap.UMAP(min_dist=0.0, metric="yule", random_state=42).fit_transform(mat)
+embedding = umap.UMAP(n_neighbors=10, min_dist=0.0, metric="yule", verbose=True, n_epochs=5000, random_state=42).fit_transform(mat)
 import plotly.express as px
 df = pd.DataFrame(embedding, columns=["x","y"])
 tissue = pd.Series(mat.index).str.split("_", expand=True)
@@ -214,3 +214,54 @@ fig = px.strip(data_frame=yuleDf, x="Annotation", y="Yule coefficient",hover_dat
 fig.show()
 # %%
 dst.to_csv(figPath + "heatmapMetacluster.csv")
+# %%
+# UMAP 3D
+import umap
+from lib.utils import plot_utils
+embedding = umap.UMAP(10, n_components=3, min_dist=0.0, metric="yule", n_epochs=5000,random_state=42).fit_transform(mat)
+import plotly.express as px
+df = pd.DataFrame(embedding, columns=["x","y","z"])
+tissue = pd.Series(mat.index).str.split("_", expand=True)
+df[["Orig", "Annot", "State"]] = tissue
+annot, palette, colors = plot_utils.applyPalette(df["Annot"],
+                                                np.unique(df["Annot"]),
+                                                 paths.polIIannotationPalette, ret_labels=True)
+palettePlotly = [f"rgb({int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)})" for c in palette]
+colormap = dict(zip(annot, palettePlotly))     
+# %%
+import plotly.graph_objects as go
+all_figs = []
+for c in df["Annot"]:
+    tagged = embedding[df["Annot"]==c]
+    j = 0
+    k = 0
+    for i in range(0, int((len(tagged)**2-len(tagged))/2)):
+        j += 1
+        print(i, j, k)
+        fig1 = px.line_3d(x=tagged[[j,k], 0], y=tagged[[j,k], 1], z=tagged[[j,k], 2])
+        fig1.update_traces(line=dict(color="rgba" + colormap[c][3:-1] + ",0.5)", width=2))
+        all_figs.append(fig1)
+        if j == len(tagged)-1:
+            k += 1
+            j = k
+fig = px.scatter_3d(df, x="x", y="y", z="z", color="Annot", color_discrete_map=colormap, symbol="Orig",
+                hover_data=['Orig', "State"], width=1200, height=800)
+fig.update_traces(marker=dict(size=50/np.sqrt(len(df))))
+fig.show()
+fig.write_html(figPath + "metacluster_umap3d.pdf" + ".html")
+import operator
+import functools
+fig3 = go.Figure(data=functools.reduce(operator.add, [_.data for _ in all_figs]) + fig.data)
+fig3.update_layout(
+    autosize=False,
+    width=1200,
+    height=800)
+fig3.show()
+fig3.write_html(figPath + "metacluster_umap3d_lines.pdf" + ".html")
+# %%
+fig = px.bar(x=mat.index[row_order], y=mat.sum(axis=1)[row_order], width=2000)
+fig.update_layout(xaxis=dict( tickvals=np.arange(len(dst))))
+fig.show()
+fig.write_image(figPath + "n_markers.pdf")
+fig.write_html(figPath + "n_markers.pdf" + ".html")
+# %%

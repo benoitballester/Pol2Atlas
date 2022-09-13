@@ -1,0 +1,12 @@
+Bootstrap: docker
+
+From: continuumio/miniconda3
+
+%files
+    conda_main.yml
+    installPackages.r
+%post
+    export PATH=/opt/conda/bin:$PATH
+    /opt/conda/bin/conda env update -f conda_main.yml
+    apt-get install build-essential -y
+    Rscript installPackages.r

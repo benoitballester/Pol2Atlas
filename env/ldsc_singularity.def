@@ -1,0 +1,16 @@
+Bootstrap: docker
+
+From: continuumio/miniconda3
+
+%files
+	conda_ldsc.yml
+%post
+	export BACKUPENVPATH1234=$PATH
+	export PATH=/opt/conda/bin:$PATH
+	apt update
+	apt-get install build-essential -y
+	conda env create -f conda_ldsc.yml
+%environment
+	export PATH=/opt/conda/envs/ldsc/bin:/bin
+
+	

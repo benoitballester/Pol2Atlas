@@ -96,7 +96,9 @@ state[tumor] = "Tumor"
 annotConv = pd.read_csv(paths.tcgaToMainAnnot, sep="\t", index_col=0)
 orig = annotConv.loc[orig]["Origin"]
 label = orig.str.cat(state,sep="_")
-
+rnaseqFuncs.limma1vsAll(counts, sf, label, np.arange(len(nzCounts))[nzCounts], 
+                        paths.outputDir + "rnaseq/TCGA/DE/")
+# %%
 for i in label.unique():
     print(i)
     labels = (label == i).astype(int)

@@ -3,9 +3,6 @@ import pynndescent
 import igraph
 import leidenalg
 from sklearn.metrics import balanced_accuracy_score
-from kneed import KneeLocator
-from sklearn.decomposition import PCA
-import matplotlib.pyplot as plt
 import umap
 from sklearn.cluster import MiniBatchKMeans
 from fastcluster import linkage_vector
@@ -43,7 +40,7 @@ def graphClustering(matrix, metric, k="auto", r=1.0, snn=True,
     approx: Boolean (optional, default True)
         Whether to use approximate nearest neighbors using nearest neighbor descent
         or exact nearest neighbors. Exact method will take very long on a large number of
-        points.
+        points (>15000).
 
     restarts: integer (optional, default 1)
         The number of times to restart the graph partitionning algorithm, before keeping 
