@@ -128,7 +128,7 @@ except FileExistsError:
     pass
 # %%
 from lib.utils.reusableUtest import mannWhitneyAsymp
-tester = mannWhitneyAsymp(countModel.residuals)
+# tester = mannWhitneyAsymp(countModel.residuals)
 # %%
 pctThreshold = 0.1
 lfcMin = 0.25
@@ -147,10 +147,10 @@ for i in np.unique(ann):
     res = pd.DataFrame(res2[::-1], columns=consensuses.index[nzCounts], index=["pval", "stat"]).T
     res["Upreg"] = 1-sig.astype(int)
     res["lfc"] = -np.log2(fc)
-    order = np.lexsort(res[["lfc","pval","Upreg"]].values.T)
+    orderDE = np.lexsort(res[["lfc","pval","Upreg"]].values.T)
     res["lfc"] = np.log2(fc)
     res["Upreg"] = sig.astype(int)
-    res = res.iloc[order]
+    res = res.iloc[orderDE]
     res.to_csv(paths.outputDir + f"rnaseq/gtex_rnaseq/DE/res_{eq[i]}.csv")
     test = consensuses[nzCounts][sig]
     test.to_csv(paths.outputDir + f"rnaseq/gtex_rnaseq/DE/bed_{eq[i]}", header=None, sep="\t", index=None)

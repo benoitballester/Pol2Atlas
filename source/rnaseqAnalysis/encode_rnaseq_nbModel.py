@@ -129,46 +129,50 @@ enricherglm = pyGREATglm(paths.GOfile,
 consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
 
 try:
-    os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/DE/")
+    os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/DE_perm/")
 except FileExistsError:
     pass
 
 # %%
 pctThreshold = 0.1
 lfcMin = 0.25
-for i in np.unique(ann):
-    print(eq[i])
-    labels = ann == i
-    name = eq[i].replace(" ", "_")
-    # labels = np.random.permutation(labels)
-    res2 = pd.read_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/ groups{name} .csv", index_col=0)
-    res2 = res2.iloc[np.argsort(res2.index)]
-    res2["P.Value"] = np.where(res2["logFC"].values > 0, res2["P.Value"]/2, 1-res2["P.Value"]/2)
-    res2["adj.P.Val"] = fdrcorrection(res2["P.Value"])[1]
-    sig = res2["adj.P.Val"] < 0.05
-    minpct = np.mean(counts[labels] > 0.5, axis=0) > max(pctThreshold, 1.5/labels.sum())
-    lfc = res2["logFC"] > lfcMin
-    print(sig.sum())
-    sig = sig & minpct & lfc
-    print(sig.sum())
-    res = pd.DataFrame(res2[["adj.P.Val", "t"]], columns=consensuses.index[nzCounts], index=["pval", "stat"]).T
-    res["Upreg"] = 1-sig.astype(int)
-    res["lfc"] = -res2["logFC"]
-    order = np.lexsort(res[["lfc","pval","Upreg"]].values.T)
-    res["lfc"] = res2["logFC"]
-    res["Upreg"] = sig.astype(int)
-    res = res.iloc[order]
-    res.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/res_{eq[i]}.csv")
-    test = consensuses.iloc[sig.index[sig]]
-    test.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/bed_{eq[i]}", header=None, sep="\t", index=None)
-    if len(test) == 0:
-        continue
-    '''
-    pvals = enricherglm.findEnriched(test, background=consensuses)
-    enricherglm.plotEnrichs(pvals)
-    enricherglm.clusterTreemap(pvals, score="-log10(pval)", 
-                                output=paths.outputDir + f"rnaseq/encode_rnaseq/DE/great_{eq[i]}.pdf")
-    '''
+with Parallel(n_jobs=-1, verbose=1, max_nbytes=None) as pool:
+    for i in np.unique(ann):
+        i = 7
+        print(eq[i])
+        labels = (ann == i).astype(int)
+        """ res2 = ss.ttest_ind(countModel.residuals[ann == i], countModel.residuals[ann != i], axis=0,
+                        alternative="greater") """
+        res2 = welshTperm(countModel.residuals, ann == i, 10000, alternative="greater", workerPool=pool)
+        sig = fdrcorrection(res2)[0]
+        print(sig.sum())
+        delta = np.mean(countModel.residuals[ann == i], axis=0) - np.mean(countModel.residuals[ann != i], axis=0)
+        minpct = np.mean(counts[ann == i] > 0.5, axis=0) > max(0.1, 1.5/labels.sum())
+        fc = np.mean(countModel.normed[ann == i], axis=0) / (1e-9+np.mean(countModel.normed[ann != i], axis=0))
+        lfc = np.log2(fc) > lfcMin
+        sig = sig & lfc & minpct
+        print(sig.sum())
+        res = pd.DataFrame(res2.reshape(1, -1), columns=consensuses.index[nzCounts], index=["pval"]).T
+        res["Upreg"] = 1-sig.astype(int)
+        res["Delta"] = -delta
+        orderDE = np.lexsort(res[["Delta","pval","Upreg"]].values.T)
+        res["Delta"] = delta
+        res["Upreg"] = sig.astype(int)
+        res = res.iloc[orderDE]
+        res.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE_perm/res_{eq[i]}.csv")
+        test = consensuses[nzCounts][sig]
+        test.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE_perm/bed_{eq[i]}", header=None, sep="\t", index=None)
+        if len(test) == 0:
+            continue
+        '''
+        pvals = enricherglm.findEnriched(test, background=consensuses)
+        enricherglm.plotEnrichs(pvals)
+        enricherglm.clusterTreemap(pvals, score="-log10(pval)", 
+                                    output=paths.outputDir + f"rnaseq/encode_rnaseq/DE/great_{eq[i]}.pdf")
+        '''
+    from joblib.externals.loky import get_reusable_executor
+    get_reusable_executor().shutdown(wait=True)
+        
 # %%
 rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
 colOrder, colLink = matrix_utils.threeStagesHClinkage(feat.T, "correlation")

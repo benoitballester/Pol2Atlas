@@ -127,7 +127,7 @@ for case in cases:
     plt.savefig(paths.outputDir + f"rnaseq/TumorVsNormal/" + case + "/PCA.pdf")
     plt.show()
     plt.close()
-    # Find DE genes using DESeq2
+    # Find DE genes
     pctThreshold = 0.1
     lfcMin = 0.25
     res = rnaseqFuncs.mannWhitneyDE(countModel.residuals, labels)[0]

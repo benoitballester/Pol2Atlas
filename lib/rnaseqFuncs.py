@@ -24,7 +24,6 @@ from settings import params, paths
 from scipy.sparse import csr_array
 from scipy.io import mmread, mmwrite
 scran = importr("scran")
-deseq = importr("DESeq2")
 
 def findMode(arr):
     # Finds the modal value of a continuous sample
@@ -312,7 +311,7 @@ def deseqNorm(counts):
     gmeans = np.where(counts.min(axis=0) == 0, np.nan, gmeans)
     return np.nanmedian(counts/gmeans, axis=1)
     
-
+""" 
 def deseqDE(counts, sf, labels, colNames, test="Wald", parallel=False):
     countTable = pd.DataFrame(counts.T, columns=colNames)
     infos = pd.DataFrame(np.array(["N", "T"])[labels], index=colNames, columns=["Type"])
@@ -340,7 +339,7 @@ def deseqDE1vsAll(counts, sf, labels, colNames, test="Wald", parallel=False):
         res = pd.DataFrame(res.slots["listData"], index=res.slots["listData"].names).T
         res["padj"] = np.nan_to_num(res["padj"], nan=1.0)
         allresults[i] = res
-    return allresults
+    return allresults """
 
 
 
