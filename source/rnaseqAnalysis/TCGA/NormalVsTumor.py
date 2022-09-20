@@ -1,6 +1,7 @@
 # %%
 import os
 import sys
+from joblib.externals.loky import get_reusable_executor
 
 sys.path.append("./")
 sys.setrecursionlimit(10000)
@@ -17,7 +18,7 @@ from lib.utils import matrix_utils, plot_utils
 from matplotlib.patches import Patch
 from matplotlib.ticker import FormatStrFormatter
 from scipy.cluster import hierarchy
-from scipy.stats import mannwhitneyu
+from scipy.stats import mannwhitneyu, ttest_ind
 from settings import paths
 from sklearn.metrics import (balanced_accuracy_score, confusion_matrix,
                              precision_score, recall_score)
@@ -116,6 +117,7 @@ for case in cases:
     sf = rnaseqFuncs.scranNorm(countsNz)
     # ScTransform-like transformation and deviance-based variable selection
     countModel = rnaseqFuncs.RnaSeqModeler().fit(countsNz, sf)
+    get_reusable_executor().shutdown(wait=False)
     residuals = countModel.residuals
     countsNorm = countModel.normed
     hv = countModel.hv
@@ -130,7 +132,7 @@ for case in cases:
     # Find DE genes
     pctThreshold = 0.1
     lfcMin = 0.25
-    res = rnaseqFuncs.mannWhitneyDE(countModel.residuals, labels)[0]
+    res = ttest_ind(countModel.residuals[labels == 0], countModel.residuals[labels == 1], axis=0)[1]
     sig, padj = fdrcorrection(res)
     minpctM = np.mean(countsNz[labels == 1] > 0.5, axis=0) > max(0.1, 1.5/labels.sum())
     minpctP = np.mean(countsNz[labels == 0] > 0.5, axis=0) > max(0.1, 1.5/(1-labels).sum())

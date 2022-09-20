@@ -68,18 +68,20 @@ counts = allCounts[:, nzCounts]
 # %%
 sf = rnaseqFuncs.scranNorm(counts).astype("float32")
 # %%
-try:
+
+""" try:
     os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/DE/")
 except FileExistsError:
     pass
 rnaseqFuncs.limma1vsAll(counts, sf, annTxt, np.arange(len(nzCounts))[nzCounts], 
-                        paths.outputDir + "rnaseq/encode_rnaseq/DE/")
+                        paths.outputDir + "rnaseq/encode_rnaseq/DE/") """
 
 # %%
 from lib.rnaseqFuncs import RnaSeqModeler
 
 countModel = RnaSeqModeler().fit(counts, sf)
-
+from joblib.externals.loky import get_reusable_executor
+get_reusable_executor().shutdown(wait=True)
 hv = countModel.hv
 # %%
 from sklearn.preprocessing import StandardScaler
@@ -129,49 +131,47 @@ enricherglm = pyGREATglm(paths.GOfile,
 consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
 
 try:
-    os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/DE_perm/")
+    os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/DE/")
 except FileExistsError:
     pass
 
 # %%
 pctThreshold = 0.1
 lfcMin = 0.25
-with Parallel(n_jobs=-1, verbose=1, max_nbytes=None) as pool:
-    for i in np.unique(ann):
-        i = 7
-        print(eq[i])
-        labels = (ann == i).astype(int)
-        """ res2 = ss.ttest_ind(countModel.residuals[ann == i], countModel.residuals[ann != i], axis=0,
-                        alternative="greater") """
-        res2 = welshTperm(countModel.residuals, ann == i, 10000, alternative="greater", workerPool=pool)
-        sig = fdrcorrection(res2)[0]
-        print(sig.sum())
-        delta = np.mean(countModel.residuals[ann == i], axis=0) - np.mean(countModel.residuals[ann != i], axis=0)
-        minpct = np.mean(counts[ann == i] > 0.5, axis=0) > max(0.1, 1.5/labels.sum())
-        fc = np.mean(countModel.normed[ann == i], axis=0) / (1e-9+np.mean(countModel.normed[ann != i], axis=0))
-        lfc = np.log2(fc) > lfcMin
-        sig = sig & lfc & minpct
-        print(sig.sum())
-        res = pd.DataFrame(res2.reshape(1, -1), columns=consensuses.index[nzCounts], index=["pval"]).T
-        res["Upreg"] = 1-sig.astype(int)
-        res["Delta"] = -delta
-        orderDE = np.lexsort(res[["Delta","pval","Upreg"]].values.T)
-        res["Delta"] = delta
-        res["Upreg"] = sig.astype(int)
-        res = res.iloc[orderDE]
-        res.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE_perm/res_{eq[i]}.csv")
-        test = consensuses[nzCounts][sig]
-        test.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE_perm/bed_{eq[i]}", header=None, sep="\t", index=None)
-        if len(test) == 0:
-            continue
-        '''
-        pvals = enricherglm.findEnriched(test, background=consensuses)
-        enricherglm.plotEnrichs(pvals)
-        enricherglm.clusterTreemap(pvals, score="-log10(pval)", 
-                                    output=paths.outputDir + f"rnaseq/encode_rnaseq/DE/great_{eq[i]}.pdf")
-        '''
-    from joblib.externals.loky import get_reusable_executor
-    get_reusable_executor().shutdown(wait=True)
+
+for i in np.unique(ann):
+    print(eq[i])
+    labels = (ann == i).astype(int)
+    res2 = ss.ttest_ind(countModel.residuals[ann == i], countModel.residuals[ann != i], axis=0,
+                    alternative="greater")
+    # res2 = welshTperm(countModel.residuals, ann == i, 10000, alternative="greater", workerPool=pool)
+    sig = fdrcorrection(res2[1])[0]
+    print(sig.sum())
+    delta = np.mean(countModel.residuals[ann == i], axis=0) - np.mean(countModel.residuals[ann != i], axis=0)
+    minpct = np.mean(counts[ann == i] > 0.5, axis=0) > max(0.1, 1.5/labels.sum())
+    fc = np.mean(countModel.normed[ann == i], axis=0) / (1e-9+np.mean(countModel.normed[ann != i], axis=0))
+    lfc = np.log2(fc) > lfcMin
+    sig = sig & lfc & minpct
+    print(sig.sum())
+    res = pd.DataFrame(res2, columns=consensuses.index[nzCounts], index=["stat", "pval"]).T
+    res["Upreg"] = 1-sig.astype(int)
+    res["Delta"] = -delta
+    orderDE = np.lexsort(res[["Delta","pval","Upreg"]].values.T)
+    res["Delta"] = delta
+    res["Upreg"] = sig.astype(int)
+    res = res.iloc[orderDE]
+    res.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/res_{eq[i]}.csv")
+    test = consensuses[nzCounts][sig]
+    test.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/bed_{eq[i]}", header=None, sep="\t", index=None)
+    if len(test) == 0:
+        continue
+    '''
+    pvals = enricherglm.findEnriched(test, background=consensuses)
+    enricherglm.plotEnrichs(pvals)
+    enricherglm.clusterTreemap(pvals, score="-log10(pval)", 
+                                output=paths.outputDir + f"rnaseq/encode_rnaseq/DE/great_{eq[i]}.pdf")
+    '''
+
         
 # %%
 rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")

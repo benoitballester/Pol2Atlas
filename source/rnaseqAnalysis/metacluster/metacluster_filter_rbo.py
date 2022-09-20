@@ -8,86 +8,93 @@ import pandas as pd
 from statsmodels.stats.multitest import fdrcorrection
 from settings import paths
 
-figPath = paths.outputDir + "rnaseq/metacluster_10pct/"
+figPath = paths.outputDir + "rnaseq/metacluster_10pct_rbo_noPol/"
+usePolII = False
 try:
     os.mkdir(figPath)
 except FileExistsError:
     pass
-indices = dict()
+mat = []
+names = []
 # %%
+from scipy.stats import rankdata
 filesEncode = os.listdir(paths.outputDir + "rnaseq/encode_rnaseq/DE/")
 filesEncode = [f for f in filesEncode if f.startswith("res_")]
 for f in filesEncode:
     name = "Encode_" + f[4:-4]
-    res = pd.read_csv(paths.outputDir + "rnaseq/encode_rnaseq/DE/" + f, index_col=0)["Upreg"] 
-    vals = res.index[res==1].values
-    if len(vals) < 100:
+    resFull = pd.read_csv(paths.outputDir + "rnaseq/encode_rnaseq/DE/" + f, index_col=0)
+    resFull = resFull[resFull["Upreg"] > 0.5]
+    resFull.sort_values(["pval", "stat"], ascending=[True, False], inplace=True)
+    if np.sum(resFull["Upreg"].values) < 100:
         continue
-    indices[name] = vals
+    mat.append(resFull.index.astype("str").values)
+    names.append(name)
+    
 
 # %%
-filesPol2 = os.listdir(paths.outputDir + "enrichedPerAnnot/")
-filesPol2 = [f for f in filesPol2 if not f.endswith("_qvals.bed")]
-for f in filesPol2:
-    name = "Pol2_" + f[:-4]
-    try:
-        bed = pd.read_csv(paths.outputDir + "enrichedPerAnnot/" + f, header=None, sep="\t")
-        if len(bed) < 100:
-            continue
-        indices[name] = bed[3].values
-    except pd.errors.EmptyDataError:
-        continue
+if usePolII:
+    filesPol2 = os.listdir(paths.outputDir + "enrichedPerAnnot/")
+    filesPol2 = [f for f in filesPol2 if f.endswith("_qvals.bed")]
+    for f in filesPol2:
+        name = "Pol2_" + f[:-10]
+        try:
+            resFull = pd.read_csv(paths.outputDir + "enrichedPerAnnot/" + f, sep="\t", index_col=0)
+            resFull = resFull[resFull["qval"] < 0.05]
+            if len(resFull) < 100:
+                continue
+            resFull.sort_values(["pval", "fc"], ascending=[True, False], inplace=True)
+            mat.append(resFull.index.astype("str").values)
+            names.append(name)
+        except pd.errors.EmptyDataError:
+            continue 
 # matPolII = pd.DataFrame(matEncode, index=[f"Pol2_f[4:-4]" for f in filesEncode])
 # %%
-
 # Files GTex
 filesEncode = os.listdir(paths.outputDir + "rnaseq/gtex_rnaseq/DE/")
 filesEncode = [f for f in filesEncode if f.startswith("res_")]
 for f in filesEncode:
-    name = "GTex_" + f[4:-4]
-    res = pd.read_csv(paths.outputDir + "rnaseq/gtex_rnaseq/DE/" + f, index_col=0)["Upreg"] 
-    vals = res.index[res==1].values
-    if len(vals) == 0:
+    name = "GTEx_" + f[4:-4]
+    resFull = pd.read_csv(paths.outputDir + "rnaseq/gtex_rnaseq/DE/" + f, index_col=0)
+    resFull = resFull[resFull["Upreg"] > 0.05]
+    resFull.sort_values(["pval", "stat"], ascending=[True, False], inplace=True)
+    if np.sum(resFull["Upreg"].values) < 100:
         continue
-    indices[name] = vals
+    mat.append(resFull.index.astype("str").values)
+    names.append(name)
+    
 
-
+# %%
 # Files TCGA
 filesEncode = os.listdir(paths.outputDir + "rnaseq/TCGA/DE/")
 filesEncode = [f for f in filesEncode if f.startswith("res_")]
 for f in filesEncode:
     name = "TCGA_" + f[4:-4]
-    res = pd.read_csv(paths.outputDir + "rnaseq/TCGA/DE/" + f, index_col=0)["Upreg"] 
-    vals = res.index[res==1].values
-    if len(vals) == 0:
+    resFull = pd.read_csv(paths.outputDir + "rnaseq/TCGA/DE/" + f, index_col=0)
+    resFull = resFull[resFull["Upreg"] > 0.5]
+    resFull.sort_values(["pval", "stat"], ascending=[True, False], inplace=True)
+    if np.sum(resFull["Upreg"].values) < 100:
         continue
-    indices[name] = vals
+    mat.append(resFull.index.astype("str").values)
+    names.append(name)
 
 # %%
+import rbo
+from sklearn.metrics import ndcg_score
 # Build matrix
-from scipy.sparse import csr_matrix
-rows = []
-cols = []
-data = []
-for i, k in enumerate(indices.keys()):
-    idx = list(indices[k])
-    cols += idx
-    rows += [i]*len(idx)
-    data += [True]*len(idx)
-mat = csr_matrix((data, (rows, cols)), shape=(len(indices), np.max(cols)+1), dtype=bool)
-mat = pd.DataFrame(mat.todense(), index=indices.keys())
-mat = mat.loc[mat.sum(axis=1)>100]
-mat = mat.loc[:, (mat.mean(axis=0) <= 0.1) & (mat.sum(axis=0) >= 1)]
-from sklearn.feature_extraction.text import TfidfTransformer
-tf = TfidfTransformer(norm=None, smooth_idf=False).fit_transform(mat.values).toarray()
+dst = pd.DataFrame(np.zeros((len(mat), len(mat))), columns=names, index=names)
+for i in range(len(mat)):
+    for j in range(len(mat)):
+        if j >= i:
+            dst.iloc[i, j] = 1-rbo.RankingSimilarity(mat[i], mat[j]).rbo_ext(p=0.998)
+dst.loc[:] = np.clip(np.maximum(dst, dst.transpose()),0,1)
 # %%
 # UMAP
 import umap
 from lib.utils import plot_utils
-embedding = umap.UMAP(n_neighbors=10, min_dist=0.0, metric="yule", verbose=True, n_epochs=5000, random_state=42).fit_transform(mat)
+embedding = umap.UMAP(n_neighbors=10, min_dist=0.0, metric="precomputed", verbose=True, n_epochs=5000, random_state=42).fit_transform(dst.values)
 import plotly.express as px
 df = pd.DataFrame(embedding, columns=["x","y"])
-tissue = pd.Series(mat.index).str.split("_", expand=True)
+tissue = pd.Series(dst.index).str.split("_", expand=True)
 df[["Orig", "Annot", "State"]] = tissue
 annot, palette, colors = plot_utils.applyPalette(df["Annot"],
                                                 np.unique(df["Annot"]),
@@ -146,19 +153,20 @@ def color(color, text):
     return s
 
 # Complete linkage hc
-linkage = fastcluster.linkage(mat, "average", metric)
+linkage = fastcluster.linkage(dst, "complete")
 row_order = hierarchy.leaves_list(linkage)
-dst = -sd.squareform(sd.pdist(mat, metric))
-dst = pd.DataFrame(dst, columns=mat.index, index=mat.index)
-dst = dst.iloc[row_order].iloc[:, row_order]
+# dst = -sd.squareform(sd.pdist(mat, metric))
+# dst = pd.DataFrame(dst, columns=mat.index, index=mat.index)
+dst2 = np.sqrt(1-dst.copy())
+dst2 = dst2.iloc[row_order].iloc[:, row_order]
 # Plot
-fig = px.imshow(dst, width=2580, height=1440)
-fig.update_layout(yaxis_nticks=len(dst),
-                  xaxis_nticks=len(dst))
+fig = px.imshow(dst2, width=2580, height=1440)
+fig.update_layout(yaxis_nticks=len(dst2),
+                  xaxis_nticks=len(dst2))
 colsInt = np.array(colors*255).astype(int)[row_order]
-ticktext = [color(rgb2hex(tuple(c)), t) for c, t in zip(colsInt, dst.columns)]
-fig.update_layout(yaxis=dict(tickmode='array', ticktext=ticktext, tickvals=np.arange(len(dst))))
-fig.update_layout(xaxis=dict(tickmode='array', ticktext=ticktext, tickvals=np.arange(len(dst))))
+ticktext = [color(rgb2hex(tuple(c)), t) for c, t in zip(colsInt, dst2.columns)]
+fig.update_layout(yaxis=dict(tickmode='array', ticktext=ticktext, tickvals=np.arange(len(dst2))))
+fig.update_layout(xaxis=dict(tickmode='array', ticktext=ticktext, tickvals=np.arange(len(dst2))))
 fig.show()
 fig.write_image(figPath + "metacluster.pdf")
 fig.write_html(figPath + "metacluster.pdf" + ".html")
@@ -189,39 +197,39 @@ fig = px.strip(data_frame=yuleDf, x="Annotation", y="Yule coefficient",hover_dat
 fig.show()
 # %%
 # Pol 2 Matching vs non-matching
-import matplotlib.pyplot as plt
-import seaborn as sns
-vals = []
-tissues = pd.Series(dst.index).str.split("_", expand=True)
-for i in range(len(dst)):
-    for j in range(1+i, len(dst)):
-        if tissues[0][i] == "Pol2":
-            if tissues[1][i] == tissues[1][j]:
-                print(dst.index[i], dst.columns[j])
-                vals.append([dst.iloc[i,j], "Matching", dst.index[i], dst.index[j]])
-            else:
-                vals.append([dst.iloc[i,j],"Not matching", dst.index[i], dst.index[j]])
-yuleDf = pd.DataFrame(vals, columns=["Yule coefficient", "Annotation", "M1", "M2"])
-plt.figure(dpi=500)
-sns.boxplot(data=yuleDf, x="Annotation", y="Yule coefficient", showfliers=False)
-sns.stripplot(data=yuleDf, x="Annotation", y="Yule coefficient", s=1.0, dodge=True, jitter=0.4, linewidths=1.0)
-pval = mannwhitneyu(yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Not matching'], yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Matching'])[1]
-plt.title(f"pval={pval}")
-plt.savefig(figPath + "yule_matching_pol2.pdf")
-plt.show()
-# %%
-fig = px.strip(data_frame=yuleDf, x="Annotation", y="Yule coefficient",hover_data=["M1", "M2"])
-fig.show()
+if usePolII:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    vals = []
+    tissues = pd.Series(dst.index).str.split("_", expand=True)
+    for i in range(len(dst)):
+        for j in range(1+i, len(dst)):
+            if tissues[0][i] == "Pol2":
+                if tissues[1][i] == tissues[1][j]:
+                    print(dst.index[i], dst.columns[j])
+                    vals.append([dst.iloc[i,j], "Matching", dst.index[i], dst.index[j]])
+                else:
+                    vals.append([dst.iloc[i,j],"Not matching", dst.index[i], dst.index[j]])
+    yuleDf = pd.DataFrame(vals, columns=["Yule coefficient", "Annotation", "M1", "M2"])
+    plt.figure(dpi=500)
+    sns.boxplot(data=yuleDf, x="Annotation", y="Yule coefficient", showfliers=False)
+    sns.stripplot(data=yuleDf, x="Annotation", y="Yule coefficient", s=1.0, dodge=True, jitter=0.4, linewidths=1.0)
+    pval = mannwhitneyu(yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Not matching'], yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Matching'])[1]
+    plt.title(f"pval={pval}")
+    plt.savefig(figPath + "yule_matching_pol2.pdf")
+    plt.show()
+    fig = px.strip(data_frame=yuleDf, x="Annotation", y="Yule coefficient",hover_data=["M1", "M2"])
+    fig.show()
 # %%
 dst.to_csv(figPath + "heatmapMetacluster.csv")
 # %%
 # UMAP 3D
 import umap
 from lib.utils import plot_utils
-embedding = umap.UMAP(10, n_components=3, min_dist=0.0, metric="yule", n_epochs=5000,random_state=42).fit_transform(mat)
+embedding = umap.UMAP(10, n_components=3, min_dist=0.0, metric="precomputed", n_epochs=5000,random_state=42).fit_transform(dst)
 import plotly.express as px
 df = pd.DataFrame(embedding, columns=["x","y","z"])
-tissue = pd.Series(mat.index).str.split("_", expand=True)
+tissue = pd.Series(dst.index).str.split("_", expand=True)
 df[["Orig", "Annot", "State"]] = tissue
 annot, palette, colors = plot_utils.applyPalette(df["Annot"],
                                                 np.unique(df["Annot"]),
@@ -259,7 +267,7 @@ fig3.update_layout(
 fig3.show()
 fig3.write_html(figPath + "metacluster_umap3d_lines.pdf" + ".html")
 # %%
-fig = px.bar(x=mat.index[row_order], y=mat.sum(axis=1)[row_order], width=2000)
+fig = px.bar(x=np.array(names)[row_order], y=np.array([len(m) for m in mat])[row_order], width=2000)
 fig.update_layout(xaxis=dict( tickvals=np.arange(len(dst))))
 fig.show()
 fig.write_image(figPath + "n_markers.pdf")

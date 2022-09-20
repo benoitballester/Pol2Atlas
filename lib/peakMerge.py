@@ -844,6 +844,7 @@ class peakMerger:
             else:
                 qvals = multitesting(pvals)[1]
             sig = (qvals < alpha) & (k >= 2)
+            fc = (k/+n)/(N/M) 
             print(sig.sum())
             sigConsensuses = self.consensuses.iloc[sig]
             if self.outputPath is not None:
@@ -852,7 +853,7 @@ class peakMerger:
                 except FileExistsError:
                     pass
                 sigConsensuses.to_csv(self.outputPath + f"enrichedPerAnnot/{eq[i]}.bed", header=False, index=False, sep="\t")
-                pd.DataFrame(qvals[sig]).to_csv(self.outputPath + f"enrichedPerAnnot/{eq[i]}_qvals.bed", header=False, index=False, sep="\t")
+                pd.DataFrame(np.array([pvals, qvals, fc]).T, columns=["pval", "qval", "fc"], index=np.arange(len(pvals))).to_csv(self.outputPath + f"enrichedPerAnnot/{eq[i]}_qvals.bed", sep="\t")
             perAnnotQvals[eq[i]] = qvals[sig]
             perAnnotConsensuses[eq[i]] = sigConsensuses
         return perAnnotConsensuses, perAnnotQvals

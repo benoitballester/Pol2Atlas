@@ -33,12 +33,8 @@ def findMode(arr):
 
 def statsProcess(alpha, sf, counts, design):
     pred = np.mean(counts/sf)*sf
-    n = 1/alpha
-    p = pred / (pred + alpha * (pred**2))
-    distrib = nbinom(n, p)
-    upperBound = np.maximum(distrib.isf(0.05/len(counts)), 0)
-    clipped = np.clip(counts, 0, upperBound)
-    pearson = (clipped - pred) / np.sqrt(pred + alpha * pred**2)
+    pearson = (counts - pred) / np.sqrt(pred + alpha * pred**2)
+    pearson = np.clip(pearson, -np.sqrt(9+len(sf)/4), np.sqrt(9+len(sf)/4))
     chi2p = chi2(len(sf)-design.shape[1]).sf(np.sum(np.square(pearson), axis=0))
     return pearson.astype("float32"), chi2p
 
