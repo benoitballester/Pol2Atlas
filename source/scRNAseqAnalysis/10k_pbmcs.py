@@ -102,7 +102,7 @@ fig.write_html(paths.outputDir + "scrnaseq/10k_pbmc_genes.pdf" + ".html")
 fig.show()
 # %%
 # DE genes
-tester = mannWhitneyAsymp(countModel.residuals)
+# tester = mannWhitneyAsymp(countModel.residuals)
 pctThreshold = 0.1
 lfcMin = 0.25
 matchinglabels = labelsGenes
@@ -110,7 +110,8 @@ resClust = dict()
 for i in np.unique(matchinglabels):
     print(i)
     grp = (matchinglabels == i).astype(int)
-    res2 = tester.test(grp, "less")
+    res2 = ss.ttest_ind(countModel.residuals[grp == 1], countModel.residuals[grp != 1], axis=0,
+                    alternative="greater")
     sig = fdrcorrection(res2[1])[0]
     minpct = np.mean(counts[matchinglabels == i] > 0.5, axis=0) > max(0.1, 1.5/grp.sum())
     fc = np.mean(countModel.normed[matchinglabels == i], axis=0) / (1e-9+np.mean(countModel.normed[matchinglabels != i], axis=0))
@@ -278,7 +279,7 @@ fig.show()
 # Setup DE analysis
 import pyranges as pr
 
-tester = mannWhitneyAsymp(countModelPolII.residuals)
+# tester = mannWhitneyAsymp(countModelPolII.residuals)
 consensuses = pr.read_gtf(paths.tempDir + "Pol2.gtf").as_df()
 consensuses.drop(["Source", "Feature", "Frame", "gene_biotype", "transcript_id", "gene_name"], 1, inplace=True)
 consensuses.columns = ["Chromosome", "Start", "End","Score","Strand","Name"]
@@ -293,7 +294,8 @@ resClustP2 = dict()
 for i in np.unique(matchinglabels):
     print(i)
     grp = (matchinglabels == i).astype(int)
-    res2 = tester.test(grp, "less")
+    res2 = ss.ttest_ind(countModelPolII.residuals[grp == 1], countModelPolII.residuals[grp == 0], axis=0,
+                    alternative="greater")
     sig = fdrcorrection(res2[1])[0]
     minpct = np.mean(polIICounts[matchinglabels == i] > 0.5, axis=0) > max(0.1, 1.5/grp.sum())
     fc = np.mean(countModelPolII.normed[matchinglabels == i], axis=0) / (1e-9+np.mean(countModelPolII.normed[matchinglabels != i], axis=0))

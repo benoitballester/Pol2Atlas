@@ -352,10 +352,10 @@ top50 = signalTopCat < -0.51
 colOrder = np.lexsort((signalTopCat[top50], topCat[top50]))
 clippedSQ = np.log10(1+countModel.normed)
 plt.figure(dpi=500)
-plot_utils.plotHC(clippedSQ.T[top50], annotation.loc[order]["Annotation"],
+plot_utils.plotHC(clippedSQ.T[top50], annotation.loc[order]["tissue_type"],
                   mtx[top50],
                   paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder, 
-                  labelsPct=annotationDf.loc[polIIMerger.labels]["Annotation"])
+                  labelsPct=annotationDf.loc[polIIMerger.labels]["tissue_type"])
 plt.savefig(paths.outputDir + "rnaseq/gtex_rnaseq/HM_top50Pol_pol2_order_pol2_signal.pdf")
 plt.close()
 # %%
@@ -368,10 +368,10 @@ meanNormed = countModel.normed/np.mean(countModel.normed, axis=0)
 epsilon = 1/np.nanmax(np.log(meanNormed), axis=0)
 clippedSQ = np.log10(1+countModel.normed)
 plt.figure(dpi=500)
-plot_utils.plotHC(clippedSQ.T, annotation.loc[order]["Annotation"],
+plot_utils.plotHC(clippedSQ.T, annotation.loc[order]["tissue_type"],
                   mtx,
                   paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder, 
-                  labelsPct=annotationDf.loc[polIIMerger.labels]["Annotation"])
+                  labelsPct=annotationDf.loc[polIIMerger.labels]["tissue_type"])
 plt.savefig(paths.outputDir + "rnaseq/gtex_rnaseq/HM_all_encode_order_pol2_signal.pdf")
 plt.show()
 plt.close()
