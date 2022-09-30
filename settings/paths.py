@@ -1,11 +1,11 @@
 # ---------- Common ---------- 
-outputDir = "/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2_newAnnot_intragenic/"   # Main results
+outputDir = "/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2_newAnnot/"   # Main results
 tempDir = "/shared/projects/pol2_chipseq/pol2_interg_default/tempPol2/"       # Temporary files / unimportant
 genomeFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/hg38.chrom.sizes.sorted"
 annotationFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/annotPol2.tsv"
 polIIannotationPalette = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/palettes/main_annot_fmt2.csv"
 # ---------- Required for peak integrative analysis ---------- 
-peaksFolder = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/peaksIntra/"
+peaksFolder = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/peaksInterg/"
 remapFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/remap2020_nr.bed"
 GOfile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/GO_files/hsapiens.GO:BP.name.gmt"
 gencode = "/shared/projects/pol2_chipseq/pol2_interg_default/data/annotation/gencode.v38.annotation.gtf"

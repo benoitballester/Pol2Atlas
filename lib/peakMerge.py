@@ -852,8 +852,9 @@ class peakMerger:
                     os.mkdir(self.outputPath + "enrichedPerAnnot/")
                 except FileExistsError:
                     pass
-                sigConsensuses.to_csv(self.outputPath + f"enrichedPerAnnot/{eq[i]}.bed", header=False, index=False, sep="\t")
-                pd.DataFrame(np.array([pvals, qvals, fc]).T, columns=["pval", "qval", "fc"], index=np.arange(len(pvals))).to_csv(self.outputPath + f"enrichedPerAnnot/{eq[i]}_qvals.bed", sep="\t")
+                fname = eq[i].replace("/", "_")
+                sigConsensuses.to_csv(self.outputPath + f"enrichedPerAnnot/{fname}.bed", header=False, index=False, sep="\t")
+                pd.DataFrame(np.array([pvals, qvals, fc]).T, columns=["pval", "qval", "fc"], index=np.arange(len(pvals))).to_csv(self.outputPath + f"enrichedPerAnnot/{fname}_qvals.bed", sep="\t")
             perAnnotQvals[eq[i]] = qvals[sig]
             perAnnotConsensuses[eq[i]] = sigConsensuses
         return perAnnotConsensuses, perAnnotQvals

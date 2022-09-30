@@ -1,6 +1,6 @@
 # %%
 import sys
-
+import os
 import numpy as np
 import pandas as pd
 import pyranges as pr
@@ -71,6 +71,56 @@ addAnnotation(consensusesPr, intersectTab, "ReMap CRM", showCol="Score",
               inputBed=paths.remapCrms)
 # %%
 intersectTab.to_csv(paths.outputDir + "intersectIntergPol2.tsv", sep="\t", index=None)
-
-
+# %%
+try:
+    os.mkdir(paths.outputDir + "intersections_databases/")
+except:
+    pass
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+proportions = intersectTab["Encode CCREs"].value_counts()/len(intersectTab)
+plt.figure(dpi=500)
+sns.barplot(proportions.values, proportions.index)
+plt.xticks(rotation=90)
+plt.ylabel("CCRE Category")
+plt.xlabel("Fraction of Pol II consensuses")
+plt.savefig(paths.outputDir + "intersections_databases/encode_ccres.pdf", bbox_inches="tight")
+plt.close()
+# %%
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+intersectLinc = intersectTab["lncpedia"].value_counts().sum()
+intersectCCRE = intersectTab["Encode CCREs"].value_counts().sum()
+intersectRemap = (intersectTab["ReMap CRM"] >= 10).sum()
+intersectRepeat = intersectTab["Repeat Family"].value_counts().sum()
+intersectF5Enh = intersectTab["Fantom 5 bidirectionnal enhancers"].sum()
+intersectF5TSS = intersectTab["Fantom 5 TSSs"].sum()
+intersectDnase = intersectTab["DNase meuleman"].value_counts().sum()
+df = pd.DataFrame([intersectLinc, intersectCCRE, intersectRemap, intersectRepeat, intersectF5Enh,
+                   intersectF5TSS, intersectDnase], index=["lncPedia", "Encode CCREs", "ReMap CRMs", "Repeated elements", "F5 enhancers", "F5 TSSs", "ENCODE Dnase"])
+df /= len(consensuses)
+df.sort_values(0, inplace=True, ascending=False)
+df["Cat"] = df.index
+plt.figure(dpi=500)
+sns.barplot(x=df[0], y=df.index)
+plt.xticks(rotation=90)
+plt.ylabel("Category")
+plt.xlabel("Fraction of Pol II consensuses")
+plt.savefig(paths.outputDir + "intersections_databases/prop_all_db.pdf", bbox_inches="tight")
+plt.show()
+plt.close()
+# %%
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+proportions = (intersectTab["Repeat Class"].value_counts()/len(intersectTab))[:10]
+plt.figure(dpi=500)
+sns.barplot(proportions.values, proportions.index)
+plt.xticks(rotation=90)
+plt.ylabel("CCRE Category")
+plt.xlabel("Fraction of Pol II consensuses")
+plt.savefig(paths.outputDir + "intersections_databases/rep_family.pdf", bbox_inches="tight")
+plt.close()
 # %%

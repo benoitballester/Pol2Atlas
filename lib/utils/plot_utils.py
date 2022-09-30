@@ -150,7 +150,7 @@ def plotUmap(points, colors, forceVectorized=False):
         plt.gca().set_aspect(xScale/yScale)
 
 
-def plotHC(matrix, labels, matPct=None, annotationPalette=None, rowOrder="umap", colOrder="umap", cmap=None, hq=True, labelsPct=None):
+def plotHC(matrix, labels, matPct=None, annotationPalette=None, rowOrder="umap", colOrder="umap", cmap=None, hq=True, labelsPct=None, rescale=True):
     """
     Plot ordered matrix with sample and consensus annotation
 
@@ -191,7 +191,8 @@ def plotHC(matrix, labels, matPct=None, annotationPalette=None, rowOrder="umap",
     rasterRes = (4000, 2000)
     rasterMat = resize(matrix[consensuses1D][:, samples1D].astype("float32"), (matrix.shape[0], 2000), anti_aliasing=False, order=int(matrix.shape[1]>2000))
     rasterMat = resize(rasterMat, rasterRes, anti_aliasing=hq, order=1)
-    rasterMat = (rasterMat - np.percentile(rasterMat, 0.5)) / (np.percentile(rasterMat, 99.5) - np.percentile(rasterMat, 0.5))
+    if rescale:
+        rasterMat = (rasterMat - np.percentile(rasterMat, 0.5)) / (np.percentile(rasterMat, 99.5) - np.percentile(rasterMat, 0.5))
     # rasterMat = sns.color_palette("viridis", as_cmap=True)(rasterMat.T)[:,:,:3]
     if cmap is None:
         rasterMat = np.repeat(1-rasterMat.T[:,:,None], 3, 2)

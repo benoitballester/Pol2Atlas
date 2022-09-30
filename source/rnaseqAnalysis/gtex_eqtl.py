@@ -56,7 +56,7 @@ kept = (mat.sum(axis=0) <= minSpec).values & (mat.sum(axis=0) != 0).values
 consensuses = consensuses.iloc[kept]
 mat = mat.iloc[:, kept]
 # Remove columns with low marker count (50)
-keptAnnots = (mat.sum(axis=1) > 50).values
+keptAnnots = (mat.sum(axis=1) > 100).values
 mat = mat.iloc[keptAnnots]
 
 # %%
@@ -123,7 +123,7 @@ def buildMarkerMatrix(consensuses, indices):
     consensuses = consensuses.iloc[kept]
     mat = mat.iloc[:, kept]
     # Remove columns with low marker count (50)
-    keptAnnots = (mat.sum(axis=1) > 50).values
+    keptAnnots = (mat.sum(axis=1) > 100).values
     mat = mat.iloc[keptAnnots]
     return consensuses,mat
 # Compute enrichments of per tissue eqtl in per tissue Pol II markers

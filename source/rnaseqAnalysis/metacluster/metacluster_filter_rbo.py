@@ -153,7 +153,7 @@ def color(color, text):
     return s
 
 # Complete linkage hc
-linkage = fastcluster.linkage(dst, "complete")
+linkage = fastcluster.linkage(dst, "average")
 row_order = hierarchy.leaves_list(linkage)
 # dst = -sd.squareform(sd.pdist(mat, metric))
 # dst = pd.DataFrame(dst, columns=mat.index, index=mat.index)
