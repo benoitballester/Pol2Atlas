@@ -1,9 +1,7 @@
-# Enable this if you do not have access to peak summits
+import matplotlib as mpl
+mpl.rcParams['pdf.fonttype'] = 42
 inferCenter=False
-# "bed" or narrowPeak
 fileFormat="bed"
-# 
 scoreMethod="binary"
-# Number of overlaps to consider a consensus peak valid
 minOverlap = 2
-# 
+removeGeneTail5kb = False

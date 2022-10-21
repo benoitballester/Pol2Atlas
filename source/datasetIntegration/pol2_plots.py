@@ -13,8 +13,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import pyranges as pr
 import seaborn as sns
-from settings import params, paths
 from scipy.io import mmread
+from settings import params, paths
+
 donutSize = 0.3
 target = "POLR2A"
 listFiles = os.listdir(paths.peaksFolder)
@@ -35,9 +36,12 @@ plot_utils.donutPlot(donutSize, counts, counts.sum(), labels,
 annotation = pd.read_csv(paths.annotationFile, sep="\t", index_col="Sample")
 fileAnnot, annots = pd.factorize(annotation.loc[listFiles]["Annotation"])
 counts = np.bincount(fileAnnot)
-palette = plot_utils.getPalette(fileAnnot)[0]
-plot_utils.donutPlot(donutSize, counts, counts.sum(), annots, 
-          counts.sum(), target + " ChIP-seq", palette, fName=outputDir + "expBiotype", showPct=False)
+palette = plot_utils.applyPalette(annotation.loc[listFiles]["Annotation"], annots, 
+                                 paths.polIIannotationPalette)[0]
+ordered = np.argsort(counts)[::-1]
+plot_utils.donutPlot(donutSize, counts[ordered], counts.sum(), annots[ordered], 
+          counts.sum(), target + " ChIP-seq", palette[ordered], fName=outputDir + "expBiotype", 
+          showPct=False, labelsCutThreshold=0.04)
 # %%
 plt.figure(dpi=300, figsize=(3,2))
 mat = mmread(paths.outputDir + "matrix.mtx")

@@ -1,4 +1,6 @@
 # %%
+import sys
+sys.path.append("./")
 from lib.peakMerge import peakMerger
 from lib.utils import overlap_utils, matrix_utils, plot_utils
 import numpy as np
@@ -27,7 +29,30 @@ merger = peakMerger(paths.genomeFile, outputPath=paths.outputDir)
 merger.mergePeaks(paths.peaksFolder, inferCenter=params.inferCenter, 
                   minOverlap=params.minOverlap, fileFormat=params.fileFormat)
 merger.writePeaks()
-
+# %%
+# GO terms
+from lib.pyGREATglm import pyGREAT
+enricher = pyGREAT(paths.GOfile,
+                          geneFile=paths.gencode,
+                          chrFile=paths.genomeFile)
+# %%
+if params.removeGeneTail5kb:
+    gencode = enricher.txList
+    consensusesPr = merger.consensuses[[0,6,7]]
+    consensusesPr["Name"] = np.arange(len(consensusesPr))
+    consensusesPr.columns = ["Chromosome", "Start", "End", "Name"]
+    consensusesPr = pr.PyRanges(consensusesPr)
+    tes_ext = 5000
+    tails = gencode.copy()
+    tesP = tails.loc[tails["Strand"] == "+"]["End"]
+    tails.loc[tails["Strand"] == "+", ["Start", "End"]] = np.array([tesP, tesP+tes_ext]).T
+    tesM = tails.loc[tails["Strand"] == "-"]["Start"]
+    tails.loc[tails["Strand"] == "-", ["Start", "End"]] = np.array([tesM-tes_ext, tesM]).T
+    tailedPol2 = consensusesPr.join(pr.PyRanges(tails), False, apply_strand_suffix=False).as_df()
+    tailedPol2.drop(["Start_b", "End_b", "Strand"], axis=1, inplace=True)
+    toRemove = tailedPol2["Name"].values
+    merger.consensuses = merger.consensuses.drop(toRemove)
+    merger.matrix = np.delete(merger.matrix, toRemove, axis=0)
 # %%
 highVar = np.mean(merger.matrix.T, axis=0) < 0.51
 orderRows = matrix_utils.threeStagesHC(merger.matrix.T[:, highVar], "yule")
@@ -94,12 +119,7 @@ plt.xticks([],[])
 plt.title("-log10(Intersection enrichment p-value)")
 plt.savefig(f"{paths.outputDir}/cluster_enrichments/dnaseHeatmap.pdf", bbox_inches="tight")
 plt.show()
-# %%
-# GO terms
-from lib.pyGREATglm import pyGREAT
-enricher = pyGREAT(paths.GOfile,
-                          geneFile=paths.gencode,
-                          chrFile=paths.genomeFile)
+
 # %%
 # testReg = pd.read_csv(paths.tempDir + "globallyProg.bed", sep="\t", header=None)
 for i in range(np.max(merger.clustered[0])+1):
@@ -107,7 +127,8 @@ for i in range(np.max(merger.clustered[0])+1):
     testReg.columns = ["Chromosome", "Start", "End"]
     testReg = pr.PyRanges(testReg)
     goEnrich = enricher.findEnriched(testReg, pr.read_bed(paths.outputDir+"consensuses.bed"))
+    goEnrich.to_csv(paths.outputDir + f"cluster_enrichments/go_enrich_{i}.csv")
     enricher.plotEnrichs(goEnrich, savePath=paths.outputDir + f"cluster_enrichments/GO_fc_{i}.png")
-    enricher.clusterTreemap(goEnrich, output=paths.outputDir + f"cluster_enrichments/GO_treemap_{i}.png")
-# %%
+    if (goEnrich["BH corrected p-value"] < 0.05).sum() >= 2:
+        enricher.clusterTreemap(goEnrich, output=paths.outputDir + f"cluster_enrichments/GO_treemap_{i}.png")
 # %%

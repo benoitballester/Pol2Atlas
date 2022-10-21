@@ -63,17 +63,23 @@ K = intersectTable["Repeat Class"].value_counts().loc[proportions.index]
 n = len(intersectTab)
 k = proportions
 pvals = hypergeom(N,K,n).sf(k-1)
+pvals = np.minimum(pvals, hypergeom(N,K,n).cdf(k-1))*2.0
 sig = fdrcorrection(pvals)[0]
 
-proportions /= len(intersectTab)
 plt.figure(dpi=500)
-sns.barplot(proportions.values, proportions.index)
+sns.barplot(proportions.values/len(intersectTab), proportions.index)
 plt.xticks(rotation=90)
 plt.ylabel("CCRE Category")
 plt.xlabel("Fraction of Pol II consensuses")
+plt.xlim(0, plt.xlim()[1]*1.15)
 for i in range(10):
+    fc = np.around((k/n)/(K/N), 2)[i]
     if sig[i]:
-        plt.text(proportions.values[i] + plt.xlim()[1]*0.01, i, "*", va="center")
+        plt.text(proportions.values[i]/len(intersectTab) + plt.xlim()[1]*0.01, i, 
+                 f"FC : {fc}", va="center")
+    else:
+        plt.text(proportions.values[i]/len(intersectTab) + plt.xlim()[1]*0.01, i, 
+                 f"FC : {fc} (n.s)", va="center")
 plt.savefig(paths.outputDir + "intersections_databases/pancancer_DE_rep_family.pdf", bbox_inches="tight")
 plt.show()
 plt.close()
@@ -127,17 +133,23 @@ K = intersectTable["Repeat Class"].value_counts().loc[proportions.index]
 n = len(intersectTab)
 k = proportions
 pvals = hypergeom(N,K,n).sf(k-1)
+pvals = np.minimum(pvals, hypergeom(N,K,n).cdf(k-1))*2.0
 sig = fdrcorrection(pvals)[0]
 
-proportions /= len(intersectTab)
 plt.figure(dpi=500)
-sns.barplot(proportions.values, proportions.index)
+sns.barplot(proportions.values/len(intersectTab), proportions.index)
 plt.xticks(rotation=90)
 plt.ylabel("CCRE Category")
 plt.xlabel("Fraction of Pol II consensuses")
+plt.xlim(0, plt.xlim()[1]*1.15)
 for i in range(10):
+    fc = np.around((k/n)/(K/N), 2)[i]
     if sig[i]:
-        plt.text(proportions.values[i] + plt.xlim()[1]*0.01, i, "*", va="center")
+        plt.text(proportions.values[i]/len(intersectTab) + plt.xlim()[1]*0.01, i, 
+                 f"FC : {fc}", va="center")
+    else:
+        plt.text(proportions.values[i]/len(intersectTab) + plt.xlim()[1]*0.01, i, 
+                 f"FC : {fc} (n.s)", va="center")
 plt.savefig(paths.outputDir + "intersections_databases/survival_rep_family.pdf", bbox_inches="tight")
 plt.show()
 plt.close()
@@ -183,6 +195,7 @@ plt.savefig(paths.outputDir + "intersections_databases/gtex_heart_prop_all_db.pd
 plt.show()
 plt.close()
 
+# Repeat classes
 proportions = (intersectTab["Repeat Class"].value_counts())[:10]
 from scipy.stats import hypergeom
 from statsmodels.stats.multitest import fdrcorrection
@@ -191,17 +204,23 @@ K = intersectTable["Repeat Class"].value_counts().loc[proportions.index]
 n = len(intersectTab)
 k = proportions
 pvals = hypergeom(N,K,n).sf(k-1)
+pvals = np.minimum(pvals, hypergeom(N,K,n).cdf(k-1))*2.0
 sig = fdrcorrection(pvals)[0]
 
-proportions /= len(intersectTab)
 plt.figure(dpi=500)
-sns.barplot(proportions.values, proportions.index)
+sns.barplot(proportions.values/len(intersectTab), proportions.index)
 plt.xticks(rotation=90)
 plt.ylabel("CCRE Category")
 plt.xlabel("Fraction of Pol II consensuses")
+plt.xlim(0, plt.xlim()[1]*1.15)
 for i in range(10):
+    fc = np.around((k/n)/(K/N), 2)[i]
     if sig[i]:
-        plt.text(proportions.values[i] + plt.xlim()[1]*0.01, i, "*", va="center")
+        plt.text(proportions.values[i]/len(intersectTab) + plt.xlim()[1]*0.01, i, 
+                 f"FC : {fc}", va="center")
+    else:
+        plt.text(proportions.values[i]/len(intersectTab) + plt.xlim()[1]*0.01, i, 
+                 f"FC : {fc} (n.s)", va="center")
 plt.savefig(paths.outputDir + "intersections_databases/gtex_heart_rep_family.pdf", bbox_inches="tight")
 plt.show()
 plt.close()

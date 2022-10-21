@@ -63,6 +63,100 @@ def getPalette(labels, palette=None):
         colors = palette[labels]
     return palette, colors
 
+def plotUmapAlpha(points, colors, forceVectorized=False, lims=None):
+    """
+    Custom plotting function. The point size is automatically 
+    selected according to the dataset size.
+    Above 100 000 points, switches automatically from the vectorized 
+    matplotlib backend to per pixel rendering on a 4000x4000 image. 
+    Avoids overplotting (and also much faster than matplotlib).
+
+    Parameters
+    ----------
+    points: ndarray of shape (n,2)
+        Positions of the n points to plot.
+
+    colors: array-like of shape (n,)
+        The color assigned to each point.
+
+    forceVectorized: Boolean (optional, default False)
+        Forces the use of the matplotlib backend.
+    """
+    if (len(points) > 10000) and not forceVectorized:
+        colorAlpha = np.hstack([colors, np.ones((len(colors),1))])
+        # Compute points per pixel for scalability to very large datasets
+        alpha = 1.0
+        size = 4000
+        # Setup plotting window
+        if lims == None:
+            xLimMin = np.nanmin(points[:, 0])
+            xLimMax = np.nanmax(points[:, 0])
+            yLimMin = np.nanmin(points[:, 1])
+            yLimMax = np.nanmax(points[:, 1])
+            windowSize = (xLimMax-xLimMin, yLimMax-yLimMin)
+            xLimMin = xLimMin - windowSize[0]*0.05
+            xLimMax = xLimMax + windowSize[0]*0.05
+            yLimMin = yLimMin - windowSize[1]*0.05
+            yLimMax = yLimMax + windowSize[1]*0.05
+        else:
+            xLimMin = lims[0]
+            xLimMax = lims[1]
+            yLimMin = lims[2]
+            yLimMax = lims[3]
+        img = np.zeros((size,size,4), dtype="float32")
+        sums = np.zeros((size,size), dtype="float32")
+        # Map points onto pixel grid
+        xCoord = ((points[:, 0] - xLimMin)/(xLimMax-xLimMin) * size)
+        yCoord = ((points[:, 1] - yLimMin)/(yLimMax-yLimMin) * size)
+        xCoordInt = ((points[:, 0] - xLimMin)/(xLimMax-xLimMin) * size).astype(int)
+        yCoordInt = ((points[:, 1] - yLimMin)/(yLimMax-yLimMin) * size).astype(int)
+        # Remove out of boundaries points
+        kept = (xCoord > 0.5) & (xCoord < size-1.5) & (yCoord > 0.5) & (yCoord < size-1.5)
+        # Each point = 2d gaussian
+        # First bilinear interpolation
+        # Bottom left
+        f = 1.0 - np.abs(xCoordInt - xCoord) * np.abs(yCoordInt - yCoord)
+        np.add.at(img, 
+                  (xCoordInt[kept], yCoordInt[kept]), 
+                  np.clip(colorAlpha[kept]*alpha*f[kept][:, None], 0.0, 1.0))
+        np.add.at(sums, (xCoordInt[kept], yCoordInt[kept]), alpha*f[kept])
+        # Upper left
+        f = 1.0 - np.abs(xCoordInt - xCoord) * np.abs(1 + yCoordInt - yCoord)
+        np.add.at(img, 
+                  (xCoordInt[kept], 1+yCoordInt[kept]), 
+                  np.clip(colorAlpha[kept]*alpha*f[kept][:, None], 0.0, 1.0))
+        np.add.at(sums, (xCoordInt[kept], 1+yCoordInt[kept]), alpha*f[kept])
+        # Bottom Right
+        f = 1.0 - np.abs(xCoordInt + 1 - xCoord) * np.abs(yCoordInt - yCoord)
+        np.add.at(img, 
+                  (xCoordInt[kept]+1, yCoordInt[kept]), 
+                  np.clip(colorAlpha[kept]*alpha*f[kept][:, None], 0.0, 1.0))
+        np.add.at(sums, (xCoordInt[kept]+1, yCoordInt[kept]), alpha*f[kept])
+        # Upper Right
+        f = 1.0 - np.abs(1+xCoordInt - xCoord) * np.abs(1+yCoordInt - yCoord)
+        np.add.at(img, 
+                  (xCoordInt[kept]+1, yCoordInt[kept]+1), 
+                  np.clip(colorAlpha[kept]*alpha*f[kept][:, None], 0.0, 1.0))
+        np.add.at(sums, (xCoordInt[kept]+1, yCoordInt[kept]+1), alpha*f[kept])
+        # Gaussian filter (automatically scale width with dataset size)
+        sigma = 0.5/np.sqrt(len(points)/1e6)
+        mult = 1.5/(norm.pdf(0,0,sigma)/0.4)    # Increase intensity
+        img = cv2.GaussianBlur(img, (0,0), sigma, sigma) * mult
+        sums = cv2.GaussianBlur(sums, (0,0), sigma, sigma) * mult
+        alpha = np.power(sums/(1+sums),0.45)   # Rescale between 0 and 1
+        plt.gca().set_aspect(1.0)
+        plt.gca().patch.set_alpha(0.0)
+        plt.gcf().patch.set_alpha(0.0)
+        mat = img / (1e-7+sums[:, :, None])
+        mat[:,:,3] = alpha
+        plt.imshow(mat, interpolation="lanczos")
+    else:
+        s0 = 3.5*np.linalg.norm(plt.gcf().get_size_inches())
+        plt.scatter(points[:, 0], points[:, 1], s=s0*min(1.0,10/np.sqrt(len(points))),
+                    linewidths=0.0, c=np.clip(colors,0.0,1.0))
+        xScale = plt.xlim()[1] - plt.xlim()[0]
+        yScale = plt.ylim()[1] - plt.ylim()[0]
+        plt.gca().set_aspect(xScale/yScale)
 
 def plotUmap(points, colors, forceVectorized=False):
     """
@@ -148,6 +242,84 @@ def plotUmap(points, colors, forceVectorized=False):
         xScale = plt.xlim()[1] - plt.xlim()[0]
         yScale = plt.ylim()[1] - plt.ylim()[0]
         plt.gca().set_aspect(xScale/yScale)
+
+
+def plotHCProps(matrix, labels, matPct=None, annotationPalette=None, rowOrder="umap", colOrder="umap", cmap=None, hq=True, labelsPct=None, rescale=True):
+    """
+    Plot ordered matrix with sample and consensus annotation
+
+    Parameters
+    ----------
+    matrix: array-like
+
+    rowOrder: "umap" or array-like
+        If set to umap, performs UMAP to 1D then orders the rows based on the UMAP position.
+        Otherwise uses the supplied order.
+    
+    colOrder: "umap" or array-like
+        If set to umap, performs UMAP to 1D then orders the columns based on the UMAP position.
+        Otherwise uses the supplied order.
+
+    """
+    if labelsPct is None:
+        labelsPct = labels
+    if matPct is None:
+        matPct = matrix
+    if colOrder == "umap":
+        consensuses1D = np.argsort(umap.UMAP(n_components=1, n_neighbors=50, min_dist=0.0, 
+                                   low_memory=False, metric="dice").fit_transform(matrix).flatten())
+    else:
+        try:
+            consensuses1D = np.array(colOrder).astype(int)
+        except:
+            raise TypeError("colOrder must be 'umap' or array-like")
+    if rowOrder == "umap":
+        samples1D = np.argsort(umap.UMAP(n_components=1, n_neighbors=50, min_dist=0.0, 
+                               low_memory=False, metric="dice").fit_transform(matrix.T).flatten())
+    else:
+        try:
+            samples1D = np.array(rowOrder).astype(int)
+        except:
+            raise TypeError("rowOrder must be 'umap' or array-like")
+    # Add sample annotation
+    annotations = np.zeros(matrix.shape[1], "int64")
+    eq = ["Non annotated"]
+    annotations, eq = pd.factorize(labels,
+                                    sort=True)
+    eq = pd.Index(eq)
+    if np.max(annotations) >= 18 and annotationPalette is None:
+        print("Warning : Over 18 annotations, using random colors instead of a palette")
+    if annotationPalette is None:
+        palette, colors = getPalette(annotations)
+    else:
+        palette, colors = applyPalette(labels, eq, annotationPalette)
+    # Big stacked barplot
+    annotations2 = eq.get_indexer(labelsPct)
+    signalPerCategory = np.zeros((np.max(annotations2)+1, len(matPct)), dtype="float32")
+    signalPerAnnot = np.array([np.sum(matPct[:, i == annotations2]) for i in range(np.max(annotations2)+1)])
+    for i in np.unique(annotations2):
+        signalPerCategory[i, :] = np.sum(matPct[:, annotations2 == i], axis=1) / signalPerAnnot[i]
+    signalPerCategory /= np.sum(signalPerCategory, axis=0)
+    runningSum = np.zeros(signalPerCategory.shape[1], dtype="float32")
+    barPlot = np.zeros((matPct.shape[1], signalPerCategory.shape[1],3), dtype="float32")
+    fractCount = signalPerCategory/np.sum(signalPerCategory, axis=0)*matPct.shape[1]
+    for i, c in enumerate(fractCount):
+        for j, f in enumerate(c):
+            positions = np.round([runningSum[j],runningSum[j]+f]).astype("int")
+            barPlot[positions[0]:positions[1], j] = palette[i]
+            runningSum[j] += f
+    barPlot = barPlot[:, consensuses1D]
+    # Downsample the bar plot
+    rasterRes = (4000, 2000)
+    barPlotScale = 0.25
+    # barPlotBlur = cv2.GaussianBlur(barPlot, ksize=(0,0), sigmaX=1.0*barPlot.shape[1]/rasterRes[0], sigmaY=1.0/barPlotScale)
+    resized = resize(barPlot, (int(rasterRes[1]*barPlotScale), rasterRes[0]), anti_aliasing=hq)
+    # Plot
+    plt.figure(figsize=(10,90/16), dpi=500)
+    plt.imshow(resized, interpolation="lanczos")
+    plt.xticks([int(rasterRes[0]/33.3)+rasterRes[0]*0.5], 
+                [f"{matrix.shape[0]} Consensus Peaks"],
+                fontsize=8, ha="center")
 
 
 def plotHC(matrix, labels, matPct=None, annotationPalette=None, rowOrder="umap", colOrder="umap", cmap=None, hq=True, labelsPct=None, rescale=True):
@@ -312,7 +484,7 @@ def donutPlot(donutSize, counts, nMult, labels,
             labels=labelsOnCond(labels, counts/np.sum(counts), labelsCutThreshold), 
             colors=palette,
             autopct=lambda p:str(int(p*nMult/100+0.5))+"%"*showPct,
-            pctdistance= 1.0-donutSize*0.5, shadow=False, wedgeprops = { 'linewidth' : 7, 'edgecolor' : 'white' })
+            pctdistance= 1.0-donutSize*0.5, shadow=False, labeldistance=1.1, wedgeprops = { 'linewidth' : 7, 'edgecolor' : 'white' })
 
     for i in range(len(label)):
         plt.setp(label[i], **{'color':palette[i], 'weight':'bold', 'fontsize':40})

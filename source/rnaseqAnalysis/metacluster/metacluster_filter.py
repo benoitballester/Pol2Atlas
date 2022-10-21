@@ -147,7 +147,7 @@ def color(color, text):
 
 # Complete linkage hc
 idf = np.log(mat.sum(axis=0).values)
-dst = -sd.squareform(sd.pdist(mat, metric, w=idf))
+dst = -sd.squareform(sd.pdist(mat, metric))
 linkage = fastcluster.linkage(-sd.squareform(dst), "average", metric)
 row_order = hierarchy.leaves_list(linkage)
 dst = pd.DataFrame(dst, columns=mat.index, index=mat.index)

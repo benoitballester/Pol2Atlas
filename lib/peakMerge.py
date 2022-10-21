@@ -460,7 +460,7 @@ class peakMerger:
         if transpose:
             plot_utils.plotUmap(self.embedding[1], colors)
         else:
-            plot_utils.plotUmap(self.embedding[0], colors)
+            plot_utils.plotUmapAlpha(self.embedding[0], colors)
         plt.xlabel("UMAP 1", fontsize=8)
         plt.ylabel("UMAP 2", fontsize=8)
         plt.tick_params(
@@ -485,7 +485,7 @@ class peakMerger:
                 pd.DataFrame(self.embedding[int(transpose)]).to_csv(self.outputPath + f"embedding_consensuses.txt", header=False, index=False, sep="\t")
                 plt.savefig(self.outputPath + f"umap_consensuses.{figureFmt}", bbox_inches='tight')
         plt.show()
-        self.save()
+        # self.save()
         return self.embedding[int(transpose)]
 
 
@@ -711,7 +711,7 @@ class peakMerger:
         else:
             if self.embedding[0] is not None:
                 # a = 0
-                plot_utils.plotUmap(self.embedding[0], colors)
+                plot_utils.plotUmapAlpha(self.embedding[0], colors)
         plt.xlabel("UMAP 1", fontsize=8)
         plt.ylabel("UMAP 2", fontsize=8)
         plt.tick_params(
