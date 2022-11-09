@@ -6,35 +6,41 @@ sys.setrecursionlimit(10000)
 import numpy as np
 import pandas as pd
 from statsmodels.stats.multitest import fdrcorrection
-from settings import paths
+from settings import params, paths
 
-figPath = paths.outputDir + "rnaseq/metacluster/"
+figPath = paths.outputDir + "rnaseq/metacluster_10pct_topK/"
 try:
     os.mkdir(figPath)
 except FileExistsError:
     pass
 indices = dict()
+topK = 1000
 # %%
 filesEncode = os.listdir(paths.outputDir + "rnaseq/encode_rnaseq/DE/")
 filesEncode = [f for f in filesEncode if f.startswith("res_")]
 for f in filesEncode:
     name = "Encode_" + f[4:-4]
+    resFull = pd.read_csv(paths.outputDir + "rnaseq/encode_rnaseq/DE/" + f, index_col=0)
+    resFull = resFull[resFull["Upreg"] == 1]
+    resFull.sort_values(["pval", "stat"], ascending=[True, False], inplace=True)
     res = pd.read_csv(paths.outputDir + "rnaseq/encode_rnaseq/DE/" + f, index_col=0)["Upreg"] 
-    vals = res.index[res==1].values
+    vals = resFull.index[:topK].values
     if len(vals) < 100:
         continue
     indices[name] = vals
 
 # %%
 filesPol2 = os.listdir(paths.outputDir + "enrichedPerAnnot/")
-filesPol2 = [f for f in filesPol2 if not f.endswith("_qvals.bed")]
+filesPol2 = [f for f in filesPol2 if f.endswith("_qvals.bed")]
 for f in filesPol2:
-    name = "Pol2_" + f[:-4]
+    name = "Pol2_" + f[:-10]
     try:
-        bed = pd.read_csv(paths.outputDir + "enrichedPerAnnot/" + f, header=None, sep="\t")
-        if len(bed) < 100:
+        resFull = pd.read_csv(paths.outputDir + "enrichedPerAnnot/" + f, sep="\t", index_col=0)
+        resFull = resFull[resFull["qval"] < 0.05]
+        resFull.sort_values(["pval", "fc"], ascending=[True, False], inplace=True)
+        if np.sum(1-resFull["qval"].values) < 100:
             continue
-        indices[name] = bed[3].values
+        indices[name] = resFull.index[:topK].values
     except pd.errors.EmptyDataError:
         continue
 # matPolII = pd.DataFrame(matEncode, index=[f"Pol2_f[4:-4]" for f in filesEncode])
@@ -45,23 +51,32 @@ filesEncode = os.listdir(paths.outputDir + "rnaseq/gtex_rnaseq/DE/")
 filesEncode = [f for f in filesEncode if f.startswith("res_")]
 for f in filesEncode:
     name = "GTex_" + f[4:-4]
+    resFull = pd.read_csv(paths.outputDir + "rnaseq/gtex_rnaseq/DE/" + f, index_col=0)
+    resFull = resFull[resFull["Upreg"] == 1]
+    resFull.sort_values(["pval", "stat"], ascending=[True, False], inplace=True)
     res = pd.read_csv(paths.outputDir + "rnaseq/gtex_rnaseq/DE/" + f, index_col=0)["Upreg"] 
-    vals = res.index[res==1].values
+    vals = resFull.index[:topK].values
     if len(vals) == 0:
         continue
     indices[name] = vals
 
-
+# %%
 # Files TCGA
 filesEncode = os.listdir(paths.outputDir + "rnaseq/TCGA/DE/")
 filesEncode = [f for f in filesEncode if f.startswith("res_")]
 for f in filesEncode:
     name = "TCGA_" + f[4:-4]
+    if name == "TCGA_nan":
+        continue
+    resFull = pd.read_csv(paths.outputDir + "rnaseq/TCGA/DE/" + f, index_col=0)
+    resFull = resFull[resFull["Upreg"] == 1]
+    resFull.sort_values(["pval", "stat"], ascending=[True, False], inplace=True)
     res = pd.read_csv(paths.outputDir + "rnaseq/TCGA/DE/" + f, index_col=0)["Upreg"] 
-    vals = res.index[res==1].values
-    if len(vals) == 0:
+    vals = resFull.index[:topK].values
+    if res.sum() == 0:
         continue
     indices[name] = vals
+   
 
 # %%
 # Build matrix
@@ -77,16 +92,20 @@ for i, k in enumerate(indices.keys()):
 mat = csr_matrix((data, (rows, cols)), shape=(len(indices), np.max(cols)+1), dtype=bool)
 mat = pd.DataFrame(mat.todense(), index=indices.keys())
 mat = mat.loc[mat.sum(axis=1)>100]
-mat = mat.loc[:, mat.sum(axis=0) >= 1]
+mat = mat.loc[:, (mat.mean(axis=0) <= 0.1) & (mat.sum(axis=0) >= 2)]
+
+from sklearn.feature_extraction.text import TfidfTransformer
+mat
 # %%
 # UMAP
 import umap
 from lib.utils import plot_utils
-embedding = umap.UMAP(n_neighbors=15, min_dist=0.0, metric="yule", random_state=42).fit_transform(mat)
+embedding = umap.UMAP(n_neighbors=10, min_dist=0.0, metric="yule", verbose=True, n_epochs=5000, random_state=42).fit_transform(mat)
 import plotly.express as px
 df = pd.DataFrame(embedding, columns=["x","y"])
 tissue = pd.Series(mat.index).str.split("_", expand=True)
 df[["Orig", "Annot", "State"]] = tissue
+df["Annot"] = df["Annot"].str.replace("-", "/")
 annot, palette, colors = plot_utils.applyPalette(df["Annot"],
                                                 np.unique(df["Annot"]),
                                                  paths.polIIannotationPalette, ret_labels=True)
@@ -176,11 +195,19 @@ for i in range(len(dst)):
             vals.append([dst.iloc[i,j],"Not matching", dst.index[i], dst.index[j]])
 yuleDf = pd.DataFrame(vals, columns=["Yule coefficient", "Annotation", "M1", "M2"])
 plt.figure(dpi=500)
-sns.boxplot(data=yuleDf, x="Annotation", y="Yule coefficient", showfliers=False)
+sns.boxplot(data=yuleDf, x="Annotation", y="Yule coefficient", showfliers=False, order=["Matching", "Not matching"])
 sns.stripplot(data=yuleDf, x="Annotation", y="Yule coefficient", s=1.0, dodge=True, jitter=0.4, linewidths=1.0)
 pval = mannwhitneyu(yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Not matching'], yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Matching'])[1]
 plt.title(f"pval={pval}")
 plt.savefig(figPath + "yule_matching.pdf")
+plt.show()
+plt.close()
+plt.figure(dpi=500)
+sns.violinplot(data=yuleDf, x="Annotation", y="Yule coefficient", showfliers=False, order=["Matching", "Not matching"])
+# sns.stripplot(data=yuleDf, x="Annotation", y="Yule coefficient", s=1.0, dodge=True, jitter=0.4, linewidths=1.0)
+pval = mannwhitneyu(yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Not matching'], yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Matching'])[1]
+plt.title(f"pval={pval}")
+plt.savefig(figPath + "yule_matching_violin.pdf")
 plt.show()
 # %%
 fig = px.strip(data_frame=yuleDf, x="Annotation", y="Yule coefficient",hover_data=["M1", "M2"])
@@ -212,3 +239,55 @@ fig = px.strip(data_frame=yuleDf, x="Annotation", y="Yule coefficient",hover_dat
 fig.show()
 # %%
 dst.to_csv(figPath + "heatmapMetacluster.csv")
+# %%
+# UMAP 3D
+import umap
+from lib.utils import plot_utils
+embedding = umap.UMAP(10, n_components=3, min_dist=0.0, metric="yule", n_epochs=5000,random_state=42).fit_transform(mat)
+import plotly.express as px
+df = pd.DataFrame(embedding, columns=["x","y","z"])
+tissue = pd.Series(mat.index).str.split("_", expand=True)
+df[["Orig", "Annot", "State"]] = tissue
+df["Annot"] = df["Annot"].str.replace("-", "/")
+annot, palette, colors = plot_utils.applyPalette(df["Annot"],
+                                                np.unique(df["Annot"]),
+                                                 paths.polIIannotationPalette, ret_labels=True)
+palettePlotly = [f"rgb({int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)})" for c in palette]
+colormap = dict(zip(annot, palettePlotly))     
+# %%
+import plotly.graph_objects as go
+all_figs = []
+for c in df["Annot"]:
+    tagged = embedding[df["Annot"]==c]
+    j = 0
+    k = 0
+    for i in range(0, int((len(tagged)**2-len(tagged))/2)):
+        j += 1
+        print(i, j, k)
+        fig1 = px.line_3d(x=tagged[[j,k], 0], y=tagged[[j,k], 1], z=tagged[[j,k], 2])
+        fig1.update_traces(line=dict(color="rgba" + colormap[c][3:-1] + ",0.5)", width=2))
+        all_figs.append(fig1)
+        if j == len(tagged)-1:
+            k += 1
+            j = k
+fig = px.scatter_3d(df, x="x", y="y", z="z", color="Annot", color_discrete_map=colormap, symbol="Orig",
+                hover_data=['Orig', "State"], width=1200, height=800)
+fig.update_traces(marker=dict(size=50/np.sqrt(len(df))))
+fig.show()
+fig.write_html(figPath + "metacluster_umap3d.pdf" + ".html")
+import operator
+import functools
+fig3 = go.Figure(data=functools.reduce(operator.add, [_.data for _ in all_figs]) + fig.data)
+fig3.update_layout(
+    autosize=False,
+    width=1200,
+    height=800)
+fig3.show()
+fig3.write_html(figPath + "metacluster_umap3d_lines.pdf" + ".html")
+# %%
+fig = px.bar(x=mat.index[row_order], y=mat.sum(axis=1)[row_order], width=2000)
+fig.update_layout(xaxis=dict( tickvals=np.arange(len(dst))))
+fig.show()
+fig.write_image(figPath + "n_markers.pdf")
+fig.write_html(figPath + "n_markers.pdf" + ".html")
+# %%

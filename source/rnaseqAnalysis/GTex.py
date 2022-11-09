@@ -2,6 +2,8 @@
 import numpy as np
 import pandas as pd
 import os
+import sys
+sys.path.append("./")
 import matplotlib.pyplot as plt
 from settings import params, paths
 from lib import rnaseqFuncs
@@ -20,13 +22,16 @@ import scipy.stats as ss
 
 countDir = paths.countsGTEx
 try:
+    os.mkdir(paths.outputDir + "rnaseq/")
+except FileExistsError:
+    pass
+try:
     os.mkdir(paths.outputDir + "rnaseq/gtex_rnaseq/")
 except FileExistsError:
     pass
 # %%
 annotation = pd.read_csv(paths.gtexData + "/tsvs/sample.tsv", 
                         sep="\t", index_col="specimen_id")
-
 colors = pd.read_csv(paths.gtexData + "colors.txt", 
                         sep="\t", index_col="tissue_site_detail")
 dlFiles = os.listdir(countDir + "BG/")
@@ -52,9 +57,10 @@ for f in dlFiles:
         continue
 allReads = np.array(allReads)
 counts = np.concatenate(counts, axis=1).T
+conv = pd.read_csv(paths.tissueToSimplified, sep="\t", index_col="Tissue")
+annotation.loc[order, "tissue_type"] = conv.loc[annotation.loc[order]["tissue_type"].values]["Simplified"].values
 annTxt = annotation.loc[order]["tissue_type"]
-ann, eq = pd.factorize(annotation.loc[order]["tissue_type"])
-
+ann, eq = pd.factorize(annTxt)
 # %%
 nzCounts = rnaseqFuncs.filterDetectableGenes(counts, readMin=1, expMin=3)
 counts = counts[:, nzCounts]
@@ -115,7 +121,6 @@ plt.savefig(paths.outputDir + "rnaseq/gtex_rnaseq/umap_samples_bad.pdf")
 plt.show()
 plt.close()
 # %%
-# %%
 from lib.pyGREATglm import pyGREAT as pyGREAT
 enricher = pyGREAT(paths.GOfile,
                           geneFile=paths.gencode,
@@ -151,9 +156,10 @@ for i in np.unique(ann):
     res["lfc"] = np.log2(fc)
     res["Upreg"] = sig.astype(int)
     res = res.iloc[orderDE]
-    res.to_csv(paths.outputDir + f"rnaseq/gtex_rnaseq/DE/res_{eq[i]}.csv")
+    fname = eq[i].replace("/", "-")
+    res.to_csv(paths.outputDir + f"rnaseq/gtex_rnaseq/DE/res_{fname}.csv")
     test = consensuses[nzCounts][sig]
-    test.to_csv(paths.outputDir + f"rnaseq/gtex_rnaseq/DE/bed_{eq[i]}", header=None, sep="\t", index=None)
+    test.to_csv(paths.outputDir + f"rnaseq/gtex_rnaseq/DE/bed_{fname}", header=None, sep="\t", index=None)
     if len(test) == 0:
         continue
     '''
@@ -239,7 +245,8 @@ for test in sharedAnnots:
     plt.xlabel("Pol II probe % of biotype (+gaussian noise to unstack points)")
     plt.ylabel("Fraction of reads in biotype")
     plt.title(test)
-    plt.savefig(paths.outputDir + f"rnaseq/gtex_rnaseq/polII_vs_rnaseq/{test}.pdf")
+    fname = eq[i].replace("/", "-")
+    plt.savefig(paths.outputDir + f"rnaseq/gtex_rnaseq/polII_vs_rnaseq/{fname}.pdf")
     plt.close()
 # %%
 # Boxplot Top 50% pct Pol II vs bottom 50% Pol II Biotype
@@ -253,11 +260,12 @@ for test in sharedAnnots:
     lower = rnaseqPerCategory[idx1][signalPerCategory[idx2] <= 0.5]
     stat, p = ss.mannwhitneyu(upper, lower)
     plt.figure(dpi=500)
+    fname = eq[i].replace("/", "-")
     sns.boxplot(data=signal, x="Category", y="Fraction of RNA-seq reads in probe", showfliers=False)
     sns.stripplot(data=signal, x="Category", y="Fraction of RNA-seq reads in probe", dodge=True, 
                 edgecolor="black", jitter=1/4, alpha=1.0, s=0.5)
     plt.title(test + f" (p-value: {p}, direction: {np.sign(np.median(upper)-np.median(lower))})")
-    plt.savefig(paths.outputDir + f"rnaseq/gtex_rnaseq/polII_vs_rnaseq/boxplot_{test}.pdf")
+    plt.savefig(paths.outputDir + f"rnaseq/gtex_rnaseq/polII_vs_rnaseq/boxplot_{fname}.pdf")
     plt.close()
 # %%
 # HM FC enrich Top 50% pct Pol II vs bottom 50% Pol II Biotype
@@ -355,7 +363,7 @@ plt.figure(dpi=500)
 plot_utils.plotHC(clippedSQ.T[top50], annotation.loc[order]["tissue_type"],
                   mtx[top50],
                   paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder, 
-                  labelsPct=annotationDf.loc[polIIMerger.labels]["tissue_type"])
+                  labelsPct=annotationDf.loc[polIIMerger.labels]["Annotation"])
 plt.savefig(paths.outputDir + "rnaseq/gtex_rnaseq/HM_top50Pol_pol2_order_pol2_signal.pdf")
 plt.close()
 # %%
@@ -371,7 +379,7 @@ plt.figure(dpi=500)
 plot_utils.plotHC(clippedSQ.T, annotation.loc[order]["tissue_type"],
                   mtx,
                   paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder, 
-                  labelsPct=annotationDf.loc[polIIMerger.labels]["tissue_type"])
+                  labelsPct=annotationDf.loc[polIIMerger.labels]["Annotation"])
 plt.savefig(paths.outputDir + "rnaseq/gtex_rnaseq/HM_all_encode_order_pol2_signal.pdf")
 plt.show()
 plt.close()
@@ -388,7 +396,7 @@ meanNormed = countModel.normed/np.mean(countModel.normed, axis=0)
 epsilon = 1/np.nanmax(np.log(meanNormed), axis=0)
 clippedSQ = np.log10(1+countModel.normed)
 plt.figure(dpi=500)
-plot_utils.plotHC(clippedSQ.T[top50], annotation.loc[order]["Annotation"],
+plot_utils.plotHC(clippedSQ.T[top50], annotation.loc[order]["tissue_type"],
                   mtx[top50],
                   paths.polIIannotationPalette, rowOrder=rowOrder, colOrder=colOrder, 
                   labelsPct=annotationDf.loc[polIIMerger.labels]["Annotation"])

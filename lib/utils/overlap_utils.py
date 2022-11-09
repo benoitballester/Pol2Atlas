@@ -94,7 +94,7 @@ def computeEnrichVsBg(catalog, universe, query, useSummit=True):
     return pvals, fc, qvals, k, n
 
 
-def computeEnrichForLabels(catalog, universe, labels, savePathPrefix=None, useSummit=True):
+def computeEnrichForLabels(catalog, universe, labels, savePathPrefix=None, useSummit=True, fileFmt="pdf"):
     enrichmentsP = []
     enrichmentsFC = []
     for i in np.unique(labels):
@@ -115,7 +115,7 @@ def computeEnrichForLabels(catalog, universe, labels, savePathPrefix=None, useSu
         fig, ax = plt.subplots(figsize=(2,2), dpi=500)
         plot_utils.enrichBarplot(ax, enrichmentsFC[i], enrichmentsQ[i], fcMin=2.0, order_by="qval")
         if savePathPrefix is not None:
-            fig.savefig(f"{savePathPrefix}_fc_{i}.png", bbox_inches="tight")
+            fig.savefig(f"{savePathPrefix}_fc_{i}.{fileFmt}", bbox_inches="tight")
         fig.show()
     return enrichmentsFC, enrichmentsQ, enrichmentsP
 

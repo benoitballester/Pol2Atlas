@@ -20,7 +20,7 @@ consensuses.columns = ["Chromosome", "Start", "End", "Name"]
 consensusesPr = pr.PyRanges(consensuses)
 clusts = np.loadtxt(paths.outputDir + "clusterConsensuses_Labels.txt").astype(int)
 # %%
-from lib.pyGREAT_normal import pyGREAT as pyGREATglm
+from lib.pyGREATglm import pyGREAT as pyGREATglm
 
 enricherglm = pyGREATglm(paths.GOfile,
                           geneFile=paths.gencode,
@@ -70,6 +70,7 @@ def symlog_bins(arr, n_bins, a, b, zero_eps=0.1, padding=0):
     
     result = neg_bin_edges + zero_bin_edges + pos_bin_edges
     return result
+    
 class distPlotter:
     def __init__(self, gencode, query, xmin, xmax, extclip=10000):
         self.xmin = xmin

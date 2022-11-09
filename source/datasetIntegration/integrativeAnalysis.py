@@ -128,7 +128,7 @@ for i in range(np.max(merger.clustered[0])+1):
     testReg = pr.PyRanges(testReg)
     goEnrich = enricher.findEnriched(testReg, pr.read_bed(paths.outputDir+"consensuses.bed"))
     goEnrich.to_csv(paths.outputDir + f"cluster_enrichments/go_enrich_{i}.csv")
-    enricher.plotEnrichs(goEnrich, savePath=paths.outputDir + f"cluster_enrichments/GO_fc_{i}.png")
+    enricher.plotEnrichs(goEnrich, savePath=paths.outputDir + f"cluster_enrichments/GO_fc_{i}.pdf")
     if (goEnrich["BH corrected p-value"] < 0.05).sum() >= 2:
-        enricher.clusterTreemap(goEnrich, output=paths.outputDir + f"cluster_enrichments/GO_treemap_{i}.png")
+        enricher.clusterTreemap(goEnrich, output=paths.outputDir + f"cluster_enrichments/GO_treemap_{i}.pdf")
 # %%

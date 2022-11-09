@@ -6,29 +6,38 @@ sys.setrecursionlimit(10000)
 import numpy as np
 import pandas as pd
 from statsmodels.stats.multitest import fdrcorrection
-from settings import paths
+from settings import params, paths
 
-figPath = paths.outputDir + "rnaseq/metacluster_10pct_topK_noPol/"
+figPath = paths.outputDir + "rnaseq/metacluster_10pct/"
 try:
     os.mkdir(figPath)
 except FileExistsError:
     pass
 indices = dict()
-topK = 1000
 # %%
 filesEncode = os.listdir(paths.outputDir + "rnaseq/encode_rnaseq/DE/")
 filesEncode = [f for f in filesEncode if f.startswith("res_")]
 for f in filesEncode:
     name = "Encode_" + f[4:-4]
-    resFull = pd.read_csv(paths.outputDir + "rnaseq/encode_rnaseq/DE/" + f, index_col=0)
-    resFull = resFull[resFull["Upreg"] == 1]
-    resFull.sort_values(["pval", "stat"], ascending=[True, False], inplace=True)
     res = pd.read_csv(paths.outputDir + "rnaseq/encode_rnaseq/DE/" + f, index_col=0)["Upreg"] 
-    vals = resFull.index[:topK].values
+    vals = res.index[res==1].values
     if len(vals) < 100:
         continue
     indices[name] = vals
 
+# %%
+filesPol2 = os.listdir(paths.outputDir + "enrichedPerAnnot/")
+filesPol2 = [f for f in filesPol2 if not f.endswith("_qvals.bed")]
+for f in filesPol2:
+    name = "Pol2_" + f[:-4]
+    try:
+        bed = pd.read_csv(paths.outputDir + "enrichedPerAnnot/" + f, header=None, sep="\t")
+        if len(bed) < 100:
+            continue
+        indices[name] = bed[3].values
+    except pd.errors.EmptyDataError:
+        continue
+# matPolII = pd.DataFrame(matEncode, index=[f"Pol2_f[4:-4]" for f in filesEncode])
 # %%
 
 # Files GTex
@@ -36,32 +45,23 @@ filesEncode = os.listdir(paths.outputDir + "rnaseq/gtex_rnaseq/DE/")
 filesEncode = [f for f in filesEncode if f.startswith("res_")]
 for f in filesEncode:
     name = "GTex_" + f[4:-4]
-    resFull = pd.read_csv(paths.outputDir + "rnaseq/gtex_rnaseq/DE/" + f, index_col=0)
-    resFull = resFull[resFull["Upreg"] == 1]
-    resFull.sort_values(["pval", "stat"], ascending=[True, False], inplace=True)
     res = pd.read_csv(paths.outputDir + "rnaseq/gtex_rnaseq/DE/" + f, index_col=0)["Upreg"] 
-    vals = resFull.index[:topK].values
+    vals = res.index[res==1].values
     if len(vals) == 0:
         continue
     indices[name] = vals
 
-# %%
+
 # Files TCGA
 filesEncode = os.listdir(paths.outputDir + "rnaseq/TCGA/DE/")
 filesEncode = [f for f in filesEncode if f.startswith("res_")]
 for f in filesEncode:
     name = "TCGA_" + f[4:-4]
-    if name == "TCGA_nan":
-        continue
-    resFull = pd.read_csv(paths.outputDir + "rnaseq/TCGA/DE/" + f, index_col=0)
-    resFull = resFull[resFull["Upreg"] == 1]
-    resFull.sort_values(["pval", "stat"], ascending=[True, False], inplace=True)
     res = pd.read_csv(paths.outputDir + "rnaseq/TCGA/DE/" + f, index_col=0)["Upreg"] 
-    vals = resFull.index[:topK].values
-    if res.sum() == 0:
+    vals = res.index[res==1].values
+    if len(vals) == 0:
         continue
     indices[name] = vals
-   
 
 # %%
 # Build matrix
@@ -76,13 +76,10 @@ for i, k in enumerate(indices.keys()):
     data += [True]*len(idx)
 mat = csr_matrix((data, (rows, cols)), shape=(len(indices), np.max(cols)+1), dtype=bool)
 mat = pd.DataFrame(mat.todense(), index=indices.keys())
-mat = mat.loc[mat.sum(axis=1)>100]
-tf = mat.values / mat.values.sum(axis=1).reshape(-1, 1)
-tf = tf[:, (mat.values.mean(axis=0) <= 0.1) & (mat.values.sum(axis=0) >= 2)]
+mat = mat.loc[mat.sum(axis=1) > 100]
 mat = mat.loc[:, (mat.mean(axis=0) <= 0.1) & (mat.sum(axis=0) >= 2)]
-
 from sklearn.feature_extraction.text import TfidfTransformer
-mat
+tf = TfidfTransformer(norm=None, smooth_idf=False).fit_transform(mat.values).toarray()
 # %%
 # UMAP
 import umap
@@ -92,6 +89,7 @@ import plotly.express as px
 df = pd.DataFrame(embedding, columns=["x","y"])
 tissue = pd.Series(mat.index).str.split("_", expand=True)
 df[["Orig", "Annot", "State"]] = tissue
+df["Annot"] = df["Annot"].str.replace("-", "/")
 annot, palette, colors = plot_utils.applyPalette(df["Annot"],
                                                 np.unique(df["Annot"]),
                                                  paths.polIIannotationPalette, ret_labels=True)
@@ -149,13 +147,14 @@ def color(color, text):
     return s
 
 # Complete linkage hc
-linkage = fastcluster.linkage(mat, "average", metric)
-row_order = hierarchy.leaves_list(linkage)
+idf = np.log(mat.sum(axis=0).values)
 dst = -sd.squareform(sd.pdist(mat, metric))
+linkage = fastcluster.linkage(-sd.squareform(dst), "average", metric)
+row_order = hierarchy.leaves_list(linkage)
 dst = pd.DataFrame(dst, columns=mat.index, index=mat.index)
 dst = dst.iloc[row_order].iloc[:, row_order]
 # Plot
-fig = px.imshow(dst, width=2580, height=1440)
+""" fig = px.imshow(dst, width=2580, height=1440)
 fig.update_layout(yaxis_nticks=len(dst),
                   xaxis_nticks=len(dst))
 colsInt = np.array(colors*255).astype(int)[row_order]
@@ -164,12 +163,66 @@ fig.update_layout(yaxis=dict(tickmode='array', ticktext=ticktext, tickvals=np.ar
 fig.update_layout(xaxis=dict(tickmode='array', ticktext=ticktext, tickvals=np.arange(len(dst))))
 fig.show()
 fig.write_image(figPath + "metacluster.pdf")
-fig.write_html(figPath + "metacluster.pdf" + ".html")
+fig.write_html(figPath + "metacluster.pdf" + ".html") """
+# %%
+import matplotlib.pyplot as plt
+import seaborn as sns
+plt.figure(dpi=500)
+ax=sns.clustermap(dst, row_cluster=False, col_cluster=False,
+                  row_colors=colors[row_order],col_colors=colors[row_order], 
+                  linewidth=0, xticklabels=True, 
+                  yticklabels=True, cmap="rocket")
+ax.ax_heatmap.axes.tick_params(right=False, bottom=False)
+plt.tight_layout()
+plt.gca().set_aspect(1.0)
+for ticklabel, tickcolor in zip(ax.ax_heatmap.axes.get_xticklabels(), colors[row_order]):
+    ticklabel.set_color(tickcolor)
+for ticklabel, tickcolor in zip(ax.ax_heatmap.axes.get_yticklabels(), colors[row_order]):
+    ticklabel.set_color(tickcolor)
+ticks = [ticklabel.get_text().replace("GTex", "GTEx").replace("Encode", "ENCODE") for ticklabel in ax.ax_heatmap.axes.get_xticklabels()]
+ax.ax_heatmap.axes.set_xticklabels(ticks,fontsize=5)
+ax.ax_heatmap.axes.set_yticklabels(ticks,fontsize=5)
+ax.ax_heatmap.axes.tick_params(axis='both', which='major', pad=-2)
+box_heatmap = ax.ax_heatmap.get_position()
+ax_row_colors = ax.ax_row_colors
+box = ax_row_colors.get_position()
+ax_row_colors.set_position([box_heatmap.x0-box.width, box.y0, box.width, box_heatmap.height])
+ax_col_colors = ax.ax_col_colors
+box = ax_col_colors.get_position()
+ax_col_colors.set_position([box_heatmap.x0, box_heatmap.y1, box.width, box.height])
+plt.savefig(figPath + "metacluster_sns.pdf")
+plt.show()
+# %%
+import matplotlib.pyplot as plt
+import seaborn as sns
+plt.figure(dpi=500)
+ax=sns.clustermap(dst, row_cluster=False, col_cluster=False,
+                  row_colors=colors[row_order],col_colors=colors[row_order], 
+                  linewidth=0, xticklabels=True, 
+                  yticklabels=True, cmap="viridis")
+ax.ax_heatmap.axes.tick_params(right=False, bottom=False)
+plt.tight_layout()
+plt.gca().set_aspect(1.0)
+for ticklabel, tickcolor in zip(ax.ax_heatmap.axes.get_xticklabels(), colors[row_order]):
+    ticklabel.set_color(tickcolor)
+for ticklabel, tickcolor in zip(ax.ax_heatmap.axes.get_yticklabels(), colors[row_order]):
+    ticklabel.set_color(tickcolor)
+ticks = [ticklabel.get_text().replace("GTex", "GTEx").replace("Encode", "ENCODE") for ticklabel in ax.ax_heatmap.axes.get_xticklabels()]
+ax.ax_heatmap.axes.set_xticklabels(ticks,fontsize=5)
+ax.ax_heatmap.axes.set_yticklabels(ticks,fontsize=5)
+ax.ax_heatmap.axes.tick_params(axis='both', which='major', pad=-2)
+box_heatmap = ax.ax_heatmap.get_position()
+ax_row_colors = ax.ax_row_colors
+box = ax_row_colors.get_position()
+ax_row_colors.set_position([box_heatmap.x0-box.width, box.y0, box.width, box_heatmap.height])
+ax_col_colors = ax.ax_col_colors
+box = ax_col_colors.get_position()
+ax_col_colors.set_position([box_heatmap.x0, box_heatmap.y1, box.width, box.height])
+plt.savefig(figPath + "metacluster_sns_ben_gradient_bizarre.pdf")
+plt.show()
 # %%
 # Matching vs non-matching
 from scipy.stats import mannwhitneyu
-import matplotlib.pyplot as plt
-import seaborn as sns
 vals = []
 tissues = pd.Series(dst.index).str.split("_", expand=True)
 for i in range(len(dst)):
@@ -191,6 +244,31 @@ plt.show()
 fig = px.strip(data_frame=yuleDf, x="Annotation", y="Yule coefficient",hover_data=["M1", "M2"])
 fig.show()
 # %%
+# Pol 2 Matching vs non-matching
+import matplotlib.pyplot as plt
+import seaborn as sns
+vals = []
+tissues = pd.Series(dst.index).str.split("_", expand=True)
+for i in range(len(dst)):
+    for j in range(1+i, len(dst)):
+        if tissues[0][i] == "Pol2":
+            if tissues[1][i] == tissues[1][j]:
+                print(dst.index[i], dst.columns[j])
+                vals.append([dst.iloc[i,j], "Matching", dst.index[i], dst.index[j]])
+            else:
+                vals.append([dst.iloc[i,j],"Not matching", dst.index[i], dst.index[j]])
+yuleDf = pd.DataFrame(vals, columns=["Yule coefficient", "Annotation", "M1", "M2"])
+plt.figure(dpi=500)
+sns.boxplot(data=yuleDf, x="Annotation", y="Yule coefficient", showfliers=False)
+sns.stripplot(data=yuleDf, x="Annotation", y="Yule coefficient", s=1.0, dodge=True, jitter=0.4, linewidths=1.0)
+pval = mannwhitneyu(yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Not matching'], yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Matching'])[1]
+plt.title(f"pval={pval}")
+plt.savefig(figPath + "yule_matching_pol2.pdf")
+plt.show()
+# %%
+fig = px.strip(data_frame=yuleDf, x="Annotation", y="Yule coefficient",hover_data=["M1", "M2"])
+fig.show()
+# %%
 dst.to_csv(figPath + "heatmapMetacluster.csv")
 # %%
 # UMAP 3D
@@ -201,6 +279,7 @@ import plotly.express as px
 df = pd.DataFrame(embedding, columns=["x","y","z"])
 tissue = pd.Series(mat.index).str.split("_", expand=True)
 df[["Orig", "Annot", "State"]] = tissue
+df["Annot"] = df["Annot"].str.replace("-", "/")
 annot, palette, colors = plot_utils.applyPalette(df["Annot"],
                                                 np.unique(df["Annot"]),
                                                  paths.polIIannotationPalette, ret_labels=True)
@@ -239,7 +318,49 @@ fig3.write_html(figPath + "metacluster_umap3d_lines.pdf" + ".html")
 # %%
 fig = px.bar(x=mat.index[row_order], y=mat.sum(axis=1)[row_order], width=2000)
 fig.update_layout(xaxis=dict( tickvals=np.arange(len(dst))))
+fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+fig.update_layout(xaxis=dict(showgrid=False), yaxis=dict(showgrid=False))
 fig.show()
 fig.write_image(figPath + "n_markers.pdf")
 fig.write_html(figPath + "n_markers.pdf" + ".html")
+# %%
+fig = px.bar(x=mat.index[row_order], y=mat.sum(axis=1)[row_order], width=2000)
+fig.update_layout(xaxis=dict( tickvals=np.arange(len(dst))))
+fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+fig.update_layout(xaxis=dict(showgrid=False), yaxis=dict(showgrid=False))
+fig.show()
+fig.write_image(figPath + "n_markers_nobg.pdf")
+fig.write_html(figPath + "n_markers_nobg.pdf" + ".html")
+# %%
+fig = px.bar(x=mat.index[row_order], y=mat.sum(axis=1)[row_order], width=2000, log_y=True)
+fig.update_layout(xaxis=dict( tickvals=np.arange(len(dst))))
+fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+fig.update_layout(xaxis=dict(showgrid=False), yaxis=dict(showgrid=False))
+fig.show()
+fig.write_image(figPath + "n_markers_nobg_logy.pdf")
+fig.write_html(figPath + "n_markers_nobg_logy.pdf" + ".html")
+# %%
+try:
+    os.mkdir(figPath + "markerCount/")
+except FileExistsError:
+    pass
+consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None, usecols=[0,1,2,3,4])
+for t in np.unique(tissue[1].values):
+    copy = consensuses.copy()
+    copy[4] = 0
+    nMarkers = mat[tissue[1].values == t].sum(axis=0)
+    copy.loc[nMarkers.index, 4] = nMarkers.values
+    copy.to_csv(figPath + f"markerCount/allwithCounts_{t}.bed", header=None, index=None, sep="\t")
+    copy[4] = 0
+    nMarkers = mat[tissue[1].values == t].mean(axis=0)
+    copy.loc[nMarkers.index, 4] = nMarkers.values
+    copy = copy[copy[4] > 0.99]
+    copy[4] = copy[4].astype(int)
+    copy.to_csv(figPath + f"markerCount/allDatasets_{t}.bed", header=None, index=None, sep="\t")
+    copy = consensuses.copy()
+    copy[4] = 0
+    nMarkers = mat[tissue[1].values == t].sum(axis=0).astype(int)
+    copy.loc[nMarkers.index, 4] = nMarkers.values
+    copy = copy[copy[4] >= 2]
+    copy.to_csv(figPath + f"markerCount/min2_{t}.bed", header=None, index=None, sep="\t")
 # %%

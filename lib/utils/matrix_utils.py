@@ -16,10 +16,8 @@ def graphClustering(matrix, metric, k="auto", r=1.0, snn=True,
 
     Parameters
     ----------
-    metric: "auto" or string (optional, default "auto")
-        Metric used for nn query. If set to "auto", it will use the jaccard index 
-        on the experiments and the hamming distance on the consensuses
-        if the peak scoring is set to binary, or pearson correlation otherwise. 
+    metric: string (optional, default "auto")
+        Metric used for nn query. 
         See the pynndescent documentation for a list of available metrics.
 
     r: float (optional, default 1.0)
@@ -34,13 +32,13 @@ def graphClustering(matrix, metric, k="auto", r=1.0, snn=True,
         If set to True, it will perform the Shared Nearest Neighbor Graph 
         clustering variant, where the edges of the graph are weighted according 
         to the number of shared nearest neighbors between two nodes. Otherwise,
-        all edges are equally weighted. SNN can produce a more refined clustering 
+        all edges are equally weighted. SNN usually produces a more refined clustering 
         but it can also hallucinate some clusters.
     
     approx: Boolean (optional, default True)
         Whether to use approximate nearest neighbors using nearest neighbor descent
         or exact nearest neighbors. Exact method will take very long on a large number of
-        points (>15000).
+        points (>15000-20000).
 
     restarts: integer (optional, default 1)
         The number of times to restart the graph partitionning algorithm, before keeping 
@@ -77,7 +75,6 @@ def graphClustering(matrix, metric, k="auto", r=1.0, snn=True,
                 if snn:
                     # Weight the edges based on the number of shared nearest neighbors between two nodes
                     weights[i*nnGraph.shape[1]+j] = len(np.intersect1d(nnGraph[i], nnGraph[link]))
-    
     graph = igraph.Graph(n=len(nnGraph), edges=edges, directed=True)
     # Restart clustering multiple times and keep the best partition
     best = -np.inf

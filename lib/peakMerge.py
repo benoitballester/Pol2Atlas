@@ -640,7 +640,9 @@ class peakMerger:
                 link = linkage_vector(allProportions, method="ward")
                 rowOrder = hierarchy.leaves_list(link)
                 np.savetxt(self.outputPath  + "clusterBarplotOrder.txt", rowOrder)
+
                 for i, o in enumerate(rowOrder):
+                    print(rowOrder[::-1][i])
                     pcts = allProportions[o]
                     runningSum = 0
                     reOrdered = np.argsort(pcts)[::-1]
@@ -852,7 +854,7 @@ class peakMerger:
                     os.mkdir(self.outputPath + "enrichedPerAnnot/")
                 except FileExistsError:
                     pass
-                fname = eq[i].replace("/", "_")
+                fname = eq[i].replace("/", "-")
                 sigConsensuses.to_csv(self.outputPath + f"enrichedPerAnnot/{fname}.bed", header=False, index=False, sep="\t")
                 pd.DataFrame(np.array([pvals, qvals, fc]).T, columns=["pval", "qval", "fc"], index=np.arange(len(pvals))).to_csv(self.outputPath + f"enrichedPerAnnot/{fname}_qvals.bed", sep="\t")
             perAnnotQvals[eq[i]] = qvals[sig]

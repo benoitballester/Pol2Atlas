@@ -6,9 +6,10 @@ sys.setrecursionlimit(10000)
 import numpy as np
 import pandas as pd
 from statsmodels.stats.multitest import fdrcorrection
-from settings import paths
+from settings import params, paths
 
-figPath = paths.outputDir + "rnaseq/metacluster_10pct_topK/"
+
+figPath = paths.outputDir + "rnaseq/metacluster_10pct_topK_noPol/"
 try:
     os.mkdir(figPath)
 except FileExistsError:
@@ -29,21 +30,6 @@ for f in filesEncode:
         continue
     indices[name] = vals
 
-# %%
-filesPol2 = os.listdir(paths.outputDir + "enrichedPerAnnot/")
-filesPol2 = [f for f in filesPol2 if f.endswith("_qvals.bed")]
-for f in filesPol2:
-    name = "Pol2_" + f[:-10]
-    try:
-        resFull = pd.read_csv(paths.outputDir + "enrichedPerAnnot/" + f, sep="\t", index_col=0)
-        resFull = resFull[resFull["qval"] < 0.05]
-        resFull.sort_values(["pval", "fc"], ascending=[True, False], inplace=True)
-        if np.sum(1-resFull["qval"].values) < 100:
-            continue
-        indices[name] = resFull.index[:topK].values
-    except pd.errors.EmptyDataError:
-        continue
-# matPolII = pd.DataFrame(matEncode, index=[f"Pol2_f[4:-4]" for f in filesEncode])
 # %%
 
 # Files GTex
@@ -92,6 +78,8 @@ for i, k in enumerate(indices.keys()):
 mat = csr_matrix((data, (rows, cols)), shape=(len(indices), np.max(cols)+1), dtype=bool)
 mat = pd.DataFrame(mat.todense(), index=indices.keys())
 mat = mat.loc[mat.sum(axis=1)>100]
+tf = mat.values / mat.values.sum(axis=1).reshape(-1, 1)
+tf = tf[:, (mat.values.mean(axis=0) <= 0.1) & (mat.values.sum(axis=0) >= 2)]
 mat = mat.loc[:, (mat.mean(axis=0) <= 0.1) & (mat.sum(axis=0) >= 2)]
 
 from sklearn.feature_extraction.text import TfidfTransformer
@@ -199,31 +187,6 @@ sns.stripplot(data=yuleDf, x="Annotation", y="Yule coefficient", s=1.0, dodge=Tr
 pval = mannwhitneyu(yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Not matching'], yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Matching'])[1]
 plt.title(f"pval={pval}")
 plt.savefig(figPath + "yule_matching.pdf")
-plt.show()
-# %%
-fig = px.strip(data_frame=yuleDf, x="Annotation", y="Yule coefficient",hover_data=["M1", "M2"])
-fig.show()
-# %%
-# Pol 2 Matching vs non-matching
-import matplotlib.pyplot as plt
-import seaborn as sns
-vals = []
-tissues = pd.Series(dst.index).str.split("_", expand=True)
-for i in range(len(dst)):
-    for j in range(1+i, len(dst)):
-        if tissues[0][i] == "Pol2":
-            if tissues[1][i] == tissues[1][j]:
-                print(dst.index[i], dst.columns[j])
-                vals.append([dst.iloc[i,j], "Matching", dst.index[i], dst.index[j]])
-            else:
-                vals.append([dst.iloc[i,j],"Not matching", dst.index[i], dst.index[j]])
-yuleDf = pd.DataFrame(vals, columns=["Yule coefficient", "Annotation", "M1", "M2"])
-plt.figure(dpi=500)
-sns.boxplot(data=yuleDf, x="Annotation", y="Yule coefficient", showfliers=False)
-sns.stripplot(data=yuleDf, x="Annotation", y="Yule coefficient", s=1.0, dodge=True, jitter=0.4, linewidths=1.0)
-pval = mannwhitneyu(yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Not matching'], yuleDf['Yule coefficient'][yuleDf['Annotation'] == 'Matching'])[1]
-plt.title(f"pval={pval}")
-plt.savefig(figPath + "yule_matching_pol2.pdf")
 plt.show()
 # %%
 fig = px.strip(data_frame=yuleDf, x="Annotation", y="Yule coefficient",hover_data=["M1", "M2"])

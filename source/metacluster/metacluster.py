@@ -6,9 +6,10 @@ sys.setrecursionlimit(10000)
 import numpy as np
 import pandas as pd
 from statsmodels.stats.multitest import fdrcorrection
-from settings import paths
+from settings import params, paths
 
-figPath = paths.outputDir + "rnaseq/metacluster_10pct/"
+
+figPath = paths.outputDir + "rnaseq/metacluster/"
 try:
     os.mkdir(figPath)
 except FileExistsError:
@@ -77,14 +78,12 @@ for i, k in enumerate(indices.keys()):
 mat = csr_matrix((data, (rows, cols)), shape=(len(indices), np.max(cols)+1), dtype=bool)
 mat = pd.DataFrame(mat.todense(), index=indices.keys())
 mat = mat.loc[mat.sum(axis=1)>100]
-mat = mat.loc[:, (mat.mean(axis=0) <= 0.1) & (mat.sum(axis=0) >= 2)]
-from sklearn.feature_extraction.text import TfidfTransformer
-tf = TfidfTransformer(norm=None, smooth_idf=False).fit_transform(mat.values).toarray()
+mat = mat.loc[:, mat.sum(axis=0) >= 1]
 # %%
 # UMAP
 import umap
 from lib.utils import plot_utils
-embedding = umap.UMAP(n_neighbors=10, min_dist=0.0, metric="yule", verbose=True, n_epochs=5000, random_state=42).fit_transform(mat)
+embedding = umap.UMAP(n_neighbors=15, min_dist=0.0, metric="yule", random_state=42).fit_transform(mat)
 import plotly.express as px
 df = pd.DataFrame(embedding, columns=["x","y"])
 tissue = pd.Series(mat.index).str.split("_", expand=True)
@@ -146,10 +145,9 @@ def color(color, text):
     return s
 
 # Complete linkage hc
-idf = np.log(mat.sum(axis=0).values)
-dst = -sd.squareform(sd.pdist(mat, metric))
-linkage = fastcluster.linkage(-sd.squareform(dst), "average", metric)
+linkage = fastcluster.linkage(mat, "average", metric)
 row_order = hierarchy.leaves_list(linkage)
+dst = -sd.squareform(sd.pdist(mat, metric))
 dst = pd.DataFrame(dst, columns=mat.index, index=mat.index)
 dst = dst.iloc[row_order].iloc[:, row_order]
 # Plot
@@ -215,96 +213,3 @@ fig = px.strip(data_frame=yuleDf, x="Annotation", y="Yule coefficient",hover_dat
 fig.show()
 # %%
 dst.to_csv(figPath + "heatmapMetacluster.csv")
-# %%
-# UMAP 3D
-import umap
-from lib.utils import plot_utils
-embedding = umap.UMAP(10, n_components=3, min_dist=0.0, metric="yule", n_epochs=5000,random_state=42).fit_transform(mat)
-import plotly.express as px
-df = pd.DataFrame(embedding, columns=["x","y","z"])
-tissue = pd.Series(mat.index).str.split("_", expand=True)
-df[["Orig", "Annot", "State"]] = tissue
-annot, palette, colors = plot_utils.applyPalette(df["Annot"],
-                                                np.unique(df["Annot"]),
-                                                 paths.polIIannotationPalette, ret_labels=True)
-palettePlotly = [f"rgb({int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)})" for c in palette]
-colormap = dict(zip(annot, palettePlotly))     
-# %%
-import plotly.graph_objects as go
-all_figs = []
-for c in df["Annot"]:
-    tagged = embedding[df["Annot"]==c]
-    j = 0
-    k = 0
-    for i in range(0, int((len(tagged)**2-len(tagged))/2)):
-        j += 1
-        print(i, j, k)
-        fig1 = px.line_3d(x=tagged[[j,k], 0], y=tagged[[j,k], 1], z=tagged[[j,k], 2])
-        fig1.update_traces(line=dict(color="rgba" + colormap[c][3:-1] + ",0.5)", width=2))
-        all_figs.append(fig1)
-        if j == len(tagged)-1:
-            k += 1
-            j = k
-fig = px.scatter_3d(df, x="x", y="y", z="z", color="Annot", color_discrete_map=colormap, symbol="Orig",
-                hover_data=['Orig', "State"], width=1200, height=800)
-fig.update_traces(marker=dict(size=50/np.sqrt(len(df))))
-fig.show()
-fig.write_html(figPath + "metacluster_umap3d.pdf" + ".html")
-import operator
-import functools
-fig3 = go.Figure(data=functools.reduce(operator.add, [_.data for _ in all_figs]) + fig.data)
-fig3.update_layout(
-    autosize=False,
-    width=1200,
-    height=800)
-fig3.show()
-fig3.write_html(figPath + "metacluster_umap3d_lines.pdf" + ".html")
-# %%
-fig = px.bar(x=mat.index[row_order], y=mat.sum(axis=1)[row_order], width=2000)
-fig.update_layout(xaxis=dict( tickvals=np.arange(len(dst))))
-fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
-fig.update_layout(xaxis=dict(showgrid=False), yaxis=dict(showgrid=False))
-fig.show()
-fig.write_image(figPath + "n_markers.pdf")
-fig.write_html(figPath + "n_markers.pdf" + ".html")
-# %%
-fig = px.bar(x=mat.index[row_order], y=mat.sum(axis=1)[row_order], width=2000)
-fig.update_layout(xaxis=dict( tickvals=np.arange(len(dst))))
-fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
-fig.update_layout(xaxis=dict(showgrid=False), yaxis=dict(showgrid=False))
-fig.show()
-fig.write_image(figPath + "n_markers_nobg.pdf")
-fig.write_html(figPath + "n_markers_nobg.pdf" + ".html")
-# %%
-fig = px.bar(x=mat.index[row_order], y=mat.sum(axis=1)[row_order], width=2000, log_y=True)
-fig.update_layout(xaxis=dict( tickvals=np.arange(len(dst))))
-fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
-fig.update_layout(xaxis=dict(showgrid=False), yaxis=dict(showgrid=False))
-fig.show()
-fig.write_image(figPath + "n_markers_nobg_logy.pdf")
-fig.write_html(figPath + "n_markers_nobg_logy.pdf" + ".html")
-# %%
-try:
-    os.mkdir(figPath + "markerCount/")
-except FileExistsError:
-    pass
-consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None, usecols=[0,1,2,3,4])
-for t in np.unique(tissue[1].values):
-    copy = consensuses.copy()
-    copy[4] = 0
-    nMarkers = mat[tissue[1].values == t].sum(axis=0)
-    copy.loc[nMarkers.index, 4] = nMarkers.values
-    copy.to_csv(figPath + f"markerCount/allwithCounts_{t}.bed", header=None, index=None, sep="\t")
-    copy[4] = 0
-    nMarkers = mat[tissue[1].values == t].mean(axis=0)
-    copy.loc[nMarkers.index, 4] = nMarkers.values
-    copy = copy[copy[4] > 0.99]
-    copy[4] = copy[4].astype(int)
-    copy.to_csv(figPath + f"markerCount/allDatasets_{t}.bed", header=None, index=None, sep="\t")
-    copy = consensuses.copy()
-    copy[4] = 0
-    nMarkers = mat[tissue[1].values == t].sum(axis=0).astype(int)
-    copy.loc[nMarkers.index, 4] = nMarkers.values
-    copy = copy[copy[4] >= 2]
-    copy.to_csv(figPath + f"markerCount/min2_{t}.bed", header=None, index=None, sep="\t")
-# %%

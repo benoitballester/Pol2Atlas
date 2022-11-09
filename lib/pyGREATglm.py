@@ -11,7 +11,7 @@ from scipy.sparse import csr_matrix
 from statsmodels.api import GLM
 from statsmodels.genmod.families.family import Binomial
 from statsmodels.stats.multitest import fdrcorrection
-
+from sklearn.cluster import AgglomerativeClustering
 from .utils import matrix_utils, overlap_utils
 
 maxCores = len(os.sched_getaffinity(0))
@@ -126,6 +126,7 @@ class pyGREAT:
         geneInList = np.isin(list(transcripts[self.gtfGeneCol]), list(allGenes), assume_unique=True)
         reversedTx = transcripts.copy()[["Chromosome", "Start", "End", self.gtfGeneCol, "Strand"]][geneInList]
         self.txList = reversedTx.copy()
+        self.clusters = None
         # Apply infered regulatory logic
         self.geneRegulatory = regLogicGREAT(5000, 1000, 1000000)(reversedTx, self.chrInfo)
         self.geneRegulatory.drop("Strand", 1)
@@ -242,10 +243,32 @@ class pyGREAT:
 
     def clusterTreemap(self, enrichDF, alpha=0.05, score="-log10(qval)", metric="yule", resolution=1.0, output=None):
         sig = enrichDF[enrichDF["BH corrected p-value"] < alpha]
-        clusters = matrix_utils.graphClustering(self.mat.loc[sig.index], 
-                                                metric, k=int(1.0+0.5*np.sqrt(len(sig))), r=resolution, snn=True, 
+        clusters = matrix_utils.graphClustering(self.mat.loc[sig.index].values.astype(bool), 
+                                                metric, k=int(np.sqrt(len(sig))), r=resolution, snn=True, 
                                                 approx=False, restarts=10)
         sig["Cluster"] = clusters
+        sig["Name"] = [customwrap(self.goMap[i]) for i in sig.index]
+        representatives = pd.Series(dict([(i, sig["Name"][sig[score][sig["Cluster"] == i].idxmax()]) for i in np.unique(sig["Cluster"])]))
+        sig["Representative"] = representatives[sig["Cluster"]].values
+        duplicate = sig["Representative"] == sig["Name"]
+        sig.loc[:, "Representative"][duplicate] = ""
+        fig = px.treemap(names=sig["Name"], parents=sig["Representative"], 
+                        values=sig[score],
+                        width=800, height=800)
+        fig.update_layout(margin = dict(t=2, l=2, r=2, b=2),
+                        font_size=30)
+        fig.show()
+        if output is not None:
+            fig.write_image(output)
+            fig.write_html(output + ".html")
+
+    def clusterTreemapFull(self, enrichDF, alpha=0.05, score="-log10(qval)", metric="yule", resolution=1.0, output=None):
+        sig = enrichDF[enrichDF["BH corrected p-value"] < alpha]
+        if self.clusters is None:
+            self.clusters = matrix_utils.graphClustering(self.mat.loc[sig.index].values.astype(bool), 
+                                                    metric, k=int(np.sqrt(len(sig))), r=resolution, snn=True, 
+                                                    approx=False, restarts=10)
+        sig["Cluster"] = self.clusters[np.isin(self.mat.index, sig.index)]
         sig["Name"] = [customwrap(self.goMap[i]) for i in sig.index]
         representatives = pd.Series(dict([(i, sig["Name"][sig[score][sig["Cluster"] == i].idxmax()]) for i in np.unique(sig["Cluster"])]))
         sig["Representative"] = representatives[sig["Cluster"]].values

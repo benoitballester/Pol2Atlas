@@ -1,6 +1,7 @@
 # %%
 import os
-
+import sys
+sys.path.append("./")
 import fastcluster
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -50,8 +51,10 @@ for f in dlFiles:
         continue
 allReads = np.array(allReads)
 allCounts = np.concatenate(counts, axis=1).T
+conv = pd.read_csv(paths.tissueToSimplified, sep="\t", index_col="Tissue")
+annotation.loc[order, "Annotation"] = conv.loc[annotation.loc[order]["Annotation"].values]["Simplified"].values
 annTxt = annotation.loc[order]["Annotation"]
-ann, eq = pd.factorize(annTxt, sort=True)
+ann, eq = pd.factorize(annTxt)
 
 # %% 
 # Plot FPKM expr per annotation
@@ -138,7 +141,6 @@ except FileExistsError:
 # %%
 pctThreshold = 0.1
 lfcMin = 0.25
-
 for i in np.unique(ann):
     print(eq[i])
     labels = (ann == i).astype(int)
@@ -159,10 +161,11 @@ for i in np.unique(ann):
     orderDE = np.lexsort(res[["Delta","pval","Upreg"]].values.T)
     res["Delta"] = delta
     res["Upreg"] = sig.astype(int)
+    fname = eq[i].replace("/", "-")
     res = res.iloc[orderDE]
-    res.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/res_{eq[i]}.csv")
+    res.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/res_{fname}.csv")
     test = consensuses[nzCounts][sig]
-    test.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/bed_{eq[i]}", header=None, sep="\t", index=None)
+    test.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/bed_{fname}", header=None, sep="\t", index=None)
     if len(test) == 0:
         continue
     '''
@@ -250,7 +253,8 @@ for test in sharedAnnots:
     plt.xlabel("Pol II probe % of biotype (+gaussian noise to unstack points)")
     plt.ylabel("Fraction of reads in biotype")
     plt.title(test)
-    plt.savefig(paths.outputDir + f"rnaseq/encode_rnaseq/polII_vs_rnaseq/{test}.pdf")
+    fname = test.replace("/", "-")
+    plt.savefig(paths.outputDir + f"rnaseq/encode_rnaseq/polII_vs_rnaseq/{fname}.pdf")
     plt.close()
 # %%
 # Boxplot Top 50% pct Pol II vs bottom 50% Pol II Biotype
@@ -263,12 +267,13 @@ for test in sharedAnnots:
     upper = rnaseqPerCategory[idx1][signalPerCategory[idx2] > 0.5]
     lower = rnaseqPerCategory[idx1][signalPerCategory[idx2] <= 0.5]
     stat, p = ss.mannwhitneyu(upper, lower)
+    fname = test.replace("/", "-")
     plt.figure(dpi=500)
     sns.boxplot(data=signal, x="Category", y="Fraction of RNA-seq reads in probe", showfliers=False)
     sns.stripplot(data=signal, x="Category", y="Fraction of RNA-seq reads in probe", dodge=True, 
                 edgecolor="black", jitter=1/4, alpha=1.0, s=0.5)
     plt.title(test + f" (p-value: {p}, direction: {np.sign(np.median(upper)-np.median(lower))})")
-    plt.savefig(paths.outputDir + f"rnaseq/encode_rnaseq/polII_vs_rnaseq/boxplot_{test}.pdf")
+    plt.savefig(paths.outputDir + f"rnaseq/encode_rnaseq/polII_vs_rnaseq/boxplot_{fname}.pdf")
     plt.close()
 # %%
 # HM FC enrich Top 50% pct Pol II vs bottom 50% Pol II Biotype

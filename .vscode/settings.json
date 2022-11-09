@@ -4,4 +4,5 @@
     "jupyter.jupyterServerType": "local",
     "jupyter.jupyterLaunchTimeout": 600000,
     "jupyter.useDefaultConfigForJupyter": false,
+    "python.analysis.typeCheckingMode": "off",
 }

@@ -6,7 +6,7 @@ sys.setrecursionlimit(10000)
 import numpy as np
 import pandas as pd
 from statsmodels.stats.multitest import fdrcorrection
-from settings import paths
+from settings import params, paths
 
 figPath = paths.outputDir + "rnaseq/metacluster_10pct_rbo_noPol/"
 usePolII = False
@@ -96,6 +96,7 @@ import plotly.express as px
 df = pd.DataFrame(embedding, columns=["x","y"])
 tissue = pd.Series(dst.index).str.split("_", expand=True)
 df[["Orig", "Annot", "State"]] = tissue
+df["Annot"] = df["Annot"].str.replace("-", "/")
 annot, palette, colors = plot_utils.applyPalette(df["Annot"],
                                                 np.unique(df["Annot"]),
                                                  paths.polIIannotationPalette, ret_labels=True)
@@ -231,6 +232,7 @@ import plotly.express as px
 df = pd.DataFrame(embedding, columns=["x","y","z"])
 tissue = pd.Series(dst.index).str.split("_", expand=True)
 df[["Orig", "Annot", "State"]] = tissue
+df["Annot"] = df["Annot"].str.replace("-", "/")
 annot, palette, colors = plot_utils.applyPalette(df["Annot"],
                                                 np.unique(df["Annot"]),
                                                  paths.polIIannotationPalette, ret_labels=True)

@@ -38,9 +38,10 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
                             columns=["Reads per 10m mapped reads per kb"])
     dfPctReads["Regions"] = [f"{suffix}, control"]*len(pctReadsBG_ENCODE) + [f"{suffix}, Pol II Interg"]*len(pctReadsPol2_ENCODE)                         
     plt.figure(figsize=(6,4), dpi=500)
-    sns.boxplot(x="Reads per 10m mapped reads per kb", y="Regions", palette=palette, data=dfPctReads, showfliers=False)
-    sns.stripplot(x="Reads per 10m mapped reads per kb", y="Regions", palette=palette, data=dfPctReads, jitter=0.33, dodge=True, 
-                    edgecolor="black",alpha=1.0, s=2/sf, linewidth=0.1)
+    sns.violinplot(x="Reads per 10m mapped reads per kb", y="Regions", palette=palette, 
+                   data=dfPctReads, showfliers=False, cut=0)
+    # sns.stripplot(x="Reads per 10m mapped reads per kb", y="Regions", palette=palette, data=dfPctReads, jitter=0.33, dodge=True, 
+    #                edgecolor="black",alpha=1.0, s=2/sf, linewidth=0.1)
     p = wilcoxon(pctReadsBG_ENCODE, pctReadsPol2_ENCODE)
     supp = np.sum(pctReadsPol2_ENCODE > pctReadsBG_ENCODE)
     medianFC = np.median(pctReadsPol2_ENCODE/pctReadsBG_ENCODE)
@@ -61,12 +62,18 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
     dfSparsity["Regions"] = [f"{suffix}, control"]*len(sparsityBG_ENCODE) + [f"{suffix}, Pol II Interg"]*len(sparsityPol2_ENCODE)     
     plt.figure(dpi=500)
     g = sns.FacetGrid(dfSparsity, col="Threshold", sharex=False, height=4, aspect=4/3, col_wrap=2)
-    g.map_dataframe(sns.boxplot,x="Fraction of non zero counts", y="Regions", palette=palette, showfliers=False)
-    g.map_dataframe(sns.stripplot,x="Fraction of non zero counts", y="Regions", palette=palette, dodge=True, 
-                    edgecolor="black", jitter=1/3, alpha=1.0, s=2/sf, linewidth=0.1)
+    g.map_dataframe(sns.boxenplot,x="Fraction of non zero counts", y="Regions", palette=palette)
+    """ g.map_dataframe(sns.stripplot,x="Fraction of non zero counts", y="Regions", palette=palette, dodge=True, 
+                    edgecolor="black", jitter=1/3, alpha=1.0, s=2/sf, linewidth=0.1) """
     p = wilcoxon(sparsityBG_ENCODE, sparsityPol2_ENCODE)
     supp = np.sum(sparsityBG_ENCODE < sparsityPol2_ENCODE)
     medianFC = np.median(sparsityPol2_ENCODE/sparsityBG_ENCODE)
+    axes = g.axes
+    # Same scale for every plot
+    axes[0].set_xlim(0, 1)
+    axes[1].set_xlim(0, 0.7)
+    axes[2].set_xlim(0, 0.030)
+    axes[3].set_xlim(0, 0.0008)
     plt.savefig(paths.outputDir + f"rnaseq/count_distrib/sparsity_{suffix}.pdf", bbox_inches="tight")
     plt.show()
     from scipy.stats import mannwhitneyu
@@ -112,9 +119,9 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
     # Fraction of intergenic counts on Pol II probes
     pctPerSample = allCounts.sum(axis=1) / (allCounts.sum(axis=1) + bgCounts.sum(axis=1))
     plt.figure(dpi=500)
-    sns.boxplot(data=pctPerSample, orient="h", showfliers=False)
-    sns.stripplot(data=pctPerSample, jitter=0.33, dodge=True, 
-                    edgecolor="black",alpha=1.0, s=2/sf, linewidth=0.1, orient="h")
+    sns.violinplot(data=pctPerSample, orient="h", showfliers=False, cut=0)
+    """ sns.stripplot(data=pctPerSample, jitter=0.33, dodge=True, 
+                    edgecolor="black",alpha=1.0, s=2/sf, linewidth=0.1, orient="h") """
     plt.xlim((0,1))
     plt.yticks([], [])
     plt.xlabel("Fraction of intergenic reads on Pol II probes")
@@ -126,9 +133,9 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
     # Fraction of mapped reads
     pctPerSample = allCounts.sum(axis=1) / allReads[None, :] * 100
     plt.figure(dpi=500)
-    sns.boxplot(data=pctPerSample, orient="h", showfliers=False)
-    sns.stripplot(data=pctPerSample, jitter=0.33, dodge=True, 
-                    edgecolor="black",alpha=1.0, s=2/sf, linewidth=0.1, orient="h")
+    sns.violinplot(data=pctPerSample, orient="h", showfliers=False, cut=0)
+    """sns.stripplot(data=pctPerSample, jitter=0.33, dodge=True, 
+                    edgecolor="black",alpha=1.0, s=2/sf, linewidth=0.1, orient="h") """
     plt.yticks([], [])
     plt.xlabel("Percentage of mapped reads in Pol II probes")
     plt.savefig(paths.outputDir + f"rnaseq/count_distrib/boxplot_pctmapped_{suffix}.pdf", bbox_inches="tight")
@@ -138,9 +145,9 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
     # Fraction of mapped reads
     pctPerSample = np.sum(allCounts, axis=1) / allReads[None, :] * 100
     plt.figure(dpi=500)
-    sns.boxplot(data=pctPerSample, orient="h", showfliers=False)
-    sns.stripplot(data=pctPerSample, jitter=0.33, dodge=True, 
-                    edgecolor="black",alpha=1.0, s=2/sf, linewidth=0.1, orient="h")
+    sns.violinplot(data=pctPerSample, orient="h", showfliers=False, cut=0)
+    """ sns.stripplot(data=pctPerSample, jitter=0.33, dodge=True, 
+                    edgecolor="black",alpha=1.0, s=2/sf, linewidth=0.1, orient="h") """
     plt.xlim((0,5))
     plt.yticks([], [])
     plt.xlabel("Percentage of mapped reads in Pol II probes")
@@ -150,9 +157,9 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
     pctPerSample = (normReadsPolII > 1e-7).sum(axis=1) / ((normReadsPolII > 1e-7).sum(axis=1) + (normReadsBG > 1e-7).sum(axis=1))
     # Pct of > 1 read per 10m mapped reads
     plt.figure(dpi=500)
-    sns.boxplot(data=pctPerSample, orient="h", showfliers=False)
-    sns.stripplot(data=pctPerSample, jitter=0.33, dodge=True, 
-                    edgecolor="black",alpha=1.0, s=2/np.sqrt(len(allReads)/510), linewidth=0.1, orient="h")
+    sns.violinplot(data=pctPerSample, orient="h", showfliers=False, cut=0)
+    """sns.stripplot(data=pctPerSample, jitter=0.33, dodge=True, 
+                    edgecolor="black",alpha=1.0, s=2/np.sqrt(len(allReads)/510), linewidth=0.1, orient="h") """
     plt.xlim((0,1))
     plt.yticks([], [])
     plt.xlabel("Fraction of intergenic reads on Pol II probes")

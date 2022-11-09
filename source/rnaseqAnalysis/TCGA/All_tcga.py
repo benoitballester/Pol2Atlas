@@ -94,7 +94,10 @@ orig = annotation["Project ID"]
 state = np.array(["Normal"]*len(orig))
 state[tumor] = "Tumor"
 annotConv = pd.read_csv(paths.tcgaToMainAnnot, sep="\t", index_col=0)
+conv = pd.read_csv(paths.tissueToSimplified, sep="\t", index_col="Tissue")
 orig = annotConv.loc[orig]["Origin"]
+orig = conv.loc[orig]["Simplified"]
+orig = pd.Series([i.replace("/", "-") for i in orig.values], index=orig.index)
 label = orig.str.cat(state,sep="_")
 
 for i in label.unique():
@@ -153,7 +156,7 @@ markers = go.scattergl.Marker(color=df["Color"], size=df["Size"],
                             line=dict(width=df["Normal"], color="rgb(0,0,0)"))
 dat = go.Scattergl(x=embedding[:,0],y=embedding[:,1], mode="markers",
                    marker=markers, hovertext=df["Hover"])
-layout = dict(height=800, width=1200)
+layout = dict(height=1200, width=1200)
 fig = go.Figure(dat, layout=layout)
 fig.show()
 fig.write_image(paths.outputDir + "rnaseq/TCGA/umap_samples.pdf")
@@ -205,7 +208,7 @@ for i in np.unique(cancerType):
     patches.append(legend)
 plt.legend(handles=patches)
 plt.title(f"Balanced accuracy on {len(np.unique(cancerType))} cancers : {acc}")
-plt.savefig(paths.outputDir + "rnaseq/TCGA/umap_all_tumors_lgd.png", bbox_inches="tight")
+plt.savefig(paths.outputDir + "rnaseq/TCGA/umap_all_tumors_lgd.pdf", bbox_inches="tight")
 plt.show()
 
 # %%

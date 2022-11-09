@@ -66,7 +66,7 @@ rule baselineLD:
     input:
         paths.tempDir + "ld.22.annot.gz"
     threads:
-        2
+        4
     singularity:
         paths.ldscSingularity
     output:

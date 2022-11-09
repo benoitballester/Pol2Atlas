@@ -19,7 +19,7 @@ from matplotlib.patches import Patch
 from matplotlib.ticker import FormatStrFormatter
 from scipy.cluster import hierarchy
 from scipy.stats import mannwhitneyu, ttest_ind
-from settings import paths
+from settings import params, paths
 from sklearn.metrics import (balanced_accuracy_score, confusion_matrix,
                              precision_score, recall_score)
 from sklearn.model_selection import StratifiedKFold

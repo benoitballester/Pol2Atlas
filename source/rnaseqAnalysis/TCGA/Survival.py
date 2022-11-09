@@ -295,7 +295,7 @@ for i, c in enumerate(cases):
     progStats = np.zeros(len(globallyDEs))
     progStats[idsInCase] = stats.loc[ids[idsInCase]]["coef"]
     coefPerCancer.append(progStats)
-    progP = np.zeros(len(globallyDEs))
+    progP = np.ones(len(globallyDEs))
     corrP = fdrcorrection(stats["p"])[1]
     progP[idsInCase] = corrP[np.isin(stats.index, ids[idsInCase])]
     qvalsPerCancer.append(progP)
@@ -304,14 +304,30 @@ coefPerCancer = np.array(coefPerCancer).T
 qvalsPerCancer = np.array(qvalsPerCancer).T
 coefPerCancer = pd.DataFrame(coefPerCancer.T, index=obsCases)
 sig = pd.DataFrame(np.where(qvalsPerCancer < 0.05, "*", " ").T, index=obsCases)
+# %%
 plt.figure(dpi=500)
 orderCol = np.argsort(coefPerCancer.mean(axis=0))[::-1]
-orderRow = np.argsort(np.abs(coefPerCancer).mean(axis=1))[::-1]
+orderRow = np.argsort((coefPerCancer).mean(axis=1))[::-1]
 sns.heatmap(coefPerCancer[orderCol].iloc[orderRow]/np.log(2), vmin=-1.0, vmax=1.0, cmap="vlag", 
-            linecolor="k", linewidths=0.25, cbar_kws={'label': 'log2(HR)'},
-            annot=sig[orderCol].iloc[orderRow].values, fmt="", annot_kws={"size": 6})
+            linecolor="k", linewidths=0.0, cbar_kws={'label': 'log2(HR)'},
+            annot=sig[orderCol].iloc[orderRow].values, fmt="", annot_kws={"size": 4})
 plt.xticks([])
 plt.yticks(np.arange(len(obsCases))+0.5, np.array(obsCases)[orderRow], fontsize=8)
 plt.xlabel(f"{len(globallyDEs)} \"Globally prognostic\" Pol II probes")
 plt.savefig(paths.outputDir + "rnaseq/Survival/globally_prognostic_heatmap.pdf", bbox_inches="tight")
+# %%
+# %%
+plt.figure(dpi=500)
+orderCol = np.argsort(coefPerCancer.mean(axis=0))[::-1]
+orderRow = np.argsort((coefPerCancer).mean(axis=1))[::-1]
+sns.heatmap(coefPerCancer[orderCol].iloc[orderRow]/np.log(2), vmin=-1.0, vmax=1.0, cmap="vlag", 
+            linecolor="k", linewidths=0.0, cbar_kws={'label': 'log2(HR)'},
+            annot=sig[orderCol].iloc[orderRow].values, fmt="", annot_kws={"size": 4})
+plt.xticks([])
+plt.yticks(np.arange(len(obsCases))+0.5, np.array(obsCases)[orderRow], fontsize=8)
+plt.xlabel(f"{len(globallyDEs)} \"Globally prognostic\" Pol II probes")
+ticks = ["_".join(list(l[1][[0,1,2,3,4]].astype("str")))for l in globallyDEs.iloc[orderCol].iterrows()]
+plt.xticks(np.arange(len(ticks))+0.5, ticks, rotation=90, fontsize=2)
+plt.savefig(paths.outputDir + "rnaseq/Survival/globally_prognostic_heatmap_positions.pdf", bbox_inches="tight")
+print("a")
 # %%

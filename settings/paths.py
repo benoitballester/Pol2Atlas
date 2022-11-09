@@ -2,7 +2,7 @@
 outputDir = "/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2_Annot3/"   # Main results
 tempDir = "/shared/projects/pol2_chipseq/pol2_interg_default/tempPol2/"       # Temporary files / unimportant
 genomeFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/hg38.chrom.sizes.sorted"
-annotationFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/annotPol2_lowlevel.tsv"
+annotationFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/annotation_files/annotPol2_lowlevel.tsv"
 polIIannotationPalette = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/palettes/annotation_palette3.tsv"
 # ---------- Required for peak integrative analysis ---------- 
 peaksFolder = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/peaksInterg/"
@@ -54,10 +54,11 @@ tcgaAnnot = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/perFil
 tcgaAnnotCounts = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/perFileAnnotationCounts.tsv"
 tcgaToMainAnnot = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/tcga_project_annot.csv"
 countsENCODE = "/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2/rnaseq/encode_counts/"
-encodeAnnot = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/encode_total_rnaseq_annot_0.tsv"
+encodeAnnot = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/annotation_files/encode_total_rnaseq_annot_0.tsv"
 countsGTEx = "/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2/rnaseq/gtex_counts/"
 GTExAnnot = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/GTex/tsvs/sample.tsv"
 atlasPath = "/shared/projects/pol2_chipseq/pol2_interg_default/temp_POL2_lenient_largerTSS_latestGENCODE/POLR2A_Inter_500.saf"
 tableDirectory = outputDir + "rnaseq"
+tissueToSimplified = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/annotation_files/tissue_to_simplified.csv"
 # ---------- Required for scRNA-seq analysis ---------- 
 pbmc10k = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/10k_pbmcs/"

@@ -317,9 +317,14 @@ def plotHCProps(matrix, labels, matPct=None, annotationPalette=None, rowOrder="u
     # Plot
     plt.figure(figsize=(10,90/16), dpi=500)
     plt.imshow(resized, interpolation="lanczos")
-    plt.xticks([int(rasterRes[0]/33.3)+rasterRes[0]*0.5], 
-                [f"{matrix.shape[0]} Consensus Peaks"],
-                fontsize=8, ha="center")
+    plt.tick_params(
+            axis='both', 
+            which='both',    
+            bottom=False,   
+            top=False,         
+            left=False,
+            labelleft=False,
+            labelbottom=False)
 
 
 def plotHC(matrix, labels, matPct=None, annotationPalette=None, rowOrder="umap", colOrder="umap", cmap=None, hq=True, labelsPct=None, rescale=True):
