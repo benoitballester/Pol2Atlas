@@ -23,7 +23,6 @@ class regLogicGREAT:
 
     def __call__(self, txDF, chrInfo):
         # Infered regulatory domain logic
-        
         copyTx = txDF.copy()
         copyTx["Start"] = (txDF["Start"] - self.upstream).where(txDF["Strand"] == "+", 
                                     txDF["End"] - self.downstream)
@@ -98,7 +97,7 @@ class pyGREAT:
     """
     doc
     """
-    def __init__(self, gmtFile, geneFile, chrFile):
+    def __init__(self, gmtFile, geneFile, chrFile,):
         self.chrInfo = pd.read_csv(chrFile, sep="\t", index_col=0, header=None)
         self.gtfGeneCol = "gene_name"
         # Parse GMT file
@@ -172,27 +171,36 @@ class pyGREAT:
             expected = intersectBg.loc[obsMatrix.columns]
             observed = pd.DataFrame(queryCounts.loc[queryCounts.index[obsGenes]])
             endog = pd.merge(observed, expected, right_index = True, left_index = True)
+            endog.iloc[:, 1] -= observed.values.ravel()
         else: 
             expected = intersectBg.loc[obsMatrix.columns]
             observed = pd.DataFrame(queryCounts.loc[queryCounts.index[obsGenes]])
             endog = observed.copy()
-            endog[1] = len(query)
+            endog[1] = len(query) - observed.values
         # Trim GOs under cutoff
         trimmed = obsMatrix[intersectQuery.index[queryGenes]].sum(axis=1) >= minGenes
+        print(obsMatrix[intersectQuery.index[queryGenes]])
         # Setup parallel computation settings
         if cores == -1:
             cores = maxCores
-        maxBatch = len(obsMatrix[trimmed])
+        print(trimmed)
+        print(intersectQuery)
+        print(endog)
+        print(observed)
+        print(expected)        
+        print(obsMatrix)        
+        maxBatch = len(obsMatrix.loc[trimmed])
         maxBatch = int(0.25*maxBatch/cores)+1
         hitsPerGO = np.sum(obsMatrix * observed.values.ravel()[None, :], axis=1)
+        
         # Fit a Binomial GLM for each annotation, and evaluate wald test p-value for each gene annotation
         with Parallel(n_jobs=cores, batch_size=maxBatch, max_nbytes=None, mmap_mode=None) as pool:
             if background is not None:
-                results = pool(delayed(fitBinomModel)(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows())
+                results = pool(delayed(fitBinomModel)(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix.loc[trimmed].iterrows())
                 # results = [fitBinomModel(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows()]
             else:
                 # results = pool(delayed(fitBinomModelNoBg)(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows())
-                results = pool(delayed(fitBinomModelNoBg)(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix[trimmed].iterrows())
+                results = pool(delayed(fitBinomModelNoBg)(hasAnnot, endog, expected, gos, queryCounts.index[obsGenes]) for gos, hasAnnot in obsMatrix.loc[trimmed].iterrows())
         results = pd.DataFrame(results)
         results.set_index(0, inplace=True)
         results.columns = ["P(Beta > 0)", "Beta"]

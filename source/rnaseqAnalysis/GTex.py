@@ -58,9 +58,20 @@ for f in dlFiles:
 allReads = np.array(allReads)
 counts = np.concatenate(counts, axis=1).T
 conv = pd.read_csv(paths.tissueToSimplified, sep="\t", index_col="Tissue")
+annotation.loc[order, "tissue_type_orig"] = annotation.loc[order, "tissue_type"].copy()
 annotation.loc[order, "tissue_type"] = conv.loc[annotation.loc[order]["tissue_type"].values]["Simplified"].values
 annTxt = annotation.loc[order]["tissue_type"]
 ann, eq = pd.factorize(annTxt)
+# %%
+try:
+    os.mkdir(paths.outputDir + "rnaseq/count_tables/")
+except:
+    pass
+try:
+    os.mkdir(paths.outputDir + "rnaseq/count_tables/GTEx/")
+except:
+    pass
+rnaseqFuncs.saveDataset(counts, pd.DataFrame(order), paths.outputDir + "rnaseq/count_tables/GTEx/")
 # %%
 nzCounts = rnaseqFuncs.filterDetectableGenes(counts, readMin=1, expMin=3)
 counts = counts[:, nzCounts]
@@ -76,27 +87,64 @@ design = np.ones((len(counts), 1))
 ischemicTime = annotation.loc[order]["total_ischemic_time"].fillna(annotation.loc[order]["total_ischemic_time"].median())
 ischemicTime = StandardScaler().fit_transform(ischemicTime.values.reshape(-1,1))
 design = np.concatenate([design, ischemicTime], axis=1)
-countModel = rnaseqFuncs.RnaSeqModeler().fit(counts, sf, maxThreads=32)
+countModel = rnaseqFuncs.RnaSeqModeler().fit(counts, sf)
 hv = countModel.hv
 
 # %%
 feat = countModel.residuals[:, hv]
 decomp = rnaseqFuncs.permutationPA_PCA(feat, 1, max_rank=1000, returnModel=False)
-matrix_utils.looKnnCV(decomp, ann, "correlation", 5)
+fullAnn = annotation.loc[order]["tissue_type_detail"].values
+annFull, eqFull = pd.factorize(fullAnn)
+acc = matrix_utils.looKnnCV(decomp, annFull, "correlation", 5)
 # %%
 # Plot UMAP of samples for visualization
 embedding = umap.UMAP(n_neighbors=30, min_dist=0.5, random_state=0, low_memory=False, 
-                      metric="correlation").fit_transform(decomp)
+                      metric="correlation").fit_transform(feat)
+# %%
+# Modify palette to have some nuance for the same colors
+import matplotlib
+def hex_to_rgb(value):
+    value = value.lstrip('#')
+    lv = len(value)
+    return tuple(int(value[i:i + lv // 3], 16) for i in range(0, lv, lv // 3))
+def rgb_to_hex(r, g, b):
+  return ('#{:X}{:X}{:X}').format(r, g, b)
+
+colorsRGB = np.array([hex_to_rgb(i) for i in colors["color_hex"]])
+numSame = {}
+g = 1.22074408460575947536
+v = np.array([1/g, 1/g/g, 1/g/g/g])
+for i, c in enumerate(colors["color_hex"]):
+    for c2 in colors["color_hex"]:
+        if c2 == c:
+            if c not in numSame.keys():
+                numSame[c] = 0
+            else:
+                numSame[c] += 1
+            multiplier = 0.85 + 0.15 * (1-np.mod(v[0] * numSame[c], 1.0))
+            colorsRGB[i] = np.int32(colorsRGB[i] * multiplier*0.95)
+            break
+colorsHex = [matplotlib.colors.to_hex(c/255.0) for c in colorsRGB]
+
 # %%
 import plotly.express as px
+import plotly.graph_objects as go
 df = pd.DataFrame(embedding, columns=["x","y"])
 df["Organ"] = annotation.loc[order]["tissue_type"].values
 df["Organ detailled"] = annotation.loc[order]["tissue_type_detail"].values
 df = df.sample(frac=1)
-colormap = dict(zip(colors.index, colors["color_hex"])) 
-fig = px.scatter(df, x="x", y="y", color="Organ detailled", color_discrete_map=colormap,
-                hover_data=['Organ detailled'], width=1200, height=800)
-fig.update_traces(marker=dict(size=3*np.sqrt(len(df)/7500)))
+colormap = dict(zip(colors.index, colorsHex)) 
+batchSize = 500
+batches = []
+for i in range(int(len(df)/batchSize+2)):
+    batches.append(px.scatter(df[i*batchSize:(i+1)*batchSize], x="x", y="y", color="Organ detailled", 
+                              color_discrete_map=colormap))
+allData = batches[0].data
+for i in batches[1:]:
+    allData = allData + i.data
+fig = go.Figure(data = allData, layout={"title": f"54 Tissue KNN classification balanced accuracy : {acc}",
+                                        "width":1200, "height":800})
+fig.update_traces(marker=dict(size=9/(len(df)/7500)))
 fig.show()
 fig.write_image(paths.outputDir + "rnaseq/gtex_rnaseq/umap_samples.pdf")
 fig.write_html(paths.outputDir + "rnaseq/gtex_rnaseq/umap_samples.pdf" + ".html")

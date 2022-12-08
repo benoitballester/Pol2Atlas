@@ -30,6 +30,7 @@ for k in results:
 import seaborn as sns
 import matplotlib.pyplot as plt
 plt.figure(dpi=500)
+normed = (sigEnrichs)/np.mean(sigEnrichs.values, axis=1)[:, None]
 ax=sns.clustermap(sigEnrichs, row_cluster=False, col_cluster=True, metric="correlation",
                 xticklabels=True, yticklabels=True, rasterized=True)
 ax.ax_heatmap.axes.set_xticklabels(ax.ax_heatmap.axes.get_xticklabels(), fontsize=2)

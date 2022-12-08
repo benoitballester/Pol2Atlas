@@ -62,7 +62,8 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
     dfSparsity["Regions"] = [f"{suffix}, control"]*len(sparsityBG_ENCODE) + [f"{suffix}, Pol II Interg"]*len(sparsityPol2_ENCODE)     
     plt.figure(dpi=500)
     g = sns.FacetGrid(dfSparsity, col="Threshold", sharex=False, height=4, aspect=4/3, col_wrap=2)
-    g.map_dataframe(sns.boxenplot,x="Fraction of non zero counts", y="Regions", palette=palette)
+    g.map_dataframe(sns.boxenplot,x="Fraction of non zero counts", y="Regions", palette=palette,
+                    scale='linear', k_depth="trustworthy")
     """ g.map_dataframe(sns.stripplot,x="Fraction of non zero counts", y="Regions", palette=palette, dodge=True, 
                     edgecolor="black", jitter=1/3, alpha=1.0, s=2/sf, linewidth=0.1) """
     p = wilcoxon(sparsityBG_ENCODE, sparsityPol2_ENCODE)
@@ -167,7 +168,7 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
     plt.vlines(allCounts.shape[1]/bgCounts.shape[1], plt.ylim()[0], plt.ylim()[1], color="red", linestyles="dashed")
     plt.savefig(paths.outputDir + f"rnaseq/count_distrib/boxplot_pct_sparsity_Interg_{suffix}.pdf", bbox_inches="tight")
     plt.show()
-
+plotReadDistribs(allReads, allCounts, bgCounts, suffix="ENCODE")
 # %%
 # Plot for encode
 annotation = pd.read_csv(paths.encodeAnnot, 

@@ -52,6 +52,7 @@ studiedConsensusesCase = dict()
 cases = allAnnots["project_id"].unique()
 # %%
 for case in cases:
+    case = "TCGA-ESCA"
     print(case)
     # Select only relevant files and annotations
     annotation = pd.read_csv(paths.tcgaData + "/perFileAnnotation.tsv", 
@@ -256,7 +257,6 @@ for case in cases:
     plt.show()
     plt.close()
     # Predictive model on PCA space
-    from scipy.stats import mannwhitneyu, ttest_ind
     predictions = np.zeros(len(labels), dtype=int)
     for train, test in StratifiedKFold(10, shuffle=True, random_state=42).split(decomp, labels):
         # Fit power transform on train data only
@@ -279,7 +279,6 @@ for case in cases:
         df.columns = ["Normal Tissue True", "Tumor True"]
         df.index = ["Normal Tissue predicted", "Tumor predicted"]
         print(df, file=f)
-
 # %%
 # Summary predictive metrics plots
 def plotMetrics(summaryTab, metricName):

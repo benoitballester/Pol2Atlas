@@ -42,6 +42,7 @@ for f in np.array(dlFiles):
 allReads = np.array(allReads)
 counts = np.concatenate(counts, axis=1).T
 # bgCounts = np.concatenate(countsBG, axis=1).T
+
 # %%
 # Keep tumoral samples
 kept = np.isin(order, annotation.index)
@@ -50,6 +51,28 @@ counts = counts[kept]
 allReads = allReads[kept]
 annotation = annotation.loc[np.array(order)[kept]]
 tumor = np.logical_not(annotation["Sample Type"] == "Solid Tissue Normal")
+# %%
+try:
+    os.mkdir(paths.outputDir + "rnaseq/count_tables/")
+except:
+    pass
+try:
+    os.mkdir(paths.outputDir + "rnaseq/count_tables/TCGA/")
+except:
+    pass
+rnaseqFuncs.saveDataset(counts, pd.DataFrame(order), paths.outputDir + "rnaseq/count_tables/TCGA/")
+annotation.to_csv(paths.outputDir + "rnaseq/count_tables/TCGA/annotation_table.csv")
+# %%
+try:
+    os.mkdir(paths.outputDir + "rnaseq/count_tables/")
+except:
+    pass
+try:
+    os.mkdir(paths.outputDir + "rnaseq/count_tables/TCGA/")
+except:
+    pass
+rnaseqFuncs.saveDataset(counts, pd.DataFrame(order), paths.outputDir + "rnaseq/count_tables/TCGA/")
+
 # %%
 # Remove undected Pol II probes
 nzCounts = rnaseqFuncs.filterDetectableGenes(counts, readMin=1, expMin=3)

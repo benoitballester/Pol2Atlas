@@ -15,6 +15,7 @@ from rpy2.robjects.packages import importr
 from scipy.stats import chi2, rankdata, mannwhitneyu, gmean, nbinom, norm, shapiro
 from sklearn.decomposition import PCA, TruncatedSVD
 from statsmodels.stats.multitest import fdrcorrection
+from joblib.externals.loky import get_reusable_executor
 from statsmodels.api import GLM
 from statsmodels.genmod.families.family import NegativeBinomial
 from sklearn.preprocessing import StandardScaler
@@ -24,6 +25,7 @@ from settings import params, paths
 from scipy.sparse import csr_array
 from scipy.io import mmread, mmwrite
 scran = importr("scran")
+deseq = importr("DESeq2")
 
 def findMode(arr):
     # Finds the modal value of a continuous sample
@@ -108,6 +110,7 @@ class RnaSeqModeler:
         with Parallel(n_jobs=maxThreads, verbose=verbose, batch_size=512, max_nbytes=None) as pool:
             stats = pool(delayed(statsProcess)(self.regAlpha[i], self.scaled_sf, counts[:, i], design) for i in range(counts.shape[1]))
         # stats = [statsProcess(self.regAlpha[i], self.scaled_sf, counts[:, i], self.means[i]) for i in range(counts.shape[1])]
+        get_reusable_executor().shutdown(wait=False, kill_workers=True)
         # Unpack results
         self.residuals = np.array([i[0] for i in stats]).T
         self.pvals = np.array([i[1] for i in stats]).ravel()
@@ -200,7 +203,6 @@ def permutationPA_PCA(X, perm=3, alpha=0.01, solver="randomized", whiten=False,
     model: sklearn PCA object
         Returned only if returnModel is set to true
     """
-
     # Compute eigenvalues of observed data
     ref = PCA(max_rank, whiten=whiten, svd_solver=solver, random_state=42)
     decompRef = ref.fit_transform(X)
@@ -262,15 +264,14 @@ def runScript(script, argumentList, outFile=None):
         with open(outFile, "wb") as outdir:
             subprocess.run([script] + argumentList, stdout=outdir)
 
-def saveDataset(counts, sf, annot, probeNames, prefix):
-    tempCountPath = prefix + "CountsDE.mtx"
-    tempNames = prefix + "NzIdxDE.txt"
-    tempSf = prefix + "SfDE.txt"
-    tempLabels = prefix + "LabelsDE.txt"
-    mmwrite(tempCountPath, csr_array(counts))
-    np.savetxt(tempNames, probeNames, fmt="%i")
-    np.savetxt(tempSf, sf)
-    annot.to_csv(tempLabels)
+def saveDataset(counts, annot, path):
+    """ tempCountPath = prefix + "_counts.mtx"
+    tempNames = prefix + "indexes.txt"
+    tempLabels = prefix + "LabelsDE.txt" """
+    mmwrite(path + "counts.mtx", csr_array(counts))
+    annot.to_csv(path + "samples.csv", header=None, index=None)
+    
+
 
 def limma1vsAll(counts, sf, annot, probeNames, deFolder):
     hashVal = hash(np.mean(counts))
@@ -307,10 +308,10 @@ def deseqNorm(counts):
     gmeans = np.where(counts.min(axis=0) == 0, np.nan, gmeans)
     return np.nanmedian(counts/gmeans, axis=1)
     
-""" 
+
 def deseqDE(counts, sf, labels, colNames, test="Wald", parallel=False):
     countTable = pd.DataFrame(counts.T, columns=colNames)
-    infos = pd.DataFrame(np.array(["N", "T"])[labels], index=colNames, columns=["Type"])
+    infos = pd.DataFrame(labels, index=colNames, columns=["Type"])
     infos["sizeFactor"] = sf.ravel()
     with localconverter(ro.default_converter + pandas2ri.converter + numpy2ri.converter):
         dds = deseq.DESeqDataSetFromMatrix(countData=countTable, colData=infos, design=ro.Formula("~Type"))
@@ -319,7 +320,7 @@ def deseqDE(counts, sf, labels, colNames, test="Wald", parallel=False):
     res = pd.DataFrame(res.slots["listData"], index=res.slots["listData"].names).T
     res["padj"] = np.nan_to_num(res["padj"], nan=1.0)
     return res
-
+""" 
 def deseqDE1vsAll(counts, sf, labels, colNames, test="Wald", parallel=False):
     countTable = pd.DataFrame(counts.T, columns=colNames)
     infos = pd.DataFrame(labels, index=colNames, columns=["Type"])

@@ -55,7 +55,16 @@ conv = pd.read_csv(paths.tissueToSimplified, sep="\t", index_col="Tissue")
 annotation.loc[order, "Annotation"] = conv.loc[annotation.loc[order]["Annotation"].values]["Simplified"].values
 annTxt = annotation.loc[order]["Annotation"]
 ann, eq = pd.factorize(annTxt)
-
+# %%
+try:
+    os.mkdir(paths.outputDir + "rnaseq/count_tables/")
+except:
+    pass
+try:
+    os.mkdir(paths.outputDir + "rnaseq/count_tables/ENCODE/")
+except:
+    pass
+rnaseqFuncs.saveDataset(allCounts, pd.DataFrame(order), paths.outputDir + "rnaseq/count_tables/ENCODE/")
 # %% 
 # Plot FPKM expr per annotation
 fpkmExpr = np.sum(allCounts/allReads[:, None], axis=1)*100

@@ -210,6 +210,7 @@ class peakMerger:
                 alltabs.append(tab)
         # Concatenate files
         self.df = pd.concat(alltabs)
+        print(self.df)
         self.numElements = len(self.df)
         self.avgPeakSize = np.mean(self.df[2] - self.df[1])
         # Check strandedness

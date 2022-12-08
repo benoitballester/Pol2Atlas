@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-df = pd.read_csv("/scratch/pdelangen/projet_these/data_clean/filtered.bed", 
+df = pd.read_csv("/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/filtered.bed", 
                  sep="\t", header=None)
 logQvalCutoff = 5
 peakCountCutoff = 1000
