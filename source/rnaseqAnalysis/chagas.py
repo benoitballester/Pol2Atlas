@@ -78,7 +78,7 @@ counts = counts[:, nzCounts]
 # %%
 sf = rnaseqFuncs.scranNorm(counts)
 # %%
-from trash.countModeler import RnaSeqModeler
+from lib.rnaseqFuncs import RnaSeqModeler
 
 countModel = RnaSeqModeler().fit(counts, sf)
 from joblib.externals.loky import get_reusable_executor
@@ -88,7 +88,7 @@ hv = countModel.hv
 import plotly.express as px
 feat = countModel.residuals[:, hv]
 decomp = rnaseqFuncs.permutationPA_PCA(feat)
-print(matrix_utils.looKnnCV(feat, pd.factorize(labels)[0], "correlation", 1))
+print(matrix_utils.looKnnCV(decomp, pd.factorize(labels)[0], "correlation", 1))
 df = pd.DataFrame(decomp[:,:2], columns=["x","y"])
 df["Cond"] = labels
 df = df.sample(frac=1)

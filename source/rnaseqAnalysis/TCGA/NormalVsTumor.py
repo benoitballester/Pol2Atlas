@@ -52,8 +52,6 @@ studiedConsensusesCase = dict()
 cases = allAnnots["project_id"].unique()
 # %%
 for case in cases:
-    case = "TCGA-ESCA"
-    print(case)
     # Select only relevant files and annotations
     annotation = pd.read_csv(paths.tcgaData + "/perFileAnnotation.tsv", 
                             sep="\t", index_col=0)
@@ -107,8 +105,6 @@ for case in cases:
         pass
     allReads = np.array(allReads)
     allCounts = np.concatenate(counts, axis=1).T
-    
-
     counts = allCounts
     # Remove undected Pol II probes
     nzCounts = rnaseqFuncs.filterDetectableGenes(allCounts, readMin=1, expMin=3)
@@ -193,6 +189,8 @@ for case in cases:
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/heatmap_hv.pdf")
     plt.close()
     # Plot heatmap and dendrograms (DE)
+    decompDE = rnaseqFuncs.permutationPA_PCA(residuals[:, sig], mincomp=2)
+    rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decompDE, "correlation")
     colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.residuals.T[sig], "correlation")
     plt.figure(dpi=500)
     hierarchy.dendrogram(colLink, p=10, truncate_mode="level", color_threshold=-1)
@@ -205,9 +203,9 @@ for case in cases:
     plt.axis('off')
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/dendrogram_row_DE.pdf")
     plt.close()
-    clippedSQ = np.log(countsNorm+1)
+    clippedSQ = countModel.residuals
     plot_utils.plotHC(clippedSQ.T[sig], np.array(["Cancer","Normal"])[1-labels], countsNorm.T[sig],  
-                    rowOrder=rowOrder, colOrder=colOrder)
+                    rowOrder=rowOrder, colOrder=colOrder, cmap="vlag", rescale="3SD")
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/heatmap_DE.pdf")
     plt.close()
     # Plot DE signal

@@ -2,8 +2,12 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-
-df = pd.read_csv("/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/filtered.bed", 
+import sys
+'''
+sys.argv[0] = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/filtered.bed"
+sys.argv[1] = "/scratch/pdelangen/projet_these/data_clean/peaks/"
+'''
+df = pd.read_csv(sys.argv[0], 
                  sep="\t", header=None)
 logQvalCutoff = 5
 peakCountCutoff = 1000
@@ -28,7 +32,7 @@ splited = dict(([(k,x[np.arange(8)]) for k, x in selected.groupby(9)]))
 peaksPerDataset = []
 for f in splited.keys():
     if len(splited[f]) > peakCountCutoff:
-        splited[f].to_csv(f"/scratch/pdelangen/projet_these/data_clean/peaks/{f}.bed.gz", 
+        splited[f].to_csv(f"{sys.argv[1]}{f}.bed.gz", 
                         sep="\t", header=False, index=False)
         a=0
     peaksPerDataset.append(len(splited[f]))

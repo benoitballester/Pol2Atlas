@@ -95,7 +95,7 @@ feat = countModel.residuals[:, hv]
 decomp = rnaseqFuncs.permutationPA_PCA(feat, 1, max_rank=1000, returnModel=False)
 fullAnn = annotation.loc[order]["tissue_type_detail"].values
 annFull, eqFull = pd.factorize(fullAnn)
-acc = matrix_utils.looKnnCV(decomp, annFull, "correlation", 5)
+acc = matrix_utils.looKnnCV(feat, annFull, "correlation", 5)
 # %%
 # Plot UMAP of samples for visualization
 embedding = umap.UMAP(n_neighbors=30, min_dist=0.5, random_state=0, low_memory=False, 
@@ -133,7 +133,7 @@ df = pd.DataFrame(embedding, columns=["x","y"])
 df["Organ"] = annotation.loc[order]["tissue_type"].values
 df["Organ detailled"] = annotation.loc[order]["tissue_type_detail"].values
 df = df.sample(frac=1)
-colormap = dict(zip(colors.index, colorsHex)) 
+colormap = dict(zip(colors.index, colors["color_hex"])) 
 batchSize = 500
 batches = []
 for i in range(int(len(df)/batchSize+2)):
@@ -169,6 +169,7 @@ plt.savefig(paths.outputDir + "rnaseq/gtex_rnaseq/umap_samples_bad.pdf")
 plt.show()
 plt.close()
 # %%
+# Find markers per tissue
 from lib.pyGREATglm import pyGREAT as pyGREAT
 enricher = pyGREAT(paths.GOfile,
                           geneFile=paths.gencode,
@@ -179,10 +180,6 @@ try:
     os.mkdir(paths.outputDir + "rnaseq/gtex_rnaseq/DE/")
 except FileExistsError:
     pass
-# %%
-from lib.utils.reusableUtest import mannWhitneyAsymp
-# tester = mannWhitneyAsymp(countModel.residuals)
-# %%
 pctThreshold = 0.1
 lfcMin = 0.25
 for i in np.unique(ann):
@@ -216,6 +213,39 @@ for i in np.unique(ann):
     enricher.clusterTreemap(pvals, score="-log10(pval)", 
                                 output=paths.outputDir + f"rnaseq/gtex_rnaseq/DE/great_{eq[i]}.pdf")
     '''                           
+# %%
+# Find markers per tissue (54)
+try:
+    os.mkdir(paths.outputDir + "rnaseq/gtex_rnaseq/DE54/")
+except FileExistsError:
+    pass
+pctThreshold = 0.1
+lfcMin = 0.25
+for i in np.unique(annFull):
+    print(eqFull[i])
+    labels = (annFull == i).astype(int)
+    res2 = ss.ttest_ind(countModel.residuals[annFull == i], countModel.residuals[annFull != i], axis=0,
+                    alternative="greater")
+    sig = fdrcorrection(res2[1])[0]
+    print(sig.sum())
+    minpct = np.mean(counts[annFull == i] > 0.5, axis=0) > max(0.1, 1.5/labels.sum())
+    fc = np.mean(countModel.normed[annFull == i], axis=0) / (1e-9+np.mean(countModel.normed[annFull != i], axis=0))
+    lfc = np.log2(fc) > lfcMin
+    sig = sig & lfc & minpct
+    print(sig.sum())
+    res = pd.DataFrame(res2[::-1], columns=consensuses.index[nzCounts], index=["pval", "stat"]).T
+    res["Upreg"] = 1-sig.astype(int)
+    res["lfc"] = -np.log2(fc)
+    orderDE = np.lexsort(res[["lfc","pval","Upreg"]].values.T)
+    res["lfc"] = np.log2(fc)
+    res["Upreg"] = sig.astype(int)
+    res = res.iloc[orderDE]
+    fname = eqFull[i].replace("/", "-")
+    res.to_csv(paths.outputDir + f"rnaseq/gtex_rnaseq/DE54/res_{fname}.csv")
+    test = consensuses[nzCounts][sig]
+    test.to_csv(paths.outputDir + f"rnaseq/gtex_rnaseq/DE54/bed_{fname}", header=None, sep="\t", index=None)
+    if len(test) == 0:
+        continue
 # %%
 rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
 colOrder, colLink = matrix_utils.threeStagesHClinkage(feat.T, "correlation")

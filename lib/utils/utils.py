@@ -1,5 +1,12 @@
 import subprocess
 import pickle
+import os
+
+def createDir(path):
+    try:
+        os.mkdir(path)
+    except FileExistsError:
+        print(f"Directory {path} already exists !")
 
 def runScript(script, argumentList, outFile=None):
     # Runs the command as a standard bash command

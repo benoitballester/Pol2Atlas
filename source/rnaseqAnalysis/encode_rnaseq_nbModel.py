@@ -91,14 +91,14 @@ rnaseqFuncs.limma1vsAll(counts, sf, annTxt, np.arange(len(nzCounts))[nzCounts],
 # %%
 from lib.rnaseqFuncs import RnaSeqModeler
 
-countModel = RnaSeqModeler().fit(counts, sf)
+countModel = RnaSeqModeler().fit(counts, sf, figSaveDir=paths.tempDir)
 from joblib.externals.loky import get_reusable_executor
 get_reusable_executor().shutdown(wait=True)
 hv = countModel.hv
 # %%
 from sklearn.preprocessing import StandardScaler
-feat = countModel.residuals[:, hv]
-decomp = rnaseqFuncs.permutationPA_PCA(feat, max_rank=250)
+feat = countModel.residuals
+decomp = rnaseqFuncs.permutationPA_PCA(feat, perm=10, max_rank=250, figSaveDir=paths.tempDir)
 matrix_utils.looKnnCV(decomp, ann, "correlation", 1)
 # %%
 # Plot UMAP of samples for visualization

@@ -168,7 +168,7 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
     plt.vlines(allCounts.shape[1]/bgCounts.shape[1], plt.ylim()[0], plt.ylim()[1], color="red", linestyles="dashed")
     plt.savefig(paths.outputDir + f"rnaseq/count_distrib/boxplot_pct_sparsity_Interg_{suffix}.pdf", bbox_inches="tight")
     plt.show()
-plotReadDistribs(allReads, allCounts, bgCounts, suffix="ENCODE")
+
 # %%
 # Plot for encode
 annotation = pd.read_csv(paths.encodeAnnot, 

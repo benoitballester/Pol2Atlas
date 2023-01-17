@@ -2,7 +2,7 @@
 import sys
 sys.path.append("./")
 from lib.peakMerge import peakMerger
-from lib.utils import overlap_utils, matrix_utils, plot_utils
+from lib.utils import overlap_utils, matrix_utils, plot_utils, utils
 import numpy as np
 from settings import params, paths
 import pyranges as pr
@@ -29,6 +29,14 @@ merger = peakMerger(paths.genomeFile, outputPath=paths.outputDir)
 merger.mergePeaks(paths.peaksFolder, inferCenter=params.inferCenter, 
                   minOverlap=params.minOverlap, fileFormat=params.fileFormat)
 merger.writePeaks()
+# %%
+utils.createDir(paths.outputDir + "descriptivePlots")
+plt.figure(dpi=500)
+plt.hist(merger.consensuses[2]-merger.consensuses[1], 50)
+plt.xlabel("Consensus peak size")
+plt.ylabel("Number of peaks")
+plt.savefig(paths.outputDir + "descriptivePlots/distribSizes.pdf")
+plt.show()
 # %%
 # GO terms
 from lib.pyGREATglm import pyGREAT

@@ -368,8 +368,10 @@ def plotHC(matrix, labels, matPct=None, annotationPalette=None, rowOrder="umap",
     rasterRes = (4000, 2000)
     rasterMat = resize(matrix[consensuses1D][:, samples1D].astype("float32"), (matrix.shape[0], 2000), anti_aliasing=False, order=int(matrix.shape[1]>2000))
     rasterMat = resize(rasterMat, rasterRes, anti_aliasing=hq, order=1)
-    if rescale:
+    if rescale and not rescale == "3SD":
         rasterMat = (rasterMat - np.percentile(rasterMat, 0.5)) / (np.percentile(rasterMat, 99.5) - np.percentile(rasterMat, 0.5))
+    if rescale == "3SD":
+        rasterMat = np.clip(rasterMat + 3,0,6.0)/6
     # rasterMat = sns.color_palette("viridis", as_cmap=True)(rasterMat.T)[:,:,:3]
     if cmap is None:
         rasterMat = np.repeat(1-rasterMat.T[:,:,None], 3, 2)
@@ -556,8 +558,8 @@ def stackedBarplot(counts, labels, plotTitle="",showPct=True, showNinPct=True, s
               color=(0.05,0.05,0.05), weight='bold', fontsize=60, y=1.05)
     plt.tight_layout()
     if savefig:
-        plt.savefig(parameters.outputDir + "figures/descrPlots/%s.pdf"%plotTitle)
-        plt.savefig(parameters.outputDir + "figures/descrPlots/%s.png"%plotTitle, dpi=300)
+        plt.savefig(params.outputDir + "figures/descrPlots/%s.pdf"%plotTitle)
+        plt.savefig(params.outputDir + "figures/descrPlots/%s.png"%plotTitle, dpi=300)
     plt.show()
 
 

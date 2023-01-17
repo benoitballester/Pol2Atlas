@@ -32,11 +32,11 @@ def findMode(arr):
     pos, fitted = KDEpy.FFTKDE(bw="silverman").fit(arr).evaluate(100000)
     return pos[np.argmax(fitted)]
 
-
 def statsProcess(alpha, sf, counts, design):
     pred = np.mean(counts/sf)*sf
     pearson = (counts - pred) / np.sqrt(pred + alpha * pred**2)
     pearson = np.clip(pearson, -np.sqrt(9+len(sf)/4), np.sqrt(9+len(sf)/4))
+    pearson -= np.mean(pearson)
     chi2p = chi2(len(sf)-design.shape[1]).sf(np.sum(np.square(pearson), axis=0))
     return pearson.astype("float32"), chi2p
 
@@ -60,7 +60,8 @@ class RnaSeqModeler:
         '''
         pass
     
-    def fit(self, counts, sf, design=None, maxThreads=-1, subSampleEst=5000, plot=True, verbose=True):
+    def fit(self, counts, sf, design=None, maxThreads=-1, subSampleEst=5000, plot=True, verbose=True,
+            figSaveDir=None):
         '''
         Fit the model
         '''
@@ -114,19 +115,8 @@ class RnaSeqModeler:
         # Unpack results
         self.residuals = np.array([i[0] for i in stats]).T
         self.pvals = np.array([i[1] for i in stats]).ravel()
-        '''
-        ssr = np.nan_to_num(np.sum(np.square(self.residuals), axis=0))
-        order = np.argsort(ssr)[::-1]
-        kneedle = kneed.KneeLocator(np.arange(len(order)), ssr[order], S=np.sqrt(len(ssr)/5), curve="convex", direction="decreasing", online=True)
-        self.hv = order[:kneedle.elbow]
-        '''
         self.hv = fdrcorrection(self.pvals)[0]
         if plot:
-            '''
-            kneedle.plot_knee()
-            plt.xlabel("SSR rank")
-            plt.ylabel("Sum of squared pearson residuals")
-            '''
             plt.figure(dpi=500)
             plt.plot(self.regAlpha[np.argsort(np.mean(self.normed, axis=0))])
             plt.scatter(np.argsort(np.argsort(np.mean(self.normed[:, shuffled], axis=0)))*self.normed.shape[1]/len(alphas), alphas, s=0.5, linewidths=0, c="red")
@@ -135,6 +125,8 @@ class RnaSeqModeler:
             plt.ylim(1e-2, 1e2)
             plt.ylabel("Alpha (overdispersion)")
             plt.show()
+            if figSaveDir is not None:
+                plt.savefig(figSaveDir + "/alpha_trendline.pdf")
             plt.close()
             # Plot mean/variance relationship and selected probes
             v = np.var(self.normed[:, :self.normed.shape[1]], axis=0)
@@ -142,7 +134,7 @@ class RnaSeqModeler:
             c = np.array([[0.0,0.0,1.0]]*(self.normed.shape[1]))
             c[self.hv] = [1.0,0.0,0.0]
             plt.figure(dpi=500)
-            plt.scatter(m, v, s = 0.5*np.sqrt(200000/len(m)), linewidths=0, c=c, alpha=0.25)
+            plt.scatter(m, v, s = 0.5*(100000/len(m)), linewidths=0, c=c, alpha=0.1)
             plt.scatter(m, m+m*m*self.regAlpha, s = 1.0, linewidths=0, c=[0.0,1.0,0.0])
             pts = np.geomspace(m.min(), m.max())
             plt.plot(pts, pts)
@@ -150,6 +142,8 @@ class RnaSeqModeler:
             plt.yscale("log")
             plt.xlabel("Pol II probe mean")
             plt.ylabel("Pol II probe variance")
+            if figSaveDir is not None:
+                plt.savefig(figSaveDir + "/mv_trendline.pdf")
             plt.show()
             plt.close()
         return self
@@ -157,7 +151,7 @@ class RnaSeqModeler:
         
 
 def permutationPA_PCA(X, perm=3, alpha=0.01, solver="randomized", whiten=False,
-                      max_rank=None, mincomp=0, returnModel=False, plot=True):
+                      max_rank=None, mincomp=0, returnModel=False, plot=True, figSaveDir=None):
     """
     Permutation Parallel Analysis to find the optimal number of PCA components.
 
@@ -240,6 +234,8 @@ def permutationPA_PCA(X, perm=3, alpha=0.01, solver="randomized", whiten=False,
         plt.legend(["Observed eigenvalues"])
         plt.xlim(1,r_est*1.2)
         plt.ylim(np.min(dstat_null[:, :int(r_est*1.2)])*0.95, dstat_obs.max()*1.05)
+        if figSaveDir is not None:
+            plt.savefig(figSaveDir + "/PCA_PA.pdf")
         plt.show()
     if plot:
         plt.figure(dpi=500)

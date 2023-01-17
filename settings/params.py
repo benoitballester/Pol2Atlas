@@ -5,3 +5,5 @@ fileFormat="bed"
 scoreMethod="binary"
 minOverlap = 2
 removeGeneTail5kb = False
+logQvalCutoff = 5
+peakCountCutoff = 1000

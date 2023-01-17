@@ -8,7 +8,7 @@ allPeaks = allPeaks[[0,6,7]] # Summits only
 clusts = np.loadtxt(paths.outputDir + "clusterConsensuses_Labels.txt").astype(int)
 
 # %%
-def subSampleFromClust(peaks, clusts=None, query=None, invert=False, s=10000, suffix=""):
+def subSampleFromClust(peaks, clusts=None, query=None, invert=False, s=20000, suffix=""):
     if query == None:
         clust = peaks
     else: 

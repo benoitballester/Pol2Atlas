@@ -1,11 +1,11 @@
 # ---------- Common ---------- 
-outputDir = "/shared/projects/pol2_chipseq/pol2_interg_default/output_h3k27ac_chip/"   # Main results
+outputDir = "/shared/projects/pol2_chipseq/pol2_interg_default/output_CAGE/"   # Main results
 tempDir = "/shared/projects/pol2_chipseq/pol2_interg_default/tempPol2/"       # Temporary files / unimportant
 genomeFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/hg38.chrom.sizes.sorted"
-annotationFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/peakDatasets/h3k27ac_data/h3k27ac_annot.csv"
+annotationFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/peakDatasets/cage_data/cage_annot.csv"
 polIIannotationPalette = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/palettes/annotation_palette3.tsv"
 # ---------- Required for peak integrative analysis ---------- 
-peaksFolder = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/peakDatasets/h3k27ac_data/peaks/"
+peaksFolder = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/peakDatasets/cage_data/peaks/"
 remapFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/remap2020_nr.bed"
 GOfile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/GO_files/hsapiens.GO:BP.name.gmt"
 gencode = "/shared/projects/pol2_chipseq/pol2_interg_default/data/annotation/gencode.v38.annotation.gtf"
