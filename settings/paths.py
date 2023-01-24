@@ -1,9 +1,9 @@
 # ---------- Common ---------- 
-outputDir = "/shared/projects/pol2_chipseq/pol2_interg_default/test123/"   # Main results
+outputDir = "/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2_Annot3/"   # Main results
 tempDir = "/shared/projects/pol2_chipseq/pol2_interg_default/tempPol2/"       # Temporary files / unimportant
 genomeFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/hg38.chrom.sizes.sorted"
 annotationFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/dataset_annotation/annotPol2_lowlevel.tsv"
-polIIannotationPalette = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/palettes/annotation_palette3.tsv"
+polIIannotationPalette = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/palettes/annot.tsv"
 # ---------- Required for peak integrative analysis ---------- 
 peaksFolder = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/Pol2_interg_peaks_per_dataset/"
 remapFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/genome_annotation/remap2020_nr.bed"
@@ -14,7 +14,6 @@ ldscFilesPath = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/ldsc
 sumstatsFolder = "/shared/projects/pol2_chipseq/pol2_interg_default/data/GWAS/ldsc_sumstats/"
 ldscSingularity = "/shared/projects/pol2_chipseq/pol2_interg_default/data/singularity/s-ldsc/envSingularityLDSC.img"
 liftoverPath = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/liftover/"
-
 # ---------- ROADMAP & Histones & Cons---------- 
 roadmapPath = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/roadmap_chromatin_states/"
 histonePathHeart27Ac = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/H3K27Ac_Chipseq/ENCFF962IUZ_heart_left_ventricule.bigWig"
@@ -28,6 +27,7 @@ consFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/conservat
 # You will likely not need this for your analyses
 bedtoolsPath = "/home/pdelangen/bedtools"
 encodeBlacklist = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/genome_annotation/hg38-blacklist.v2.bed"
+allPol2File = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/pol2.bed"
 # ---------- Genome annotation files ---------- 
 ccrePath = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/genome_annotation/GRCh38-ccREsFix.bed"
 lncpediaPath = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/genome_annotation/lncipedia_5_2_hg38.bed"

@@ -14,8 +14,8 @@ sys.argv[1] = "/scratch/pdelangen/projet_these/data_clean/peaks/"
 '''
 df = pd.read_csv({sys.argv[0]}, 
                  sep="\t", header=None)
-logQvalCutoff = 5
-peakCountCutoff = 100
+logQvalCutoff = params.logQvalCutoff
+peakCountCutoff = params.peakCountCutoff
 # %%
 hasPol2 = df[3].str.split(".", expand=True)[1] == "POLR2A"
 # %%

@@ -1,13 +1,18 @@
 # %%
+import sys
+
+import numpy as np
 import pandas as pd
 import pyranges as pr
-import numpy as np
-import sys
+
 sys.path.append("./")
+from lib.utils import utils
 from settings import params, paths
+
+utils.createDir(paths.tempDir)
+
 # Extension of the genomic context file given (in both sides, bp)
 genomicContextExtent = 1000
-
 gencode = pr.read_gtf(paths.gencode)
 gencode = gencode.as_df()
 # %%
