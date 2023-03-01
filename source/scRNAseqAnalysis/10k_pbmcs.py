@@ -69,15 +69,16 @@ adata = adata[adata.obs.pct_counts_mt < 13, :]
 print("Found %i cells after filtering"%len(adata))
 counts = np.array(adata.X.todense().astype("int32"))
 
-nzCounts = rnaseqFuncs.filterDetectableGenes(counts, readMin=1, expMin=3)
+nzCounts = rnaseqFuncs.filterDetectableGenes(counts, readMin=1, expMin=2)
 counts = counts[:, nzCounts]
 
-sf = rnaseqFuncs.scranNorm(counts)
+sf = np.sum(counts, axis=1)
+sf = sf/sf.mean()
 
-countModel = rnaseqFuncs.RnaSeqModeler().fit(counts, sf, maxThreads=40)
+countModel = rnaseqFuncs.RnaSeqModeler().fit(counts, sf, residuals="deviance")
 hv = countModel.hv
-feat = countModel.residuals[:, hv]
-decomp = rnaseqFuncs.permutationPA_PCA(feat, 3, max_rank=100, returnModel=False)
+feat = countModel.residuals
+decomp = rnaseqFuncs.permutationPA_PCA(feat, 3, max_rank=100, returnModel=False, whiten=True)
 
 embedding = umap.UMAP(n_neighbors=30, min_dist=0.3, random_state=0, low_memory=False, metric="correlation").fit_transform(decomp)
 
@@ -218,19 +219,20 @@ print(len(adata.obs.index), " found barcodes for genes.")
 print(len(polIICounts), " found barcodes for Pol II.")
 # %%
 # Filter not detectable probes
-nzCountsPolII = rnaseqFuncs.filterDetectableGenes(polIICounts, readMin=1, expMin=3)
-# matchingsf = pd.Series(sf, adata.obs.index).loc[foundBarcodes].values
-matchingsf = np.sum(polIICounts, axis=1)
+nzCountsPolII = rnaseqFuncs.filterDetectableGenes(polIICounts, readMin=1, expMin=1)
+matchingsf = pd.Series(sf, adata.obs.index).loc[foundBarcodes].values
+# matchingsf = np.sum(polIICounts, axis=1)
+matchingsf = matchingsf/matchingsf.mean()
 polIICounts = polIICounts[:, nzCountsPolII]
 # %%
 # Fit count model
-countModelPolII = rnaseqFuncs.RnaSeqModeler().fit(polIICounts, matchingsf, maxThreads=40)
+countModelPolII = rnaseqFuncs.RnaSeqModeler().fit(polIICounts, matchingsf, residuals="deviance")
 hvPolII = countModelPolII.hv
 # %%
 # PCA with same number of components as gene analysis
 from sklearn.decomposition import PCA
-feat = countModelPolII.residuals
-decomp = PCA(decomp.shape[1], random_state=42).fit_transform(feat)
+feat = countModelPolII.residuals[:, rnaseqFuncs.filterDetectableGenes(polIICounts, readMin=1, expMin=3)]
+decomp = rnaseqFuncs.permutationPA_PCA(feat, 3, max_rank=100, returnModel=False, whiten=True)
 # %%
 # UMAP
 embedding = umap.UMAP(n_neighbors=30, min_dist=0.3, random_state=0, low_memory=False, metric="correlation").fit_transform(decomp)
@@ -246,8 +248,8 @@ plt.show()
 # Draw cluster labels on top of umap
 colors = sns.color_palette("tab20")
 palettePlotly = [f"rgb({int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)})" for c in colors]
-colormap = dict(zip(np.unique(annotatedLabels), palettePlotly))
-df = pd.DataFrame({"cluster":annotatedLabels})
+colormap = dict(zip(np.unique(labelsGenes), palettePlotly))
+df = pd.DataFrame({"cluster":labelsGenes})
 df.index = adata.obs.index
 df = df.loc[foundBarcodes]
 df["x"] = embedding[:, 0]
@@ -295,7 +297,7 @@ for i in np.unique(matchinglabels):
     print(i)
     grp = (matchinglabels == i).astype(int)
     res2 = ss.ttest_ind(countModelPolII.residuals[grp == 1], countModelPolII.residuals[grp == 0], axis=0,
-                    alternative="greater")
+                    alternative="greater", equal_var=False)
     sig = fdrcorrection(res2[1])[0]
     minpct = np.mean(polIICounts[matchinglabels == i] > 0.5, axis=0) > max(0.1, 1.5/grp.sum())
     fc = np.mean(countModelPolII.normed[matchinglabels == i], axis=0) / (1e-9+np.mean(countModelPolII.normed[matchinglabels != i], axis=0))
@@ -337,3 +339,5 @@ for clustID in np.unique(matchinglabels):
         axs[xi][yi].scatter(embedding[:, 0], embedding[:, 1], alpha=0.5, s=0.5, linewidths=0, c=np.sqrt(readsPerCell/readsPerCell.max()))
         axs[xi][yi].set_title(geneId2, fontsize=6)
     fig.savefig(paths.outputDir + "scrnaseq/markerGenes/PolII_" + clustID + ".png", bbox_inches="tight", dpi=500)
+
+# %%

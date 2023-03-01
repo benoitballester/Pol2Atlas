@@ -498,6 +498,7 @@ dependencies:
   - zlib=1.2.12=h166bdaf_0
   - zstd=1.5.2=h8a70e8d_1
   - pip:
+    - kaplanmeier==0.1.8
     - kaleido==0.2.1
     - kdepy==1.1.0
     - kneed==0.7.0

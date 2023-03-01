@@ -29,27 +29,19 @@ deseq = importr("DESeq2")
 
 def findMode(arr):
     # Finds the modal value of a continuous sample
+    return np.percentile(arr, 50)
     pos, fitted = KDEpy.FFTKDE(bw="silverman").fit(arr).evaluate(100000)
     return pos[np.argmax(fitted)]
 
 
-def computePearsonResiduals(alpha, sf, counts, design):
-    alpha = np.clip(alpha, 1e-5, 1e5)
-    pred = np.mean(counts/sf)*sf
-    pearson = (counts - pred) / np.sqrt(pred + alpha * pred**2)
-    pearson = np.clip(pearson, -np.sqrt(9+len(sf)/4), np.sqrt(9+len(sf)/4))
-    pearson -= np.mean(pearson)
-    chi2p = chi2(len(sf)-design.shape[1]).sf(np.sum(np.square(pearson), axis=0))
-    return pearson.astype("float32"), chi2p 
-
-def computeDevianceResiduals(alpha, sf, counts, design):
+def statsProcess(alpha, sf, counts, design):
     alpha = np.clip(alpha, 1e-5, 1e5)
     pred = np.mean(counts/sf)*sf
     distrib = NegativeBinomial(alpha=alpha)
-    devianceRes = distrib.resid_dev(counts, pred)
-    devianceRes -= np.mean(devianceRes)
-    chi2p = chi2(len(sf)-design.shape[1]).sf(np.sum(np.square(devianceRes), axis=0))
-    return devianceRes.astype("float32"), chi2p 
+    pearson = distrib.resid_dev(counts, pred)
+    pearson -= np.mean(pearson)
+    chi2p = chi2(len(sf)-design.shape[1]).sf(np.sum(np.square(pearson), axis=0))
+    return pearson.astype("float32"), chi2p 
 
 def fitModels(counts, sfs, m, design):
     warnings.filterwarnings("error")
@@ -72,7 +64,7 @@ class RnaSeqModeler:
         pass
     
     def fit(self, counts, sf, design=None, maxThreads=-1, subSampleEst=5000, plot=True, verbose=True,
-            figSaveDir=None, residuals="pearson"):
+            figSaveDir=None):
         '''
         Fit the model
         '''
@@ -92,15 +84,15 @@ class RnaSeqModeler:
         m = np.mean(self.normed, axis=0)
         with Parallel(n_jobs=maxThreads, verbose=verbose, batch_size=512, max_nbytes=None) as pool:
            fittedParams = pool(delayed(fitModels)(self.counts[:, i], self.scaled_sf, m[i], design) for i in shuffled)
+        valid = np.array(fittedParams) > 0.0
         alphas = np.maximum(1e-9, np.array(fittedParams))
-        valid = alphas > 1e-3
         # Estimate NB overdispersion in function of mean expression
         # Overdispersion can be caused by biological variation as well as technical variation
         # To estimate technical overdispersion, it is assumed that a large fraction of probes are non-DE, and that overdispersion is a function of mean
         # The modal value of overdispersion is tracked for each decile of mean expression using a kernel density estimate
         # The median value would overestimate overdispersion as the % of DE probes is unknown
         means = np.mean(self.normed[:, shuffled], axis=0)
-        nQuantiles = 20
+        nQuantiles = 25
         pcts = np.linspace(0,100,nQuantiles+1)
         centers = (pcts * 0.5 + np.roll(pcts,1)*0.5)[1:]/100
         quantiles = np.percentile(means, pcts)
@@ -111,22 +103,16 @@ class RnaSeqModeler:
             if (valid & (digitized == i)).sum() > 5:
                 regressed.append(findMode(alphas[valid & (digitized == i)]))
             else:
-                regressed.append(-1)
+                regressed.append(1e-5)
         regressed = np.array(regressed).ravel()
-        for i in np.arange(len(regressed)-1)[::-1]:
-            regressed[i] = np.maximum(regressed[i], regressed[i+1])
+        """for i in np.arange(len(regressed)-1)[::-1]:
+            regressed[i] = np.maximum(regressed[i], regressed[i+1])"""
         self.means = np.mean(self.normed, axis=0)
         fittedAlpha = si.interp1d(centers, regressed, bounds_error=False, fill_value=(regressed[0], regressed[-1]))
         self.regAlpha = fittedAlpha((rankdata(self.means)-0.5)/len(self.means))
         # Dispatch accross multiple processes
-        if residuals == "pearson":
-            func = computePearsonResiduals
-        elif residuals == "deviance":
-            func = computeDevianceResiduals
-        else:
-            raise ValueError('Invalid "residuals" argument, must be "pearson" or "deviance"')
         with Parallel(n_jobs=maxThreads, verbose=verbose, batch_size=512, max_nbytes=None) as pool:
-            stats = pool(delayed(func)(self.regAlpha[i], self.scaled_sf, counts[:, i], design) for i in range(counts.shape[1]))
+            stats = pool(delayed(statsProcess)(self.regAlpha[i], self.scaled_sf, counts[:, i], design) for i in range(counts.shape[1]))
         # stats = [statsProcess(self.regAlpha[i], self.scaled_sf, counts[:, i], self.means[i]) for i in range(counts.shape[1])]
         get_reusable_executor().shutdown(wait=False, kill_workers=True)
         # Unpack results
@@ -139,7 +125,7 @@ class RnaSeqModeler:
             plt.scatter(np.argsort(np.argsort(np.mean(self.normed[:, shuffled], axis=0)))*self.normed.shape[1]/len(alphas), alphas, s=0.5, linewidths=0, c="red")
             # plt.yscale("log")
             plt.xlabel("Pol II ranked mean expression")
-            plt.ylim(1e-2, 1e2)
+            plt.ylim(-1e-2, 1e2)
             plt.ylabel("Alpha (overdispersion)")
             plt.show()
             if figSaveDir is not None:

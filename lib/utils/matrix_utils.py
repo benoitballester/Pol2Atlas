@@ -16,7 +16,7 @@ def graphClustering(matrix, metric, k="auto", r=1.0, snn=True,
 
     Parameters
     ----------
-    metric: string (optional, default "auto")
+    metric: string
         Metric used for nn query. 
         See the pynndescent documentation for a list of available metrics.
 
@@ -37,7 +37,7 @@ def graphClustering(matrix, metric, k="auto", r=1.0, snn=True,
     
     approx: Boolean (optional, default True)
         Whether to use approximate nearest neighbors using nearest neighbor descent
-        or exact nearest neighbors. Exact method will take very long on a large number of
+        or exact nearest neighbors. The exact method will take very long on a large number of
         points (>15000-20000).
 
     restarts: integer (optional, default 1)

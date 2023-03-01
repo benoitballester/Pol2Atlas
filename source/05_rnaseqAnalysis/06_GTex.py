@@ -30,7 +30,7 @@ try:
 except FileExistsError:
     pass
 # %%
-annotation = pd.read_csv(paths.gtexData + "/tsvs/sample.tsv", 
+annotation = pd.read_csv(paths.gtexData + "/tsvs/sample_annot.tsv", 
                         sep="\t", index_col="specimen_id")
 colors = pd.read_csv(paths.gtexData + "colors.txt", 
                         sep="\t", index_col="tissue_site_detail")

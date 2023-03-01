@@ -119,7 +119,7 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
         plt.close()
     # Fraction of intergenic counts on Pol II probes
     pctPerSample = allCounts.sum(axis=1) / (allCounts.sum(axis=1) + bgCounts.sum(axis=1))
-    plt.figure(dpi=500)
+    plt.figure(dpi=500, figsize=(5,4))
     sns.violinplot(data=pctPerSample, orient="h", showfliers=False, cut=0)
     """ sns.stripplot(data=pctPerSample, jitter=0.33, dodge=True, 
                     edgecolor="black",alpha=1.0, s=2/sf, linewidth=0.1, orient="h") """
@@ -133,7 +133,7 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
     print("c")
     # Fraction of mapped reads
     pctPerSample = allCounts.sum(axis=1) / allReads[None, :] * 100
-    plt.figure(dpi=500)
+    plt.figure(dpi=500, figsize=(5,4))
     sns.violinplot(data=pctPerSample, orient="h", showfliers=False, cut=0)
     """sns.stripplot(data=pctPerSample, jitter=0.33, dodge=True, 
                     edgecolor="black",alpha=1.0, s=2/sf, linewidth=0.1, orient="h") """
@@ -145,13 +145,14 @@ def plotReadDistribs(allReads, allCounts, bgCounts, suffix, plotAllCounts=False)
     pctPerSample = np.sum(normReadsPolII > 1e-7, axis=1) / (np.sum(normReadsPolII > 1e-7, axis=1) + np.sum(normReadsBG > 1e-7, axis=1))
     # Fraction of mapped reads
     pctPerSample = np.sum(allCounts, axis=1) / allReads[None, :] * 100
-    plt.figure(dpi=500)
+    plt.figure(dpi=500, figsize=(3,2))
     sns.violinplot(data=pctPerSample, orient="h", showfliers=False, cut=0)
     """ sns.stripplot(data=pctPerSample, jitter=0.33, dodge=True, 
                     edgecolor="black",alpha=1.0, s=2/sf, linewidth=0.1, orient="h") """
     plt.xlim((0,5))
     plt.yticks([], [])
     plt.xlabel("Percentage of mapped reads in Pol II probes")
+    plt.xticks(fontsize=15)
     plt.savefig(paths.outputDir + f"rnaseq/count_distrib/boxplot_pctmapped_fixed_scale_{suffix}.pdf", bbox_inches="tight")
     plt.show()
     print("b")
@@ -236,7 +237,7 @@ bgCounts = csc_array(vstack(countsBG))
 plotReadDistribs(allReads, allCounts, bgCounts, suffix="TCGA")
 # %%
 # Plot GTEx
-annotation = pd.read_csv(paths.gtexData + "/tsvs/sample.tsv", 
+annotation = pd.read_csv(paths.gtexData + "/tsvs/sample_annot.tsv", 
                         sep="\t", index_col="specimen_id")
 
 colors = pd.read_csv(paths.gtexData + "colors.txt", 

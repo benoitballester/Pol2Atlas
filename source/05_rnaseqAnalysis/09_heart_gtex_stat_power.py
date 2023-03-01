@@ -33,7 +33,7 @@ except FileExistsError:
     pass
 # %%
 # Read count files
-annotation = pd.read_csv(paths.gtexData + "/tsvs/sample.tsv", 
+annotation = pd.read_csv(paths.gtexData + "tsvs/sample_annot.tsv", 
                         sep="\t", index_col="specimen_id")
 colors = pd.read_csv(paths.gtexData + "colors.txt", 
                         sep="\t", index_col="tissue_site_detail")
@@ -68,6 +68,35 @@ conv = pd.read_csv(paths.tissueToSimplified, sep="\t", index_col="Tissue")
 annTxt = annotation.loc[order]["tissue_type_detail"].values
 ann, eq = pd.factorize(annTxt)
 # %%
+np.random.seed(42)
+fullAnn = annotation.loc[order]["tissue_type_detail"].values
+annFull, eqFull = pd.factorize(fullAnn)
+sampleSizes = np.bincount(annFull)
+subsample1 = np.random.choice(sampleSizes[1], 3)
+subsample2 = np.random.choice(sampleSizes[0], 3)
+subTable = np.concatenate([counts[annFull == 0][subsample1], counts[annFull == 1][subsample2]], axis=0)
+nzCountsSub = rnaseqFuncs.filterDetectableGenes(subTable, readMin=1, expMin=3)
+subTable = subTable[:, nzCountsSub]
+sf = rnaseqFuncs.scranNorm(subTable)
+countModel = rnaseqFuncs.RnaSeqModeler().fit(subTable, sf)
+hv = countModel.hv
+feat = countModel.residuals
+decomp = rnaseqFuncs.permutationPA_PCA(feat, 10, returnModel=False, mincomp=2)
+plt.scatter(decomp[:,0],decomp[:,1], c=[0]*3+[1]*3)
+matrix_utils.looKnnCV(decomp, np.array([0]*3+[1]*3), "euclidean", 1)
+# %%
+DEtab = rnaseqFuncs.deseqDE(subTable, sf, labels=np.array([eq[0]]*3 + [eq[1]]*3), 
+                            colNames=np.arange(subTable.shape[0]))
+DE = (DEtab["padj"] < 0.05) & (np.abs(DEtab["log2FoldChange"]) > 0.25)
+# %%
+rowOrder, rowLink = matrix_utils.twoStagesHClinkage(decomp)
+colOrder, colLink = matrix_utils.twoStagesHClinkage(feat.T[DE.values])
+logCounts = countModel.residuals
+plot_utils.plotHC(logCounts.T[DE.values], np.array([eq[0]]*3 + [eq[1]]*3), (countModel.normed).T[DE.values], rescale="3SD",  
+                  rowOrder=rowOrder, colOrder=colOrder, cmap="vlag")
+plt.savefig(paths.outputDir + "rnaseq/gtex_rnaseq_heart_DE/n3_heatmap.pdf")
+plt.show()
+# %%
 # Remove unexpressed probes, normalize, compute pearson residuals
 nzCounts0 = rnaseqFuncs.filterDetectableGenes(counts, readMin=1, expMin=3)
 counts = counts[:, nzCounts0]
@@ -76,11 +105,8 @@ countModel = rnaseqFuncs.RnaSeqModeler().fit(counts, sf)
 hv = countModel.hv
 feat = countModel.residuals[:, hv]
 decomp = rnaseqFuncs.permutationPA_PCA(feat, 10, returnModel=False)
-# %%
 # KNN classifier
-fullAnn = annotation.loc[order]["tissue_type_detail"].values
-annFull, eqFull = pd.factorize(fullAnn)
-acc = matrix_utils.looKnnCV(decomp, annFull, "correlation", 5)
+acc = matrix_utils.looKnnCV(feat, annFull, "correlation", 1)
 # %%
 # Plot UMAP of samples for visualization
 embedding = umap.UMAP(n_neighbors=30, min_dist=0.5, random_state=0, low_memory=False, 
@@ -128,6 +154,7 @@ for i in range(reps):
     minpct = minpctM | minpctP
     DE = (DEtab["padj"] < 0.05) & (np.abs(DEtab["log2FoldChange"]) > 0.25) & minpct
     results[nzCounts, i] = DE
+
 # %%
 means = np.mean(results, axis=1)
 sds = np.std(results, axis=0)

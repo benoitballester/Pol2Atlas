@@ -7,10 +7,9 @@ From: continuumio/miniconda3
     installPackages.r
 %post
     export PATH=/opt/conda/bin:$PATH
-    ./opt/conda/etc/profile.d/conda.sh
-    conda activate	
     /opt/conda/bin/conda env update -f conda_main.yml
     apt update
     apt-get install build-essential -y
+    apt-get install libxml2-dev -y
     conda list --explicit | grep "r-"
     Rscript installPackages.r

@@ -8,14 +8,16 @@ import sys
 sys.path.append("./")
 from settings import params, paths
 
-clusterPath = paths.tempDir + "liftedClusters/"
+clusterPath = sys.argv[1]
+tmp = sys.argv[2]
+print(tmp)
 files = os.listdir(clusterPath)
 bedfiles = [pr.read_bed(clusterPath + c) for c in files]
 # %%
 # First check if TF intersects with any HapMap3 SNPs
 hasIntersect = np.zeros(len(files), dtype=int)
 for ch in range(1,23):
-    snps = pandas.read_csv(paths.ldscFilesPath + f"ldsc_files/1000G_EUR_Phase3_plink/1000G.EUR.QC.{ch}.bim", sep="\t", header=None)
+    snps = pandas.read_csv(paths.ldscFilesPath + f"1000G_EUR_Phase3_plink/1000G.EUR.QC.{ch}.bim", sep="\t", header=None)
     snps.columns = ["Chromosome", "Name", "cm", "Start", "a1", "a2"]
     snpAnnotFmt = snps[["Chromosome", "Start", "Name", "cm"]]
     snpAnnotFmt.columns = ["CHR", "BP", "SNP", "CM"]
@@ -31,8 +33,10 @@ for ch in range(1,23):
 
 
 # %%
+# Assign cluster to each SNP
 for ch in range(1,23):
-    snps = pandas.read_csv(paths.ldscFilesPath + f"ldsc_files/1000G_EUR_Phase3_plink/1000G.EUR.QC.{ch}.bim", sep="\t", header=None)
+    # Reformat SNP file to bed format / PyRanges object
+    snps = pandas.read_csv(paths.ldscFilesPath + f"1000G_EUR_Phase3_plink/1000G.EUR.QC.{ch}.bim", sep="\t", header=None)
     snps.columns = ["Chromosome", "Name", "cm", "Start", "a1", "a2"]
     snpAnnotFmt = snps[["Chromosome", "Start", "Name", "cm"]]
     snpAnnotFmt.columns = ["CHR", "BP", "SNP", "CM"]
@@ -41,6 +45,7 @@ for ch in range(1,23):
     snpBed = snps[["Chromosome", "Start", "End", "Name"]]
     snpBed["Chromosome"] = "chr" + snpBed["Chromosome"].astype("string")
     snpPr = pr.PyRanges(df=snpBed)
+    # Iterate over annotation bed files
     for i, f in enumerate(files):
         if hasIntersect[i] > 100:   # Remove groups with < 100 SNPs
             print(f, ch)
@@ -53,5 +58,6 @@ for ch in range(1,23):
                 snpAnnotFmt[annotName].loc[intersection] = 1
             except KeyError:
                 pass
-    snpAnnotFmt.to_csv(paths.tempDir + f"ld.{ch}.annot.gz", index=False, sep=" ")
+    # Write file
+    snpAnnotFmt.to_csv(tmp + f"ld.{ch}.annot.gz", index=False, sep=" ")
 # %%

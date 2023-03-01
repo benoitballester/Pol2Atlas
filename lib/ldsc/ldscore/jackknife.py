@@ -103,7 +103,8 @@ class Jackknife(object):
             raise ValueError('Must specify either n_blocks are separators.')
 
         if self.n_blocks > self.N:
-            raise ValueError('More blocks than data points.')
+            self.n_blocks = self.N
+            # raise ValueError('More blocks than data points.')
 
     @classmethod
     def jknife(cls, pseudovalues):

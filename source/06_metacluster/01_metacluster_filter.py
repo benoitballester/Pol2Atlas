@@ -350,17 +350,25 @@ for t in np.unique(tissue[1].values):
     copy[4] = 0
     nMarkers = mat[tissue[1].values == t].sum(axis=0)
     copy.loc[nMarkers.index, 4] = nMarkers.values
-    copy.to_csv(figPath + f"markerCount/allwithCounts_{t}.bed", header=None, index=None, sep="\t")
+    copy.to_csv(figPath + f"markerCount/allwithCounts_{t.replace(' ','_')}.bed", header=None, index=None, sep="\t")
     copy[4] = 0
     nMarkers = mat[tissue[1].values == t].mean(axis=0)
+    copy[4] = 0
     copy.loc[nMarkers.index, 4] = nMarkers.values
     copy = copy[copy[4] > 0.99]
     copy[4] = copy[4].astype(int)
-    copy.to_csv(figPath + f"markerCount/allDatasets_{t}.bed", header=None, index=None, sep="\t")
+    copy.to_csv(figPath + f"markerCount/allDatasets_{t.replace(' ','_')}.bed", header=None, index=None, sep="\t")
+    copy = consensuses.copy()
+    copy[4] = 0
+    copy.loc[nMarkers.index, 4] = nMarkers.values
+    copy = copy[copy[4] >= 0.5]
+    copy[4] = copy[4]
+    copy.to_csv(figPath + f"markerCount/halfDatasets_{t.replace(' ','_')}.bed", header=None, index=None, sep="\t")
     copy = consensuses.copy()
     copy[4] = 0
     nMarkers = mat[tissue[1].values == t].sum(axis=0).astype(int)
     copy.loc[nMarkers.index, 4] = nMarkers.values
     copy = copy[copy[4] >= 2]
-    copy.to_csv(figPath + f"markerCount/min2_{t}.bed", header=None, index=None, sep="\t")
+    if len(copy) > 0:
+        copy.to_csv(figPath + f"markerCount/min2_{t.replace(' ','_')}.bed", header=None, index=None, sep="\t")
 # %%

@@ -9,7 +9,6 @@ sys.path.append("./")
 from lib.utils import utils
 from settings import params, paths
 
-utils.createDir(paths.tempDir)
 
 # Extension of the genomic context file given (in both sides, bp)
 genomicContextExtent = 1000

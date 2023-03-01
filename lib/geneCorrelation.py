@@ -7,151 +7,96 @@ import pandas as pd
 import plotly.express as px
 import pyranges as pr
 from joblib import Parallel, delayed
-from scipy.sparse import csr_matrix
-from statsmodels.api import GLM
-from statsmodels.genmod.families.family import Binomial
-from statsmodels.api import NegativeBinomial, Poisson
+from scipy.stats import rankdata, spearmanr, pearsonr
 from statsmodels.stats.multitest import fdrcorrection
-from sklearn.cluster import AgglomerativeClustering
 from .utils import matrix_utils, overlap_utils
+from . import pyGREATglm
 from joblib.externals.loky import get_reusable_executor
-
 maxCores = len(os.sched_getaffinity(0))
 
-class regLogicGREAT:
-    def __init__(self, upstream, downstream, distal):
-        self.upstream = upstream
-        self.downstream = downstream
-        self.distal = distal
-
-    def __call__(self, txDF, chrInfo):
-        # Infered regulatory domain logic
-        copyTx = txDF.copy()
-        copyTx["Start"] = (txDF["Start"] - self.upstream).where(txDF["Strand"] == "+", 
-                                    txDF["End"] - self.downstream)
-        copyTx["End"] = (txDF["Start"] + self.downstream).where(txDF["Strand"] == "+", 
-                                    txDF["End"] + self.upstream)
-        copyTx.sort_values(["Chromosome", "Start"], inplace=True)
-        try:
-            copyTx["Chromosome"].cat.remove_unused_categories(inplace=True)
-        except:
-            pass
-        gb = copyTx.groupby("Chromosome")
-        copyTx["Chromosome"] = copyTx["Chromosome"]
-        perChr = dict([(x,gb.get_group(x)) for x in gb.groups])
-        for c in perChr:
-            inIdx = copyTx["Chromosome"] == c
-            nextReg = np.roll(copyTx["Start"][inIdx], -1)
-            try:
-                nextReg[-1] = chrInfo.loc[c].values[0]
-            except:
-                print(f"Warning: chromosome '{c}' in gtf but not in size file, skipping all genes within this chromosome.")
-                copyTx = copyTx[np.logical_not(inIdx)]
-                continue
-            previousReg = np.roll(copyTx["End"][inIdx], 1)
-            previousReg[0] = 0
-            extMin = np.maximum(copyTx["Start"][inIdx] - self.distal, previousReg)
-            extMax = np.minimum(copyTx["End"][inIdx] + self.distal, nextReg)
-            extMin = np.minimum(copyTx["Start"][inIdx], extMin)
-            extMax = np.maximum(copyTx["End"][inIdx], extMax)
-            copyTx.loc[copyTx["Chromosome"] == c, "Start"] = np.clip(extMin, 0, chrInfo.loc[c].values[0])
-            copyTx.loc[copyTx["Chromosome"] == c, "End"] = np.clip(extMax, 0, chrInfo.loc[c].values[0])
-        return copyTx
-
-def customwrap(s,width=20):
-    return "<br>".join(textwrap.wrap(s,width=width)).capitalize()
-
-def capTxtLen(txt, maxlen):
-    try:
-        if len(txt) < maxlen:
-            return txt
-        else:
-            return txt[:maxlen] + '...'
-    except:
-        return "N/A"
-
-
-def fitBinomModel(hasAnnot, observed, expected, goTerm, idx):
-    df = pd.DataFrame(np.array([hasAnnot.T.astype(float), np.ones_like(expected)]).T, 
-                                columns=["GS", "Intercept"], index=idx)
-    model = GLM(observed, df, family=Binomial())
-    model = model.fit([0.0, 0.0], disp=False)
-    beta = model.params["GS"]
-    waldP = model.pvalues["GS"]
-    # Get one sided pvalues
-    if beta >= 0:
-        pvals = waldP/2.0
-    else:
-        pvals = (1.0-waldP/2.0)
-    return (goTerm, pvals, beta)
-
-def fitNBinomModel(hasAnnot, observed, expected, goTerm, idx):
-    df = pd.DataFrame(np.array([hasAnnot.T.astype(float), np.ones_like(expected)]).T, 
-                                columns=["GS", "Intercept"], index=idx)
-    model = NegativeBinomial(observed, df, exposure=expected, loglike_method="nb1")
-    model = model.fit([0.0,0.0,10.0], method="lbfgs", disp=False)
-    beta = model.params["GS"]
-    waldP = model.pvalues["GS"]
-    # Get one sided pvalues
-    if beta >= 0:
-        pvals = waldP/2.0
-    else:
-        pvals = (1.0-waldP/2.0)
-    return (goTerm, pvals, beta)
-
-
-class pyGREAT:
+class geneCorreler(pyGREATglm.pyGREAT):
     """
     doc
     """
-    def __init__(self, gmtFile, geneFile, chrFile, validGenes="all", 
-                 distal=1000000, upstream=5000, downstream=1000):
-        self.chrInfo = pd.read_csv(chrFile, sep="\t", index_col=0, header=None)
-        self.gtfGeneCol = "gene_name"
-        # Parse GMT file
-        # Setup gene-GO matrix
-        genesPerAnnot = dict()
-        self.goMap = dict()
-        allGenes = set()
-        with open(gmtFile) as f:
-            for l in f:
-                vals = l.rstrip("\n").split("\t")
-                genesPerAnnot[vals[0]] = vals[2:]
-                allGenes |= set(vals[2:])
-                self.goMap[vals[0]] = vals[1]
-        # Read gtf file
-        gencode = pr.read_gtf(geneFile)
-        gencode = gencode.as_df()
-        self.transcripts = gencode[gencode["Feature"] == "gene"].copy()
-        del gencode
-        self.transcripts = self.transcripts[["Chromosome", "Start", "End", self.gtfGeneCol, "Strand"]]
-        # Reverse positions on opposite strand for convenience
-        reversedTx = self.transcripts.copy()[["Chromosome", "Start", "End", self.gtfGeneCol, "Strand"]]
-        self.txList = reversedTx.copy()
-        self.clusters = None
-        # Apply infered regulatory logic
-        self.geneRegulatory = regLogicGREAT(upstream, downstream, distal)(reversedTx, self.chrInfo)
-        # geneInList = np.isin(list(self.geneRegulatory["gene_name"]), list(allGenes), assume_unique=False)
-        self.geneRegulatory.drop("Strand", 1, inplace=True)
-        self.geneRegulatory.index = self.geneRegulatory["gene_name"]
-        self.geneRegulatory = self.geneRegulatory[~self.geneRegulatory.index.duplicated(False)]
-        if validGenes == "annotated":
-            validGenes = pd.Index(self.geneRegulatory["gene_name"]).intersection(allGenes)
-        elif validGenes == "all":
-            validGenes = self.geneRegulatory["gene_name"]
+    def fit(self, query, queryNormCounts, geneNormCounts, nPerms=100000):
+        """
+        Find query-gene associations and compute empirical null distribution of 
+        random query-gene correlations.
+
+        Parameters
+        ----------
+        query: pandas dataframe in bed-like format or PyRanges
+            Set of genomic regions to compute enrichment on.
+        queryNormCounts: ndarray
+            Count table for query regions.
+        maxGenes: pandas dataframe (default 3)
+            Normalized count table for genes. Rows are features and should match queryNormCounts.
+            Columns are genes, column names are gene names.
+        nPerms: int, (default 100000)
+            Number of random query-gene pairs to evaluate correlation on.
+        
+        Returns
+        -------
+        results: pandas dataframe
+        """
+        # Compute random correlations between normalized counts of query and genes
+        randomP2 = np.random.choice(len(queryNormCounts.T), nPerms, replace=True)
+        randomGene = np.random.choice(len(geneNormCounts.T), nPerms, replace=True)
+        xrank = rankdata(queryNormCounts[:, randomP2], axis=0)
+        yrank = rankdata(geneNormCounts.iloc[:, randomGene], axis=0)
+        self.randomCorrelations = np.array([pearsonr(xrank[:, i],yrank[:, i])[0] for i in range(yrank.shape[1])])
+        geneReg = pr.PyRanges(self.geneRegulatory)
+        self.queryPr = query
+        self.linkedGene = self.queryPr.join(geneReg).as_df()
+        self.queryNormCounts = queryNormCounts
+        self.geneNormCounts = geneNormCounts
+        return self.linkedGene
+
+    def findCorrelations(self, linkedGenes="fitted", alternative="two-sided"):
+        # Compute correlations between normalized counts of query and genes
+
+        if linkedGenes == "fitted":
+            linkedGene = self.linkedGene
         else:
-            print("Invalid validGenes argument", validGenes)
-            print("Use either 'annotated' or 'all'")
-            return None
-        self.mat = pd.DataFrame(columns=validGenes, dtype="int8", index=genesPerAnnot.keys())
-        for ann in genesPerAnnot.keys():
-            self.mat.loc[ann] = 0
+            linkedGene = linkedGenes
+        self.means = []
+        self.corr_name = []
+        self.correlations = []
+        self.corrP = []
+        alt = alternative
+        for i in range(len(linkedGene)):
+            if (i+1)%100 == 0:
+                print(i)
+                break
+            gene = linkedGene.iloc[i]["gene_name"]
+            p2 = linkedGene.iloc[i]["Name"] 
             try:
-                self.mat.loc[ann][self.mat.columns.intersection(genesPerAnnot[ann])] = 1
+                exprGene = self.geneNormCounts[gene].values
+                if len(exprGene.shape) > 1:
+                    print(exprGene.shape, gene)
+                    continue
             except KeyError:
-                print("Missing", genesPerAnnot[ann])
+                print("Missing", gene)
                 continue
-        self.geneRegulatory = self.geneRegulatory.loc[self.mat.columns]
+            exprP2 = self.queryNormCounts[:, p2]
+            self.corr_name.append((p2, gene))
+            r, p = spearmanr(exprP2, exprGene)
+            if alt == "greater":
+                p = (r < self.randomCorrelations[:, 0]).mean()
+            elif alt == "less":
+                p = (r > self.randomCorrelations[:, 0]).mean()
+            elif alt == "two-sided":
+                p1 = (r < self.randomCorrelations[:, 0]).mean()
+                p2 = (r > self.randomCorrelations[:, 0]).mean()
+                p = np.minimum(p1, p2)*2
+            self.correlations.append(r)
+            self.corrP.append(p)
+            self.means.append((np.mean(exprP2),np.mean(exprGene)))
+        tab = np.concatenate([np.array(self.corr_name)[:,0], 
+                              np.array(self.corr_name)[:,1], 
+                              np.array(self.correlations), 
+                              np.array(self.corrP)]).reshape(len(self.corrP),-1, order="F")
+        return tab
 
     def findEnriched(self, query, background=None, minGenes=3, maxGenes=1000, cores=-1):
         """
@@ -207,11 +152,11 @@ class pyGREAT:
         if cores == -1:
             cores = maxCores      
         maxBatch = len(obsMatrix.loc[trimmed])
-        maxBatch = int(0.25*maxBatch/cores)+1
+        maxBatch = int(0.25*maxBatch/cores) + 1
         hitsPerGO = np.sum(obsMatrix * observed.values.ravel()[None, :], axis=1)
         # Fit a Negative Binomial GLM for each annotation, and evaluate wald test p-value for each gene annotation
         with Parallel(n_jobs=cores, batch_size=maxBatch, max_nbytes=None, mmap_mode=None) as pool:
-            results = pool(delayed(fitNBinomModel)(hasAnnot, endog, expected, gos, queryCounts.index) for gos, hasAnnot in obsMatrix.loc[trimmed].iterrows())
+            results = pool(delayed(pyGREATglm.fitNBinomModel)(hasAnnot, endog, expected, gos, queryCounts.index) for gos, hasAnnot in obsMatrix.loc[trimmed].iterrows())
         # Manually kill workers afterwards or they'll just stack up with multiple runs
         get_reusable_executor().shutdown(wait=False, kill_workers=True)
         # Format results
@@ -266,10 +211,9 @@ class pyGREAT:
 
     def clusterTreemap(self, enrichDF, alpha=0.05, score="-log10(qval)", metric="yule", resolution=1.0, output=None):
         sig = enrichDF[enrichDF["BH corrected p-value"] < alpha]
-        simplifiedMat = self.mat.loc[sig.index].values.astype(bool)
-        clusters = matrix_utils.graphClustering(simplifiedMat, 
+        clusters = matrix_utils.graphClustering(self.mat.loc[sig.index].values.astype(bool), 
                                                 metric, k=int(np.sqrt(len(sig))), r=resolution, snn=True, 
-                                                approx=True, restarts=10)
+                                                approx=False, restarts=10)
         sig["Cluster"] = clusters
         sig["Name"] = [customwrap(self.goMap[i]) for i in sig.index]
         representatives = pd.Series(dict([(i, sig["Name"][sig[score][sig["Cluster"] == i].idxmax()]) for i in np.unique(sig["Cluster"])]))
@@ -291,7 +235,7 @@ class pyGREAT:
         if self.clusters is None:
             self.clusters = matrix_utils.graphClustering(self.mat.loc[sig.index].values.astype(bool), 
                                                     metric, k=int(np.sqrt(len(sig))), r=resolution, snn=True, 
-                                                    approx=True, restarts=10)
+                                                    approx=False, restarts=10)
         sig["Cluster"] = self.clusters[np.isin(self.mat.index, sig.index)]
         sig["Name"] = [customwrap(self.goMap[i]) for i in sig.index]
         representatives = pd.Series(dict([(i, sig["Name"][sig[score][sig["Cluster"] == i].idxmax()]) for i in np.unique(sig["Cluster"])]))

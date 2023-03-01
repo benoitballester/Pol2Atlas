@@ -9,8 +9,6 @@ from settings import params, paths
 from lib import rnaseqFuncs
 from lib.utils import plot_utils, matrix_utils
 from matplotlib.patches import Patch
-from scipy.stats import rankdata, chi2
-from scipy.stats import chi2
 import seaborn as sns
 import umap
 from statsmodels.stats.multitest import fdrcorrection
@@ -63,17 +61,6 @@ except:
 rnaseqFuncs.saveDataset(counts, pd.DataFrame(order), paths.outputDir + "rnaseq/count_tables/TCGA/")
 annotation.to_csv(paths.outputDir + "rnaseq/count_tables/TCGA/annotation_table.csv")
 # %%
-try:
-    os.mkdir(paths.outputDir + "rnaseq/count_tables/")
-except:
-    pass
-try:
-    os.mkdir(paths.outputDir + "rnaseq/count_tables/TCGA/")
-except:
-    pass
-rnaseqFuncs.saveDataset(counts, pd.DataFrame(order), paths.outputDir + "rnaseq/count_tables/TCGA/")
-
-# %%
 # Remove undected Pol II probes
 nzCounts = rnaseqFuncs.filterDetectableGenes(counts, readMin=1, expMin=3)
 counts = counts[:, nzCounts]
@@ -82,7 +69,7 @@ counts = counts[:, nzCounts]
 sf = rnaseqFuncs.scranNorm(counts)
 # %%
 try:
-    os.mkdir(paths.outputDir + "rnaseq/TCGA/")
+    os.mkdir(paths.outputDir + "rnaseq/TCGA2/")
 except FileExistsError:
     pass
 # %%
@@ -92,7 +79,7 @@ hv = countModel.hv
 # %%
 # Identify DE per condition
 try:
-    os.mkdir(paths.outputDir + "rnaseq/TCGA/DE/")
+    os.mkdir(paths.outputDir + "rnaseq/TCGA2/DE/")
 except FileExistsError:
     pass
 # %%
@@ -102,10 +89,6 @@ enricherglm = pyGREATglm(paths.GOfile,
                           chrFile=paths.genomeFile)
 consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
 consensuses.columns = ["Chromosome", "Start", "End", "Name", "Score", "Strand", "ThickStart", "ThickEnd"]
-try:
-    os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/DE/")
-except FileExistsError:
-    pass
 # %%
 # 1 vs All DE analysis (markers)
 from lib.utils.reusableUtest import mannWhitneyAsymp
@@ -139,16 +122,16 @@ for i in label.unique():
     print(sig.sum())
     res = pd.DataFrame(res2[::-1], columns=consensuses.index[nzCounts], index=["pval", "stat"]).T
     res["Upreg"] = sig.astype(int)
-    res.to_csv(paths.outputDir + f"rnaseq/TCGA/DE/res_{i}.csv")
+    res.to_csv(paths.outputDir + f"rnaseq/TCGA2/DE/res_{i}.csv")
     test = consensuses[nzCounts][sig]
-    test.to_csv(paths.outputDir + f"rnaseq/TCGA/DE/bed_{i}", header=None, sep="\t", index=None)
+    test.to_csv(paths.outputDir + f"rnaseq/TCGA2/DE/bed_{i}", header=None, sep="\t", index=None)
     if len(test) == 0:
         continue
     """     
     pvals = enricherglm.findEnriched(test, background=consensuses)
     enricherglm.plotEnrichs(pvals)
     enricherglm.clusterTreemap(pvals, score="-log10(pval)", 
-                                output=paths.outputDir + f"rnaseq/TCGA/DE/great_{i}.pdf") """
+                                output=paths.outputDir + f"rnaseq/TCGA2/DE/great_{i}.pdf") """
 
 # %%
 # Compute PCA
@@ -182,8 +165,8 @@ dat = go.Scattergl(x=embedding[:,0],y=embedding[:,1], mode="markers",
 layout = dict(height=1200, width=1200)
 fig = go.Figure(dat, layout=layout)
 fig.show()
-fig.write_image(paths.outputDir + "rnaseq/TCGA/umap_samples.pdf")
-fig.write_html(paths.outputDir + "rnaseq/TCGA/umap_samples.pdf" + ".html")
+fig.write_image(paths.outputDir + "rnaseq/TCGA2/umap_samples.pdf")
+fig.write_html(paths.outputDir + "rnaseq/TCGA2/umap_samples.pdf" + ".html")
 # %%
 import plotly.express as px
 #%%
@@ -221,7 +204,7 @@ xScale = plt.xlim()[1] - plt.xlim()[0]
 yScale = plt.ylim()[1] - plt.ylim()[0]
 # plt.gca().set_aspect(xScale/yScale)
 plt.axis('off')
-plt.savefig(paths.outputDir + "rnaseq/TCGA/umap_all_tumors_plus_normal.png")
+plt.savefig(paths.outputDir + "rnaseq/TCGA2/umap_all_tumors_plus_normal.png")
 plt.show()
 plt.figure(dpi=500)
 plt.axis('off')
@@ -231,47 +214,126 @@ for i in np.unique(cancerType):
     patches.append(legend)
 plt.legend(handles=patches)
 plt.title(f"Balanced accuracy on {len(np.unique(cancerType))} cancers : {acc}")
-plt.savefig(paths.outputDir + "rnaseq/TCGA/umap_all_tumors_lgd.pdf", bbox_inches="tight")
+plt.savefig(paths.outputDir + "rnaseq/TCGA2/umap_all_tumors_lgd.pdf", bbox_inches="tight")
 plt.show()
-
 # %%
-'''
-clustsPol2 = np.loadtxt(paths.outputDir + "clusterConsensuses_Labels.txt",dtype=int)[nzCounts]
-nClusts = np.max(clustsPol2)+1
-nAnnots = len(eq)
-zScores = np.zeros((nClusts, nAnnots))
-avg1Read = np.mean(countModel.residuals, axis=0) > 1
-filteredMat = np.log(1+countModel.residuals)[:, avg1Read]
-for i in range(nAnnots):
-    hasAnnot = cancerType == i
-    sd = np.std(np.percentile(filteredMat[hasAnnot], 95, axis=0))
-    expected = np.mean(np.percentile(filteredMat[hasAnnot], 95, axis=0))
-    for j in range(nClusts):
-        inClust = clustsPol2[avg1Read] == j
-        notInClust = np.logical_not(clustsPol2 == j)
-        observed = np.mean(np.percentile(filteredMat[hasAnnot][:, inClust], 95, axis=0))
-        zScores[j, i] = (observed-expected)/sd
-import matplotlib as mpl
-rowOrder, colOrder = matrix_utils.HcOrder(zScores)
-rowOrder = np.loadtxt(paths.outputDir + "clusterBarplotOrder.txt").astype(int)
-zClip = np.clip(zScores,0.0,10.0)
-zNorm = np.clip(zClip / np.percentile(zClip, 95),0.0,1.0)
-plt.figure(dpi=300)
-sns.heatmap(zNorm[rowOrder].T[colOrder], cmap="vlag", linewidths=0.1, linecolor='black', cbar=False)
-plt.gca().set_aspect(2.0)
-plt.yticks(np.arange(len(eq))+0.5, eq[colOrder], rotation=0)
-plt.xticks([],[])
-plt.xlabel(f"{len(zNorm)} Pol II clusters")
-plt.savefig(paths.outputDir + "rnaseq/TCGA/signalPerClustPerAnnot.pdf", bbox_inches="tight")
+# Subtype info
+subtypeAnnot = pd.read_csv(paths.tcgaSubtypes, sep=",", index_col="pan.samplesID")
+subtypeAnnot.index = ["-".join(i.split("-")[:4]) for i in subtypeAnnot.index]
+query = annotation["Sample ID"]
+inSubtypeAnnot = np.isin(query, subtypeAnnot.index)
+subtype = pd.Series(["N/A"]*len(query), index=query)
+subtype[inSubtypeAnnot] = subtypeAnnot.loc[query[inSubtypeAnnot]]["Subtype_Selected"]
+# %%
+# Plot UMAP w/ subtype info
+import plotly.express as px
+import plotly.graph_objects as go
+df = pd.DataFrame(embedding, columns=["x","y"])
+palette = np.array(sns.color_palette("Paired"))[[3,9,4,5,1, -2]]
+df["Sample Type"] = annotation["Sample Type"].values
+df["Project"] = annotation["Project ID"].values
+df["Normal"] = 1.0*(annotation["Sample Type"].values == "Solid Tissue Normal")
+df["Size"] = 3*np.sqrt(len(df)/7500) * (1+df["Normal"])
+df["Hover"] = df["Project"] + "\n" + df["Sample Type"]  + "\n" + subtype.values
+project_id = annotation["project_id"]
+brcaOnly = subtype.copy()
+brcaOnly[["BRCA" not in i for i in subtype.values]] = "N/A"
+subtypecat, eq = pd.factorize(brcaOnly.values, sort=True)
+colors = palette[subtypecat]
+nas = brcaOnly.values == "N/A"
+colors = np.concatenate([colors, np.ones((len(colors),1))], axis=1)
+colors[nas] = (0.5,0.5,0.5,0.1)
+palette[eq=="N/A"] = (0.5,0.5,0.5)
+df["Color"] = [f"rgb({int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)})" for c in colors]
+#df = df[df["Project"] == "TCGA-BRCA"]
+markers = go.scattergl.Marker(color=df["Color"], size=df["Size"], 
+                            line=dict(width=df["Normal"], color="rgb(0,0,0)"))
+dat = go.Scattergl(x=df["x"],y=df["y"], mode="markers",
+                   marker=markers, hovertext=df["Hover"])
+layout = dict(height=1200, width=1200)
+fig = go.Figure(dat, layout=layout)
+fig.show()
+fig.write_image(paths.outputDir + "rnaseq/TCGA2/umap_samples_subtype_BRCA.pdf")
+fig.write_html(paths.outputDir + "rnaseq/TCGA2/umap_samples_subtype_BRCA.pdf" + ".html")
+plt.figure(dpi=500)
+plt.axis('off')
+patches = []
+for i in np.unique(subtypecat):
+    legend = Patch(color=palette[i], label=eq[i])
+    patches.append(legend)
+plt.legend(handles=patches)
+plt.savefig(paths.outputDir + "rnaseq/TCGA2/umap_subtype_brca_lgd.pdf", bbox_inches="tight")
 plt.show()
-plt.figure(figsize=(6, 1), dpi=300)
-norm = mpl.colors.Normalize(vmin=0, vmax=np.percentile(zClip, 95))
-cb = mpl.colorbar.ColorbarBase(plt.gca(), sns.color_palette("vlag", as_cmap=True), norm, orientation='horizontal')
-cb.set_label("95th percentile Z-score")
-plt.tight_layout()
-plt.savefig(paths.outputDir + "rnaseq/TCGA/signalPerClustPerAnnot_colorbar.pdf")
+# %%
+import plotly.express as px
+import plotly.graph_objects as go
+df = pd.DataFrame(embedding, columns=["x","y"])
+palette = np.array(sns.color_palette())
+df["Sample Type"] = annotation["Sample Type"].values
+df["Project"] = annotation["Project ID"].values
+df["Normal"] = 1.0*(annotation["Sample Type"].values == "Solid Tissue Normal")
+df["Size"] = 3*np.sqrt(len(df)/7500) * (1+df["Normal"])
+df["Hover"] = df["Project"] + "\n" + df["Sample Type"]  + "\n" + subtype.values
+project_id = annotation["project_id"]
+brcaOnly = subtype.copy()
+brcaOnly[["THCA" not in i for i in subtype.values]] = "N/A"
+subtypecat, eq = pd.factorize(brcaOnly.values, sort=True)
+colors = palette[subtypecat]
+nas = brcaOnly.values == "N/A"
+colors = np.concatenate([colors, np.ones((len(colors),1))], axis=1)
+colors[nas] = (0.5,0.5,0.5,0.1)
+palette[np.argmax(eq=="N/A")] = (0,0,0)
+df["Color"] = [f"rgb({int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)})" for c in colors]
+#df = df[df["Project"] == "TCGA-BRCA"]
+markers = go.scattergl.Marker(color=df["Color"], size=df["Size"], 
+                            line=dict(width=df["Normal"], color="rgb(0,0,0)"))
+dat = go.Scattergl(x=df["x"],y=df["y"], mode="markers",
+                   marker=markers, hovertext=df["Hover"])
+layout = dict(height=1200, width=1200)
+fig = go.Figure(dat, layout=layout)
+fig.show()
+fig.write_image(paths.outputDir + "rnaseq/TCGA2/umap_samples_subtype_THCA.pdf")
+fig.write_html(paths.outputDir + "rnaseq/TCGA2/umap_samples_subtype_THCA.pdf" + ".html")
+plt.figure(dpi=500)
+plt.axis('off')
+patches = []
+for i in np.unique(subtypecat):
+    legend = Patch(color=palette[i], label=eq[i])
+    patches.append(legend)
+plt.legend(handles=patches)
+plt.savefig(paths.outputDir + "rnaseq/TCGA2/umap_subtype_thca_lgd.pdf", bbox_inches="tight")
 plt.show()
-'''
+# %%
+# Grade
+import plotly.express as px
+import plotly.graph_objects as go
+df = pd.DataFrame(embedding, columns=["x","y"])
+
+df["Sample Type"] = annotation["Sample Type"].values
+df["Project"] = annotation["Project ID"].values
+df["Normal"] = 1.0*(annotation["Sample Type"].values == "Solid Tissue Normal")
+df["Size"] = 3*np.sqrt(len(df)/7500) * (1+df["Normal"])
+df["Stage"] = annotation["ajcc_pathologic_stage"].values
+df["Hover"] = df["Project"] + "\n" + df["Sample Type"]  + "\n" + subtype.values + "\n" + annotation["ajcc_pathologic_stage"].values
+
+project_id = annotation["project_id"]
+brcaOnly = subtype.copy()
+subtypecat, eq = pd.factorize(df["Stage"].astype("str"), sort=True)
+palette = np.array(sns.color_palette("rocket", len(eq)))
+colors = palette[subtypecat]
+colors = np.concatenate([colors, np.ones((len(colors),1))], axis=1)
+# palette[eq=="N/A"] = (0.5,0.5,0.5)
+df["Color"] = [f"rgb({int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)})" for c in colors]
+df = df[df["Project"] == "TCGA-BRCA"]
+markers = go.scattergl.Marker(color=df["Color"], size=df["Size"]*2, 
+                            line=dict(width=df["Normal"], color="rgb(0,0,0)"))
+dat = go.Scattergl(x=df["x"],y=df["y"], mode="markers",
+                   marker=markers, hovertext=df["Hover"])
+layout = dict(height=1200, width=1200)
+fig = go.Figure(dat, layout=layout)
+fig.show()
+fig.write_image(paths.outputDir + "rnaseq/TCGA2/umap_samples_BRCA_grade.pdf")
+fig.write_html(paths.outputDir + "rnaseq/TCGA2/umap_samples_BRCA_grade.pdf" + ".html")
 # %%
 # HC 
 rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
@@ -280,7 +342,7 @@ colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.residuals.T, "c
 vals = countModel.normed
 plot_utils.plotHC(vals.T, eq[cancerType], vals.T,  
                     rowOrder=rowOrder, colOrder=colOrder, hq=True)
-plt.savefig(paths.outputDir + "rnaseq/TCGA/HM_all.pdf", bbox_inches="tight")
+plt.savefig(paths.outputDir + "rnaseq/TCGA2/HM_all.pdf", bbox_inches="tight")
 # %%
 # HC (hv probes only)
 rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
@@ -289,6 +351,6 @@ colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.residuals.T[hv]
 vals = countModel.normed
 plot_utils.plotHC(vals.T[hv], eq[cancerType], vals.T[hv],  
                     rowOrder=rowOrder, colOrder=colOrder, hq=True)
-plt.savefig(paths.outputDir + "rnaseq/TCGA/HM_hv.pdf", bbox_inches="tight")
+plt.savefig(paths.outputDir + "rnaseq/TCGA2/HM_hv.pdf", bbox_inches="tight")
 
 # %%

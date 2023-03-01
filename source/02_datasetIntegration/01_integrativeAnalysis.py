@@ -61,6 +61,7 @@ if params.removeGeneTail5kb:
     toRemove = tailedPol2["Name"].values
     merger.consensuses = merger.consensuses.drop(toRemove)
     merger.matrix = np.delete(merger.matrix, toRemove, axis=0)
+
 # %%
 highVar = np.mean(merger.matrix.T, axis=0) < 0.51
 orderRows = matrix_utils.threeStagesHC(merger.matrix.T[:, highVar], "yule")
@@ -88,7 +89,23 @@ merger.umap(transpose=False, metric="dice", altMatrix=merger.matrix, annotationF
 # Clustering consensus peaks
 merger.clusterize(transpose=False, r=0.5, metric="dice", restarts=10, annotationFile=paths.annotationFile,
                   reDo=False, annotationPalette=paths.polIIannotationPalette)
-
+# %%
+# Plot UMAP per cluster
+utils.createDir(paths.outputDir + "clusterUMAPFacet/")
+minx = np.nanmin(merger.embedding[0][:, 1])
+maxx = np.nanmax(merger.embedding[0][:, 1])
+miny = np.nanmin(-merger.embedding[0][:, 0])
+maxy = np.nanmax(-merger.embedding[0][:, 0])
+palette, colors = plot_utils.getPalette(merger.clustered[0])
+for i in range(merger.clustered[0].max()+1):
+    plt.figure(dpi=300)
+    plt.xlim(minx,maxx)
+    plt.ylim(miny,maxy)
+    plt.scatter(merger.embedding[0][merger.clustered[0]==i, 1], 
+                -merger.embedding[0][merger.clustered[0]==i, 0],s=0.5, linewidths=0, alpha=0.5, c=palette[i])
+    plt.title(i)
+    plt.savefig(paths.outputDir + f"clusterUMAPFacet/{i}.png", bbox_inches="tight")
+    plt.close()
 # %%
 # Intersect enrichments
 try:
@@ -140,3 +157,5 @@ for i in range(np.max(merger.clustered[0])+1):
     if (goEnrich["BH corrected p-value"] < 0.05).sum() >= 2:
         enricher.clusterTreemap(goEnrich, output=paths.outputDir + f"cluster_enrichments/GO_treemap_{i}.pdf")
 # %%
+with open(paths.tempDir + "end0201.txt", "w") as f:
+    print(f)

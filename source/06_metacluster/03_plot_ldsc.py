@@ -10,12 +10,12 @@ lookupTable = pd.read_csv(f"{paths.ldscFilesPath}/LDSC Sumstat Manifest for Neal
 lookupTable.set_index("phenotype", inplace=True)
 lookupTable.index = lookupTable.index.astype(str)
 
-allFiles = os.listdir(paths.outputDir + "ldsc/")
+allFiles = os.listdir(paths.outputDir + "ldsc_meta/")
 allFiles = [f for f in allFiles if f.endswith(".results")]
 results = dict()
 for f in allFiles:
-    df = pd.read_csv(paths.outputDir + f"ldsc/{f}", sep="\t")
-    df["Category"] = df["Category"].str.split("/cluster_",2,True)[1].str.split("L2_0",2,True)[0].astype("str")
+    df = pd.read_csv(paths.outputDir + f"ldsc_meta/{f}", sep="\t")
+    df["Category"] = df["Category"].str.split("/liftedClusters/",2,True)[1].str.split("L2_0",2,True)[0].astype("str")
     df.set_index("Category", inplace=True)
     cats = df.index
     trait = f.split(".")[0]
@@ -30,15 +30,16 @@ for k in results:
 from statsmodels.stats.multitest import fdrcorrection
 qvalDf = pvalDF.copy()*np.prod(pvalDF.shape)
 # %%
-from lib.utils import plot_utils
+from lib.utils import plot_utils, utils
 import matplotlib.pyplot as plt
+utils.createDir(paths.outputDir + "ldsc_meta_figures/")
 for clust in enrichDF.index:
     print(clust)
-    enrichDF.loc[clust][(enrichDF.loc[clust] > 1.0) & (qvalDf.loc[clust] < 0.05)].sort_values()[::-1]
     fig, ax = plt.subplots(figsize=(2,2), dpi=500)
-    plot_utils.enrichBarplot(ax, enrichDF.loc[clust], qvalDf.loc[clust], fcMin=2.0, order_by="fc", cap=2000)
+    plot_utils.enrichBarplot(ax, enrichDF.loc[clust], qvalDf.loc[clust], 
+                            fcMin=2.0, order_by="fc", cap=1e6, alpha=1e-3)
     ax.set_xlabel("Heritability enrichment")
-    fig.savefig(f"{paths.outputDir}/cluster_enrichments/ldsc_{clust}.pdf", bbox_inches="tight")
+    fig.savefig(f"{paths.outputDir}/ldsc_meta_figures/ldsc_{clust}.png", bbox_inches="tight")
     # plt.show()
     plt.close()
 # %%

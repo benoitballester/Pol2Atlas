@@ -52,6 +52,7 @@ studiedConsensusesCase = dict()
 cases = allAnnots["project_id"].unique()
 # %%
 for case in cases:
+    print("case")
     # Select only relevant files and annotations
     annotation = pd.read_csv(paths.tcgaData + "/perFileAnnotation.tsv", 
                             sep="\t", index_col=0)
@@ -142,6 +143,18 @@ for case in cases:
     allDE = consensuses[nzCounts][sig]
     allDE["Score"] = -np.log10(padj[sig])
     allDE.to_csv(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/allDE.bed", sep="\t", header=None, index=None)
+    
+    delta = np.mean(countModel.residuals[labels == 1], axis=0) - np.mean(countModel.residuals[labels == 0], axis=0)
+    allWithScore = consensuses.copy()[["Chromosome", "Start", "End", "Name"]]
+    allWithScore["logFDR"] = 0.0
+    allWithScore["logFDR"][nzCounts] = -np.log10(padj)
+    allWithScore["DeltaRes"] = 0.0
+    allWithScore["DeltaRes"][nzCounts] = delta
+    allWithScore["DeltaRes"] = 0.0
+    allWithScore["DeltaRes"][nzCounts] = delta
+    allWithScore["LFC"] = 0.0
+    allWithScore["LFC"][nzCounts] = np.log2(fc)
+    allWithScore.to_csv(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/allWithStats.bed", sep="\t", index=None)
     enrichedBP = enricher.findEnriched(consensuses[nzCounts][sig], consensuses)
     enricher.plotEnrichs(enrichedBP, savePath=paths.outputDir + f"rnaseq/TumorVsNormal/{case}/DE_greatglm.pdf")
     if len(enrichedBP) > 1:
@@ -167,8 +180,8 @@ for case in cases:
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/dendrogram_row.pdf")
     plt.close()
     clippedSQ= np.log(countsNorm+1)
-    plot_utils.plotHC(clippedSQ.T, np.array(["Cancer","Normal"])[1-labels], countsNorm.T,  
-                    rowOrder=rowOrder, colOrder=colOrder)
+    plot_utils.plotHC(residuals.T, np.array(["Cancer","Normal"])[1-labels], countsNorm.T,  
+                    rowOrder=rowOrder, colOrder=colOrder, cmap="vlag", rescale="3SD")
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/heatmap.pdf")
     plt.close()
     # Plot heatmap and dendrograms (hv)
@@ -184,8 +197,8 @@ for case in cases:
     plt.axis('off')
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/dendrogram_row_hv.pdf")
     clippedSQ= np.log(countsNorm+1)
-    plot_utils.plotHC(clippedSQ.T[hv], np.array(["Cancer","Normal"])[1-labels], countsNorm.T[hv],  
-                    rowOrder=rowOrder, colOrder=colOrder)
+    plot_utils.plotHC(residuals.T[hv], np.array(["Cancer","Normal"])[1-labels], countsNorm.T[hv],  
+                    rowOrder=rowOrder, colOrder=colOrder, cmap="vlag", rescale="3SD")
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/heatmap_hv.pdf")
     plt.close()
     # Plot heatmap and dendrograms (DE)
@@ -204,7 +217,7 @@ for case in cases:
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/dendrogram_row_DE.pdf")
     plt.close()
     clippedSQ = countModel.residuals
-    plot_utils.plotHC(clippedSQ.T[sig], np.array(["Cancer","Normal"])[1-labels], countsNorm.T[sig],  
+    plot_utils.plotHC(residuals.T[sig], np.array(["Cancer","Normal"])[1-labels], countsNorm.T[sig],  
                     rowOrder=rowOrder, colOrder=colOrder, cmap="vlag", rescale="3SD")
     plt.savefig(paths.outputDir + "rnaseq/TumorVsNormal/" + case + "/heatmap_DE.pdf")
     plt.close()

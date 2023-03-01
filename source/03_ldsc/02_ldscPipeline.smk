@@ -14,7 +14,7 @@ except:
     pass
 
 
-sumstatsFolder = paths.ldscFilesPath + "ldsc_sumstats/"
+sumstatsFolder = paths.ldscFilesPath + "/"
 sumstatsFilesAll = os.listdir(sumstatsFolder)
 sumstatsFiles = []
 for i in sumstatsFilesAll:
@@ -26,7 +26,6 @@ tfClusts = os.listdir(tfFolder)
 tfPaths = [tfFolder + f for f in tfClusts]
 
 chroms = list(range(1,23))
-
 
 
 rule all:
@@ -74,7 +73,7 @@ rule baselineLD:
     shell:
        """
        python lib/ldsc/ldsc.py --l2 \
-       --bfile {paths.ldscFilesPath}/ldsc_files/1000G_EUR_Phase3_plink/1000G.EUR.QC.{wildcards.chroms} \
+       --bfile {paths.ldscFilesPath}/1000G_EUR_Phase3_plink/1000G.EUR.QC.{wildcards.chroms} \
        --ld-wind-cm 1 \
        --annot {paths.tempDir}ld.{wildcards.chroms}.annot.gz  \
        --out {paths.tempDir}ld.{wildcards.chroms}
@@ -93,9 +92,9 @@ rule computeSLDSC:
         """
         python lib/ldsc/ldsc.py --h2 {sumstatsFolder}{wildcards.sumstatsFiles} \
         --ref-ld-chr {paths.tempDir}ld. \
-        --w-ld-chr {paths.ldscFilesPath}ldsc_files/weights_hm3_no_hla/weights. \
+        --w-ld-chr {paths.ldscFilesPath}/weights_hm3_no_hla/weights. \
         --annot {paths.tempDir}ld. \
-        --frqfile-chr {paths.ldscFilesPath}ldsc_files/1000G_Phase3_frq/1000G.EUR.QC. \
+        --frqfile-chr {paths.ldscFilesPath}/1000G_Phase3_frq/1000G.EUR.QC. \
         --out {paths.outputDir}ldsc/{wildcards.sumstatsFiles} \
         --overlap-annot \
         --n-blocks 100000

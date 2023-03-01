@@ -450,7 +450,7 @@ def capTxtLen(txt, maxlen):
     except:
         return "N/A"
 
-def enrichBarplot(ax, enrichFC, enrichQval, title="", order_by="fc", alpha=0.05, fcMin = 1.0, topK=10):
+def enrichBarplot(ax, enrichFC, enrichQval, title="", order_by="fc", alpha=0.05, fcMin = 1.0, topK=10, cap=324.0):
     selected = (enrichQval < alpha) & (enrichFC > fcMin)
     if order_by == "fc":
         ordered = enrichFC[selected].sort_values(ascending=False)[:topK]
@@ -463,7 +463,7 @@ def enrichBarplot(ax, enrichFC, enrichQval, title="", order_by="fc", alpha=0.05,
     t = [capTxtLen(term, 50) for term in terms]
     ax.tick_params(axis="x", labelsize=8)
     ax.tick_params(length=3, width=1.2)
-    ax.barh(range(len(terms)), np.minimum(ordered[::-1],324.0))
+    ax.barh(range(len(terms)), np.minimum(ordered[::-1],cap))
     ax.set_yticks(range(len(terms)))
     ax.set_yticklabels(t[::-1], fontsize=5)
     ax.spines['right'].set_visible(False)
