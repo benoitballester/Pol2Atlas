@@ -38,7 +38,7 @@ The usage instructions for the project can be found in the `USAGE.md` file in th
 
 ## Data
 
-The data used in this project is publicly available at the "Entrepôt-Catalogue Recherche Data Gouv https://entrepot.recherche.data.gouv.fr" [@BRUWG5_2023] and can be found at the following DOI:
+The data used in this project is publicly available at the "Entrepôt-Catalogue Recherche Data Gouv https://entrepot.recherche.data.gouv.fr" [@remap2022] and can be found at the following DOI:
 
 [https://doi.org/10.57745/BRUWG5](https://doi.org/10.57745/BRUWG5)
 
