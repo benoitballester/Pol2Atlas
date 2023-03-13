@@ -1,7 +1,8 @@
 # A high-resolution atlas of intergenic transcription in nearly 29,000 normal and cancer samples.
 
+[![DOI](http://img.shields.io/badge/DOI-10.1101/2021.01.08.425840-B31B1B.svg)](https://doi.org/)
 
-This project is based on the research paper [A high-resolution atlas of intergenic transcription in nearly 29,000 normal and cancer samples](https://www.biorxiv.org/) by Pierre de Langen et al. 
+This is the code repository for the research paper [A high-resolution atlas of intergenic transcription in nearly 29,000 normal and cancer samples](https://www.biorxiv.org/) by Pierre de Langen et al. 
 
 ## Table of Contents
 
@@ -37,6 +38,7 @@ The installation instructions for the project can be found in the `INSTALL.md` f
 The usage instructions for the project can be found in the `USAGE.md` file in the repository[@remap2022].
 
 ## Data
+[![DOI](http://img.shields.io/badge/DOI-10.1101/2021.01.08.425840-B31B1B.svg)](https://doi.org/10.57745/BRUWG5)
 
 The data used in this project is publicly available at the "Entrepôt-Catalogue Recherche Data Gouv https://entrepot.recherche.data.gouv.fr" [@BRUWG5_2023] and can be found at the following DOI:
 
