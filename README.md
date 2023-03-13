@@ -3,7 +3,7 @@
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/<username>/<repository>/blob/main/LICENSE)
 [![GitHub issues](https://img.shields.io/github/issues/<username>/<repository>)](https://github.com/<username>/<repository>/issues)
 
-A brief description of the project, including its purpose and main features.
+This project is based on the research paper "A high-resolution atlas of intergenic transcription in nearly 29,000 normal and cancer samples" by Pierre de Langen et al. 
 
 ## Table of Contents
 
@@ -17,7 +17,7 @@ A brief description of the project, including its purpose and main features.
 
 ## Background
 
-This project is based on the research paper "A high-resolution atlas of intergenic transcription in nearly 29,000 normal and cancer samples" by Pierre de Langen et al. The aim of this project is to provide a high-resolution atlas of intergenic transcription in nearly 29,000 normal and cancer samples. The project uses bioinformatics tools and techniques to analyze the data and present the results in an easy-to-use format.
+This study present an atlas of active intergenic regions that connects genomic, transcriptomic, and clinical data across normal and cancer samples. The atlas contains over 180,000 RNA Polymerase II bound intergenic regions in more than 900 samples, revealing extensive activity in non-coding regions. By applying a meta-clustering methodology, the authors identified novel per-cancer and pan-cancer intergenic transcriptional markers showing genomic and clinically relevant characteristics, demonstrating the effectiveness of a simple yet effective integration uncovering intergenic transcriptional activity in both normal and cancer tissues.
 
 ## Installation
 
