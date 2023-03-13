@@ -12,6 +12,7 @@ This project is based on the research paper "A high-resolution atlas of intergen
 - [Data](#data)
 - [License](#license)
 - [Acknowledgements](#acknowledgements)
+- [References](#references)
 
 ## Background
 
@@ -52,5 +53,6 @@ This project is licensed under the GPL-3.0 license. See the `LICENSE.md` file in
 
 We would like to thank the authors of the original research paper for providing the data used in this project. We would also like to thank the bioinformatics community for their contributions to the field.
 
+## References
 
 \bibliography{references.bib}
