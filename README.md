@@ -1,7 +1,5 @@
 # A high-resolution atlas of intergenic transcription in nearly 29,000 normal and cancer samples.
 
-[![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/<username>/<repository>/blob/main/LICENSE)
-[![GitHub issues](https://img.shields.io/github/issues/<username>/<repository>)](https://github.com/<username>/<repository>/issues)
 
 This project is based on the research paper "A high-resolution atlas of intergenic transcription in nearly 29,000 normal and cancer samples" by Pierre de Langen et al. 
 
@@ -22,6 +20,11 @@ This study present an atlas of active intergenic regions that connects genomic, 
 ## Installation
 
 The installation instructions for the project can be found in the `INSTALL.md` file in the repository.
+
+1. Clone the repo
+   ```sh
+   git clone https://github.com/benoitballester/Pol2Atlas.git
+
 
 ## Dependencies
 
@@ -50,9 +53,4 @@ This project is licensed under the GPL-3.0 license. See the `LICENSE.md` file in
 We would like to thank the authors of the original research paper for providing the data used in this project. We would also like to thank the bioinformatics community for their contributions to the field.
 
 
-
-### Installation
-
-1. Clone the repo
-   ```sh
-   git clone https://github.com/<username>/<repository>.git
+\bibliography{references.bib}
