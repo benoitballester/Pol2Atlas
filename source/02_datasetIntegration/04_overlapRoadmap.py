@@ -504,3 +504,5 @@ df1 = computeProps(consensusEpigenomeMat[np.logical_not(clusts==9)][:, (usedEpig
 df2 = computeProps(consensusEpigenomeMat[clusts==9][:, usedEpigenomes], np.array(epigenomes)[usedEpigenomes], 
                     chrStateMap.classes_, targetCol=f"'Embryo' cluster, in 'ESC' epigenomes")
 # %%
+with open(paths.tempDir + "end0204.txt", "w") as f:
+    f.write("1")

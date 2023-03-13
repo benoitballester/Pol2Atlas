@@ -29,3 +29,5 @@ trash/
 .~lock.metadata.csv#
 source/rnaseqAnalysis/TCGA/__pycache__
 .cache
+.keras
+ldsc.log

@@ -28,11 +28,11 @@ consensuses.columns = ["Chromosome", "Start", "End", "Name"]
 # Read per tissue markers
 indices = dict()
 # Files GTex
-filesEncode = os.listdir(paths.outputDir + "rnaseq/encode_rnaseq/DE/")
+filesEncode = os.listdir(paths.outputDir + "rnaseq/gtex_rnaseq/DE/")
 filesEncode = [f for f in filesEncode if f.startswith("res_")]
 for f in filesEncode:
     name = f[4:-4]
-    res = pd.read_csv(paths.outputDir + "rnaseq/encode_rnaseq/DE/" + f, index_col=0)["Upreg"] 
+    res = pd.read_csv(paths.outputDir + "rnaseq/gtex_rnaseq/DE/" + f, index_col=0)["Upreg"] 
     vals = res.index[res==1].values
     if len(vals) < 100:
         continue
@@ -213,6 +213,21 @@ for f in filesEncode:
     indices[name] = vals
 consensuses, mat = buildMarkerMatrix(consensuses, indices)
 eqtlEnrich(consensuses, mat, tissues, eqtlDf, highSpec, eqtlPos, "GTEx", colors)
+# %%
+numMarkers = mat.sum(axis=1).sort_values(ascending=False)
+rgb = colors.loc[numMarkers.index]["color_rgb"].str.split(",", expand=True).astype(int).values/255.0
+plt.figure(dpi=500, figsize=(3,3))
+plt.gca().set_axisbelow(True)
+plt.gca().yaxis.grid(color='gray', linestyle='dashed', linewidth="0.1")
+plt.gca().xaxis.grid(color='gray', linestyle='dashed', linewidth="0.1")
+plt.barh(numMarkers.index, numMarkers.values, color=rgb)
+plt.gca().set_aspect((plt.xlim()[1]-plt.xlim()[0]) / (plt.ylim()[1]-plt.ylim()[0])*1.5)
+plt.yticks(fontsize=4)
+plt.locator_params(axis='y', nbins=10)
+plt.xticks(fontsize=4, rotation=90)
+plt.xlabel("Marker count", fontsize=8)
+plt.savefig(paths.outputDir + "eqtlAnalysis/markerCount.pdf", bbox_inches="tight")
+plt.show()
 # %%
 '''
 # Pol II

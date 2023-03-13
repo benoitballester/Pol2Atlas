@@ -1,4 +1,4 @@
-snakemake --snakefile source/ldsc/dlGwasSumstats.smk \
+snakemake --snakefile source/03_ldsc/01_dlGwasSumstats.smk \
           --cores 32 \
           --rerun-incomplete \
           -k \

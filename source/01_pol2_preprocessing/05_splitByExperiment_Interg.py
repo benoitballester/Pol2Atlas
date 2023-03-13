@@ -9,13 +9,12 @@ from settings import params, paths
 from lib.utils import utils
 utils.createDir(paths.outputDir + "descriptivePlots/")
 
-""" sys.argv = [None]*6
+sys.argv = [None]*6
 sys.argv[1] = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/filteredInterg.bed"
 sys.argv[2] = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/peaks/"
 sys.argv[3] = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/filtered.bed"
 sys.argv[4] = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/filteredqval_dataset_all.bed"
 sys.argv[5] = "/shared/projects/pol2_chipseq/pol2_interg_default/data_clean/filteredqval_dataset_interg.bed"
-"""
 print(sys.argv)
 df = pd.read_csv(f"{sys.argv[1]}", 
                  sep="\t", header=None)

@@ -30,7 +30,7 @@ chroms = list(range(1,23))
 
 rule all:
     input:
-        expand(paths.outputDir + "ldsc/{sumstatsFiles}.results", sumstatsFiles=sumstatsFiles)
+        paths.tempDir + "end0303.txt"
 
 annotFiles = [paths.tempDir + f"ld.{c}.annot.gz" for c in chroms]
 
@@ -98,4 +98,16 @@ rule computeSLDSC:
         --out {paths.outputDir}ldsc/{wildcards.sumstatsFiles} \
         --overlap-annot \
         --n-blocks 100000
+        """
+
+rule plot:
+    input:
+        paths.outputDir + "ldsc/{sumstatsFiles}.results"
+    singularity:
+        paths.singularityImg
+    output:
+        paths.tempDir + "end0303.txt"
+    shell:
+        """
+        python source/03_ldsc/03_plot_ldsc.py"
         """

@@ -16,13 +16,7 @@ from lib import rnaseqFuncs
 from lib.pyGREATglm import pyGREAT
 from lib.utils import matrix_utils, plot_utils, utils
 from matplotlib.patches import Patch
-from matplotlib.ticker import FormatStrFormatter
-from scipy.cluster import hierarchy
-from scipy.stats import mannwhitneyu, ttest_ind
 from settings import params, paths
-from sklearn.metrics import (balanced_accuracy_score, confusion_matrix,
-                             precision_score, recall_score)
-from sklearn.model_selection import StratifiedKFold
 from statsmodels.stats.multitest import fdrcorrection
 
 utils.createDir(paths.outputDir + "rnaseq/BRCA")
@@ -36,6 +30,9 @@ sortedIdx = ["chr1", 'chr2','chr3','chr4','chr5','chr6',
 chrFile = chrFile.loc[sortedIdx]
 
 enricher = pyGREAT(paths.GOfile,
+                          geneFile=paths.gencode,
+                          chrFile=paths.genomeFile)
+enricherMF = pyGREAT(paths.geneSets + "hsapiens.GO:MF.name.gmt",
                           geneFile=paths.gencode,
                           chrFile=paths.genomeFile)
 # %%
@@ -127,7 +124,7 @@ residuals = countModel.residuals
 countsNorm = countModel.normed
 hv = countModel.hv
 # Compute PCA on the residuals
-decomp = rnaseqFuncs.permutationPA_PCA(residuals[:, hv], mincomp=2) 
+decomp = rnaseqFuncs.permutationPA_PCA(residuals, mincomp=2, whiten=True) 
 
 # Plot PC 1 and 2
 plt.figure(dpi=500)
@@ -180,7 +177,7 @@ for i in eq.drop(["BRCA.Normal"]):
     print(i)
     res2 = ss.ttest_ind(countModel.residuals[subtype == i], countModel.residuals[refGroup], axis=0,
                         alternative="two-sided")
-    sig = fdrcorrection(res2[1])[0]
+    sig, padj = fdrcorrection(res2[1])
     minpctM = np.mean(countsNz[subtype == i] > 0.5, axis=0) > max(pctThreshold, 1.5/(subtype == i).sum())
     minpctP = np.mean(countsNz[refGroup] > 0.5, axis=0) > max(pctThreshold, 1.5/(refGroup).sum())
     minpct = minpctM | minpctP
@@ -200,16 +197,29 @@ for i in eq.drop(["BRCA.Normal"]):
     test["Score"] = res["t-stat"]
     test = test.iloc[ranked][sig[ranked]]
     test.to_csv(paths.outputDir + f"rnaseq/BRCA/bed_{i}", header=None, sep="\t", index=None)
+    delta = np.mean(countModel.residuals[subtype == i], axis=0) - np.mean(countModel.residuals[refGroup], axis=0)
+    allWithScore = consensuses.copy()[["Chromosome", "Start", "End", "Name"]]
+    allWithScore["logFDR"] = 0.0
+    allWithScore["logFDR"][nzCounts] = -np.log10(padj)
+    allWithScore["DeltaRes"] = 0.0
+    allWithScore["DeltaRes"][nzCounts] = delta
+    allWithScore["LFC"] = 0.0
+    allWithScore["LFC"][nzCounts] = np.log2(fc)
+    allWithScore.to_csv(paths.outputDir + "rnaseq/BRCA/" + f"allWithStats_{i}.bed", sep="\t", index=None)
     binVec[j, sig] = 1 
     j += 1
     if len(test) == 0:
         continue
-
-    """ pvals = enricher.findEnriched(test, background=consensuses)
+    """pvals = enricher.findEnriched(test, background=consensuses)
     enricher.plotEnrichs(pvals)
     enricher.clusterTreemap(pvals, score="-log10(pval)", 
-                            output=paths.outputDir + f"rnaseq/BRCA/great_{i}.pdf") """
-# %%
+                            output=paths.outputDir + f"rnaseq/BRCA/great_{i}.pdf")
+    pvals = enricherMF.findEnriched(test, background=consensuses)
+    enricherMF.plotEnrichs(pvals)
+    enricherMF.clusterTreemap(pvals, score="-log10(pval)", 
+                            output=paths.outputDir + f"rnaseq/BRCA/greatMF_{i}.pdf")
+    """
+ # %%
 # Unique marker per subtype
 plt.hist(np.sum(binVec, axis=0), np.arange(5))
 j = 0
@@ -225,6 +235,10 @@ for i in eq.drop(["BRCA.Normal"]):
     enricher.plotEnrichs(pvals)
     enricher.clusterTreemap(pvals, score="-log10(pval)", 
                             output=paths.outputDir + f"rnaseq/BRCA/unique_{i}.pdf")
+    pvals = enricherMF.findEnriched(test, background=consensuses)
+    enricherMF.plotEnrichs(pvals)
+    enricherMF.clusterTreemap(pvals, score="-log10(pval)", 
+                            output=paths.outputDir + f"rnaseq/BRCA/uniqueMF_{i}.pdf")
     j += 1
 # %%
 # Survival

@@ -34,6 +34,7 @@ def findMode(arr):
 
 
 def computePearsonResiduals(alpha, sf, counts, design):
+    # Avoid numerical instability
     alpha = np.clip(alpha, 1e-5, 1e5)
     pred = np.mean(counts/sf)*sf
     pearson = (counts - pred) / np.sqrt(pred + alpha * pred**2)
@@ -43,10 +44,12 @@ def computePearsonResiduals(alpha, sf, counts, design):
     return pearson.astype("float32"), chi2p 
 
 def computeDevianceResiduals(alpha, sf, counts, design):
+    # Avoid numerical instability
     alpha = np.clip(alpha, 1e-5, 1e5)
     pred = np.mean(counts/sf)*sf
     distrib = NegativeBinomial(alpha=alpha)
     devianceRes = distrib.resid_dev(counts, pred)
+    # Re-center
     devianceRes -= np.mean(devianceRes)
     chi2p = chi2(len(sf)-design.shape[1]).sf(np.sum(np.square(devianceRes), axis=0))
     return devianceRes.astype("float32"), chi2p 
@@ -71,11 +74,44 @@ class RnaSeqModeler:
         '''
         pass
     
-    def fit(self, counts, sf, design=None, maxThreads=-1, subSampleEst=5000, plot=True, verbose=True,
+    def fit(self, counts, sf, maxThreads=-1, subSampleEst=5000, plot=True, verbose=True,
             figSaveDir=None, residuals="pearson"):
-        '''
-        Fit the model
-        '''
+        """
+        Fit mean-variance relationship and compute residuals.
+
+        Parameters
+        ----------
+        counts : ndarray of ints
+            (samples, features) array with raw counts
+        sf : ndarray of floats
+            Size factors for each row
+        maxThreads : int, optional
+            Number of threads to use, by default -1 (all)
+        subSampleEst : int, optional
+            Number of features to estimate mean-overdispersion relationship, by default 5000
+        plot : bool, optional
+            Whether to plot fit figures, by default True
+        verbose : bool, optional
+            Whether to write advancement or not, by default True
+        figSaveDir : str or None, optional
+            Path to save figures, by default None
+        residuals : str, optional
+            "deviance" or "pearson", by default "pearson"
+
+        Returns
+        -------
+        self
+
+        Attributes
+        ----------
+        normed : float32 ndarray
+            Normalized counts
+        residuals : float32 ndarray
+            (samples, features) array of pearson or deviance residuals.
+        hv : bool ndarray
+            Features whose chi2 test is significant at an FDR of 5%
+        """
+        design=None
         if design is None:
             design = np.ones([len(sf),1], dtype="float32")
         # Setup size factors

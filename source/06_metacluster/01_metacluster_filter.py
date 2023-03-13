@@ -76,6 +76,7 @@ for i, k in enumerate(indices.keys()):
     data += [True]*len(idx)
 mat = csr_matrix((data, (rows, cols)), shape=(len(indices), np.max(cols)+1), dtype=bool)
 mat = pd.DataFrame(mat.todense(), index=indices.keys())
+subsetGTex = mat.loc[mat.index.str.startswith("GTex")]
 mat = mat.loc[mat.sum(axis=1) > 100]
 mat = mat.loc[:, (mat.mean(axis=0) <= 0.1) & (mat.sum(axis=0) >= 2)]
 from sklearn.feature_extraction.text import TfidfTransformer

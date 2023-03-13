@@ -55,7 +55,7 @@ class geneCorreler(pyGREATglm.pyGREAT):
     def findCorrelations(self, linkedGenes="fitted", alternative="two-sided"):
         # Compute correlations between normalized counts of query and genes
 
-        if linkedGenes == "fitted":
+        if type(linkedGenes) is str and linkedGenes == "fitted":
             linkedGene = self.linkedGene
         else:
             linkedGene = linkedGenes
@@ -65,29 +65,26 @@ class geneCorreler(pyGREATglm.pyGREAT):
         self.corrP = []
         alt = alternative
         for i in range(len(linkedGene)):
-            if (i+1)%100 == 0:
+            if (i+1)%1000 == 0:
                 print(i)
-                break
             gene = linkedGene.iloc[i]["gene_name"]
             p2 = linkedGene.iloc[i]["Name"] 
             try:
                 exprGene = self.geneNormCounts[gene].values
                 if len(exprGene.shape) > 1:
-                    print(exprGene.shape, gene)
                     continue
             except KeyError:
-                print("Missing", gene)
                 continue
             exprP2 = self.queryNormCounts[:, p2]
             self.corr_name.append((p2, gene))
             r, p = spearmanr(exprP2, exprGene)
             if alt == "greater":
-                p = (r < self.randomCorrelations[:, 0]).mean()
+                p = (r < self.randomCorrelations).mean()
             elif alt == "less":
-                p = (r > self.randomCorrelations[:, 0]).mean()
+                p = (r > self.randomCorrelations).mean()
             elif alt == "two-sided":
-                p1 = (r < self.randomCorrelations[:, 0]).mean()
-                p2 = (r > self.randomCorrelations[:, 0]).mean()
+                p1 = (r < self.randomCorrelations).mean()
+                p2 = (r > self.randomCorrelations).mean()
                 p = np.minimum(p1, p2)*2
             self.correlations.append(r)
             self.corrP.append(p)
@@ -96,7 +93,7 @@ class geneCorreler(pyGREATglm.pyGREAT):
                               np.array(self.corr_name)[:,1], 
                               np.array(self.correlations), 
                               np.array(self.corrP)]).reshape(len(self.corrP),-1, order="F")
-        return tab
+        return pd.DataFrame(tab, columns=["Probe ID", "Gene", "Spearman r", "P-value"])
 
     def findEnriched(self, query, background=None, minGenes=3, maxGenes=1000, cores=-1):
         """

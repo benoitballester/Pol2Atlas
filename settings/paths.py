@@ -1,6 +1,6 @@
 # ---------- Common ---------- 
-outputDir = "/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2_Annot3/"   # Main results
-tempDir = "/shared/projects/pol2_chipseq/pol2_interg_default/tempPol2/"       # Temporary files / unimportant
+outputDir = "/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2_repro/"   # Main results
+tempDir = "/shared/projects/pol2_chipseq/pol2_interg_default/tempPol2_repro/"       # Temporary files / unimportant
 genomeFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/hg38.chrom.sizes.sorted"
 annotationFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/dataset_annotation/annotPol2_lowlevel.tsv"
 polIIannotationPalette = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/palettes/annot.tsv"
@@ -13,6 +13,7 @@ allPol2File = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/pol2.b
 peaksFolder = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/Pol2_interg_peaks_per_dataset/"
 remapFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/genome_annotation/remap2020_nr.bed"
 GOfile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/GO_files/hsapiens.GO:BP.name.gmt"
+geneSets = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/GO_files/"
 gencode = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/genome_annotation/gencode.v38.annotation.gtf"
 # ---------- Required for GWAS LDSC ---------- 
 ldscFilesPath = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/ldsc/"

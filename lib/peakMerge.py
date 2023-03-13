@@ -3,19 +3,17 @@ import argparse
 import os
 import sys
 
-import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pynndescent
-import seaborn as sns
 import umap
 from matplotlib.patches import Patch
 from scipy.io import mmwrite
 from scipy.signal import argrelextrema, oaconvolve
 from scipy.signal.windows import gaussian
 from scipy.sparse import csr_matrix
-from scipy.stats import binom, hypergeom, mannwhitneyu
+from scipy.stats import hypergeom, mannwhitneyu
 
 try:
     from utils import matrix_utils, overlap_utils, plot_utils
@@ -23,6 +21,7 @@ except ModuleNotFoundError:
     from .utils import plot_utils, matrix_utils, overlap_utils
 
 import pickle
+
 import pyranges as pr
 import scipy.cluster.hierarchy as hierarchy
 from fastcluster import linkage_vector
@@ -350,7 +349,6 @@ class peakMerger:
             f.write("Number of consensus peaks\t" + str(self.matrix.shape[0]) + "\n")
             f.write("Number of experiments\t" + str(self.matrix.shape[1]) + "\n")
             f.write("Genome size\t" + str(self.genomeSize) + "\n")
-
 
     def pseudoHC(self, annotationFile=None, metric="dice", kMetaSamples=50000, method="ward", figureFmt="pdf"):
         orderRows = matrix_utils.threeStagesHC(self.matrix.T, metric)

@@ -78,11 +78,18 @@ subTable = np.concatenate([counts[annFull == 0][subsample1], counts[annFull == 1
 nzCountsSub = rnaseqFuncs.filterDetectableGenes(subTable, readMin=1, expMin=3)
 subTable = subTable[:, nzCountsSub]
 sf = rnaseqFuncs.scranNorm(subTable)
-countModel = rnaseqFuncs.RnaSeqModeler().fit(subTable, sf)
+countModel = rnaseqFuncs.RnaSeqModeler().fit(subTable, sf, residuals="deviance")
 hv = countModel.hv
 feat = countModel.residuals
-decomp = rnaseqFuncs.permutationPA_PCA(feat, 10, returnModel=False, mincomp=2)
-plt.scatter(decomp[:,0],decomp[:,1], c=[0]*3+[1]*3)
+decomp = rnaseqFuncs.permutationPA_PCA(feat, 10, returnModel=False, 
+                                       mincomp=2, whiten=False)
+plt.figure(dpi=500)
+plt.scatter(decomp[:3,0],decomp[:3,1])
+plt.scatter(decomp[3:,0],decomp[3:,1])
+plt.xlabel("PC 1")
+plt.ylabel("PC 2")
+plt.legend(eq)
+plt.savefig(paths.outputDir + "rnaseq/gtex_rnaseq_heart_DE/n3_PCA.pdf")
 matrix_utils.looKnnCV(decomp, np.array([0]*3+[1]*3), "euclidean", 1)
 # %%
 DEtab = rnaseqFuncs.deseqDE(subTable, sf, labels=np.array([eq[0]]*3 + [eq[1]]*3), 

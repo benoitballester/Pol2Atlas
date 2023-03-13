@@ -41,8 +41,8 @@ plt.show()
 # GO terms
 from lib.pyGREATglm import pyGREAT
 enricher = pyGREAT(paths.GOfile,
-                          geneFile=paths.gencode,
-                          chrFile=paths.genomeFile)
+                   geneFile=paths.gencode,
+                   chrFile=paths.genomeFile)
 # %%
 if params.removeGeneTail5kb:
     gencode = enricher.txList
@@ -61,7 +61,6 @@ if params.removeGeneTail5kb:
     toRemove = tailedPol2["Name"].values
     merger.consensuses = merger.consensuses.drop(toRemove)
     merger.matrix = np.delete(merger.matrix, toRemove, axis=0)
-
 # %%
 highVar = np.mean(merger.matrix.T, axis=0) < 0.51
 orderRows = matrix_utils.threeStagesHC(merger.matrix.T[:, highVar], "yule")
@@ -158,4 +157,4 @@ for i in range(np.max(merger.clustered[0])+1):
         enricher.clusterTreemap(goEnrich, output=paths.outputDir + f"cluster_enrichments/GO_treemap_{i}.pdf")
 # %%
 with open(paths.tempDir + "end0201.txt", "w") as f:
-    print(f)
+    f.write("1")

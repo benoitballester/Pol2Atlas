@@ -7,15 +7,15 @@ import pandas as pd
 import plotly.express as px
 import pyranges as pr
 from joblib import Parallel, delayed
-from scipy.sparse import csr_matrix
-from statsmodels.api import GLM
-from statsmodels.genmod.families.family import Binomial
-from statsmodels.api import NegativeBinomial, Poisson
-from statsmodels.stats.multitest import fdrcorrection
-from sklearn.cluster import AgglomerativeClustering
-from .utils import matrix_utils, overlap_utils
 from joblib.externals.loky import get_reusable_executor
+from rpy2.robjects.packages import importr
+from statsmodels.api import GLM, NegativeBinomial
+from statsmodels.genmod.families.family import Binomial
+from statsmodels.stats.multitest import fdrcorrection
 
+from .utils import matrix_utils, overlap_utils
+
+rs = importr("stats")
 maxCores = len(os.sched_getaffinity(0))
 
 class regLogicGREAT:
@@ -101,28 +101,57 @@ def fitNBinomModel(hasAnnot, observed, expected, goTerm, idx):
 
 
 class pyGREAT:
-    """
-    doc
-    """
     def __init__(self, gmtFile, geneFile, chrFile, validGenes="all", 
-                 distal=1000000, upstream=5000, downstream=1000):
+                 distal=1000000, upstream=5000, downstream=1000, 
+                 gtfGeneCol = "gene_name", gene_biotype="all"):
+        """
+        Genomic regions GSEA tool
+
+        Parameters
+        ----------
+        gmtFile : str or list of str
+            Path to gmt file or list of paths to gmt files that will get 
+            concatenated.
+        geneFile : str
+            Path to a GTF file.
+        chrFile : str
+            Path to a chrInfo file. (chrom-tab-Chrom size-line return)
+        validGenes : str, "all" or "annotated", optional
+            Whether to keep all genes or only annotated genes, by default "all"
+        distal : int, optional
+            Size of inferred distal regulatory regions, by default 1000000
+        upstream : int, optional
+            Size of inferred upstream regulatory regions, by default 5000
+        downstream : int, optional
+            Size of inferred downstream regulatory regions, by default 1000
+        gtfGeneCol : str, optional
+            Name of the gene name/id column in the GTF file, by default "gene_name"
+        gene_biotype : str, optional
+            Type of gene to keep e.g. "protein_coding", by default "all"
+        """
         self.chrInfo = pd.read_csv(chrFile, sep="\t", index_col=0, header=None)
-        self.gtfGeneCol = "gene_name"
+        self.gtfGeneCol = gtfGeneCol
         # Parse GMT file
         # Setup gene-GO matrix
+        if type(gmtFile) is str:
+            gmtFile = [gmtFile]
         genesPerAnnot = dict()
         self.goMap = dict()
         allGenes = set()
-        with open(gmtFile) as f:
-            for l in f:
-                vals = l.rstrip("\n").split("\t")
-                genesPerAnnot[vals[0]] = vals[2:]
-                allGenes |= set(vals[2:])
-                self.goMap[vals[0]] = vals[1]
+        for gmtF in gmtFile:
+            with open(gmtF) as f:
+                for l in f:
+                    vals = l.rstrip("\n").split("\t")
+                    genesPerAnnot[vals[0]] = vals[2:]
+                    allGenes |= set(vals[2:])
+                    self.goMap[vals[0]] = vals[1]
+        self.invGoMat = {v: k for k, v in self.goMap.items()}
         # Read gtf file
         gencode = pr.read_gtf(geneFile)
         gencode = gencode.as_df()
         self.transcripts = gencode[gencode["Feature"] == "gene"].copy()
+        if not gene_biotype == "all":
+            self.transcripts = self.transcripts[self.transcripts["gene_type"] == gene_biotype].copy()
         del gencode
         self.transcripts = self.transcripts[["Chromosome", "Start", "End", self.gtfGeneCol, "Strand"]]
         # Reverse positions on opposite strand for convenience
@@ -152,6 +181,68 @@ class pyGREAT:
                 print("Missing", genesPerAnnot[ann])
                 continue
         self.geneRegulatory = self.geneRegulatory.loc[self.mat.columns]
+
+    def findEnrichedGenes(self, query, background=None):
+        """
+        Find enriched terms in genes near query.
+
+        Parameters
+        ----------
+        query: pandas dataframe in bed-like format or PyRanges
+            Set of genomic regions to compute enrichment on.
+        background: None, pandas dataframe in bed-like format, or PyRanges (default: None)
+            If set to None considers the whole genome as the possible locations of the query.
+            Otherwise it supposes the query is a subset of these background regions.
+        
+        Returns
+        -------
+        results: pandas dataframe
+        """
+        regPR = pr.PyRanges(self.geneRegulatory.rename({self.gtfGeneCol:"Name"}, axis=1))
+        refCounts = overlap_utils.countOverlapPerCategory(regPR, 
+                                                          overlap_utils.dfToPrWorkaround(background, useSummit=False))
+        allCats = np.array(list(refCounts.keys()))
+        pvals = np.zeros(len(allCats))
+        fc = np.zeros(len(allCats))
+        M = len(background)
+        # Then for the query
+        obsCounts = overlap_utils.countOverlapPerCategory(regPR, 
+                                                          overlap_utils.dfToPrWorkaround(query, useSummit=False))
+        N = len(query)
+        # Find hypergeometric enrichment
+        k = pd.Series(np.zeros(len(allCats), dtype="int"), allCats)
+        isFound = np.isin(allCats, obsCounts.index, assume_unique=True)
+        k[allCats[isFound]] = obsCounts
+        n = pd.Series(np.zeros(len(allCats), dtype="int"), allCats)
+        n[allCats] = refCounts
+        # Scipy hyper 
+        pvals = np.array(rs.phyper(k.values-1,n.values,M-n.values,N, lower_tail=False))
+        pvals = np.nan_to_num(pvals, nan=1.0)
+        fc = (k/np.maximum(N, 1e-7))/np.maximum(n/np.maximum(M, 1e-7), 1e-7)
+        qvals = fdrcorrection(pvals)[1]
+        pvals = pd.Series(pvals)
+        pvals.index = allCats
+        qvals = pd.Series(qvals)
+        qvals.index = allCats
+        fc = pd.Series(fc)
+        fc.index = allCats
+        geneEnriched = pvals, fc, qvals, k, n
+        geneEnriched = pd.DataFrame(geneEnriched, 
+                            index=["P-value", "FC", "FDR", "Query hits", "Background hits"]).T
+        return geneEnriched.sort_values("P-value")
+        
+    
+    def findGenesForGeneSet(self, term, enrichedGeneTab, alpha=0.05):
+        """
+        Find enriched genes in a particular geneset
+        """
+        sigGenes = enrichedGeneTab[enrichedGeneTab["FDR"] < alpha].index
+        genesInTerm = self.mat.columns[self.mat.loc[term] > 0.5]
+        enrichedInTerm = sigGenes.intersection(genesInTerm)
+        return enrichedGeneTab.loc[enrichedInTerm]
+
+
+
 
     def findEnriched(self, query, background=None, minGenes=3, maxGenes=1000, cores=-1):
         """
@@ -238,7 +329,7 @@ class pyGREAT:
         Parameters
         ----------
         enrichDF: pandas dataframe or tuple of pandas dataframes
-            The result of the findEnriched function
+            The result of the findEnriched method.
             
         savePath: string (optional)
             If set to None, does not save the figure.
@@ -265,34 +356,30 @@ class pyGREAT:
         return fig, ax
 
     def clusterTreemap(self, enrichDF, alpha=0.05, score="-log10(qval)", metric="yule", resolution=1.0, output=None):
+        """Plot a treemap of clustered gene set terms.
+
+        Parameters
+        ----------
+        enrichDF : dataframe
+            Output of "findEnriched" method.
+        alpha : float, optional
+            FDR cutoff, by default 0.05
+        score : str, optional
+            Which column of the result dataframe to use to identify lead
+            term, by default "-log10(qval)"
+        metric : str, optional
+            Similarity measure between GO terms, by default "yule"
+        resolution : float, optional
+            Influences the size of the clusters (larger = more clusters), by default 1.0
+        output : str or None, optional
+            Path to save figure, by default None
+        """
         sig = enrichDF[enrichDF["BH corrected p-value"] < alpha]
         simplifiedMat = self.mat.loc[sig.index].values.astype(bool)
         clusters = matrix_utils.graphClustering(simplifiedMat, 
                                                 metric, k=int(np.sqrt(len(sig))), r=resolution, snn=True, 
                                                 approx=True, restarts=10)
         sig["Cluster"] = clusters
-        sig["Name"] = [customwrap(self.goMap[i]) for i in sig.index]
-        representatives = pd.Series(dict([(i, sig["Name"][sig[score][sig["Cluster"] == i].idxmax()]) for i in np.unique(sig["Cluster"])]))
-        sig["Representative"] = representatives[sig["Cluster"]].values
-        duplicate = sig["Representative"] == sig["Name"]
-        sig.loc[:, "Representative"][duplicate] = ""
-        fig = px.treemap(names=sig["Name"], parents=sig["Representative"], 
-                        values=sig[score],
-                        width=800, height=800)
-        fig.update_layout(margin = dict(t=2, l=2, r=2, b=2),
-                        font_size=30)
-        fig.show()
-        if output is not None:
-            fig.write_image(output)
-            fig.write_html(output + ".html")
-
-    def clusterTreemapFull(self, enrichDF, alpha=0.05, score="-log10(qval)", metric="yule", resolution=1.0, output=None):
-        sig = enrichDF[enrichDF["BH corrected p-value"] < alpha]
-        if self.clusters is None:
-            self.clusters = matrix_utils.graphClustering(self.mat.loc[sig.index].values.astype(bool), 
-                                                    metric, k=int(np.sqrt(len(sig))), r=resolution, snn=True, 
-                                                    approx=True, restarts=10)
-        sig["Cluster"] = self.clusters[np.isin(self.mat.index, sig.index)]
         sig["Name"] = [customwrap(self.goMap[i]) for i in sig.index]
         representatives = pd.Series(dict([(i, sig["Name"][sig[score][sig["Cluster"] == i].idxmax()]) for i in np.unique(sig["Cluster"])]))
         sig["Representative"] = representatives[sig["Cluster"]].values

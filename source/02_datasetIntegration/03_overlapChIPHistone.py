@@ -60,33 +60,6 @@ cmdSplit.insert(21, "Pol II consensus centroid")
 subprocess.run(cmdSplit)
 
 # %%
-'''
-import subprocess
-cmd = f"""computeMatrix reference-point \
-        -S {histonePathTcell27Me3} \
-        -R {" ".join(beds)} \
-        -b 5000 -a 5000 -p 50 \
-        -o {paths.tempDir}dnase.mat"""
-subprocess.run(cmd.split())
-
-cmdPlot = f"""plotProfile -m {paths.tempDir}dnase.mat \
-             --averageType median \
-             --yAxisLabel \
-             --samplesLabel \
-             -z \
-             --numPlotsPerRow 3 \
-             --refPointLabel \
-             -o {paths.tempDir}cardHistvsOthers_median.pdf"""
-cmdSplit = cmdPlot.split()
-cmdSplit.insert(6, "Median fold change over input")
-cmdSplit.insert(8, "ATAC-seq Heart")
-cmdSplit.insert(10, "'Cardiovascular' cluster")
-cmdSplit.insert(11, "'Hepatic' cluster")
-cmdSplit.insert(12, "'Lymphoid' cluster")
-cmdSplit.insert(16, "Pol II consensus centroid")
-subprocess.run(cmdSplit)
-'''
-# %%
 import subprocess
 shuffledReg = pd.read_csv(paths.tempDir + "background.bed", sep="\t", header=None)
 meanPos = (shuffledReg[2]*0.5 + shuffledReg[1]*0.5).astype(int)

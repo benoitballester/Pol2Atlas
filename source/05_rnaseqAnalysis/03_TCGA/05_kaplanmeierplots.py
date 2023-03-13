@@ -161,3 +161,14 @@ for case in cases:
         # plt.show()
         plt.close()
 # %%
+files = os.listdir(paths.outputDir + "rnaseq/Survival/")
+files = [f for f in files if f.startswith("TCGA-")]
+counts = pd.Series()
+for f in files:
+    with open(paths.outputDir + "rnaseq/Survival/" + f + "/prognostic.bed") as fo:
+        numProg = len(fo.readlines())
+        counts[f] = numProg
+# %%
+counts.sort_values(ascending=False,inplace=True)
+sns.barplot(counts)
+# %%

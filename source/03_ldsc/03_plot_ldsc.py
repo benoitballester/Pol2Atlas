@@ -42,3 +42,5 @@ for clust in enrichDF.index:
     # plt.show()
     plt.close()
 # %%
+with open(paths.tempDir + "end0303.txt", "w") as f:
+    f.write("1")

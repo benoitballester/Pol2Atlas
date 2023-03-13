@@ -16,9 +16,6 @@ from lib import rnaseqFuncs
 from lib.pyGREATglm import pyGREAT
 from lib.utils import matrix_utils, plot_utils, utils
 from matplotlib.patches import Patch
-from matplotlib.ticker import FormatStrFormatter
-from scipy.cluster import hierarchy
-from scipy.stats import mannwhitneyu, ttest_ind
 from settings import params, paths
 from sklearn.metrics import (balanced_accuracy_score, confusion_matrix,
                              precision_score, recall_score)
@@ -167,6 +164,8 @@ plt.savefig(paths.outputDir + "rnaseq/THCA/HM_clusters.pdf")
 # %%
 import scipy.stats as ss
 pctThreshold = 0.1
+resAll = dict()
+rankAll = dict()
 lfcMin = 1.0
 refGroup = subtype == "Solid Tissue Normal"
 binVec = np.zeros((len(eq.drop(["Solid Tissue Normal"])), countModel.residuals.shape[1]), dtype="int")
@@ -175,7 +174,7 @@ for i in eq.drop(["Solid Tissue Normal"]):
     print(i)
     res2 = ss.ttest_ind(countModel.residuals[subtype == i], countModel.residuals[refGroup], axis=0,
                         alternative="two-sided")
-    sig = fdrcorrection(res2[1])[0]
+    sig, padj = fdrcorrection(res2[1])
     minpctM = np.mean(countsNz[subtype == i] > 0.5, axis=0) > max(pctThreshold, 1.5/(subtype == i).sum())
     minpctP = np.mean(countsNz[refGroup] > 0.5, axis=0) > max(pctThreshold, 1.5/(refGroup).sum())
     minpct = minpctM | minpctP
@@ -184,35 +183,61 @@ for i in eq.drop(["Solid Tissue Normal"]):
     print(sig.sum())
     sig = sig & lfc & minpct
     print(sig.sum())
-    res = pd.DataFrame(res2[::-1], columns=consensuses.index[nzCounts], index=["pval", "stat"]).T
-    res["Upreg"] = sig.astype(int)
+    res = pd.DataFrame(res2[::-1], columns=consensuses.index[nzCounts], index=["pval", "t-stat"]).T
+    res["DE"] = sig.astype(int)
+    ranked = np.lexsort((-np.abs(res["t-stat"].values), res["pval"].values))
+    res = res.iloc[ranked]
+    resAll[i] = res
+    rankAll[i] = ranked
     res.to_csv(paths.outputDir + f"rnaseq/THCA/res_{i}.csv")
-    test = consensuses[nzCounts][sig]
+    test = consensuses[nzCounts]
+    test["Score"] = res["t-stat"]
+    test = test.iloc[ranked][sig[ranked]]
     test.to_csv(paths.outputDir + f"rnaseq/THCA/bed_{i}", header=None, sep="\t", index=None)
-    binVec[j, sig] = 1
+    delta = np.mean(countModel.residuals[subtype == i], axis=0) - np.mean(countModel.residuals[refGroup], axis=0)
+    allWithScore = consensuses.copy()[["Chromosome", "Start", "End", "Name"]]
+    allWithScore["logFDR"] = 0.0
+    allWithScore["logFDR"][nzCounts] = -np.log10(padj)
+    allWithScore["DeltaRes"] = 0.0
+    allWithScore["DeltaRes"][nzCounts] = delta
+    allWithScore["LFC"] = 0.0
+    allWithScore["LFC"][nzCounts] = np.log2(fc)
+    allWithScore.to_csv(paths.outputDir + "rnaseq/THCA/" + f"allWithStats_{i}.bed", sep="\t", index=None)
+    binVec[j, sig] = 1 
     j += 1
     if len(test) == 0:
         continue
-
-    """ pvals = enricher.findEnriched(test, background=consensuses)
+    """pvals = enricher.findEnriched(test, background=consensuses)
     enricher.plotEnrichs(pvals)
     enricher.clusterTreemap(pvals, score="-log10(pval)", 
-                            output=paths.outputDir + f"rnaseq/THCA/great_{i}.pdf") """
+                            output=paths.outputDir + f"rnaseq/THCA/great_{i}.pdf")
+    pvals = enricherMF.findEnriched(test, background=consensuses)
+    enricherMF.plotEnrichs(pvals)
+    enricherMF.clusterTreemap(pvals, score="-log10(pval)", 
+                            output=paths.outputDir + f"rnaseq/THCA/greatMF_{i}.pdf")
+    """
 # %%
 # Unique marker per subtype
 plt.hist(np.sum(binVec, axis=0), np.arange(5))
 # %%
+plt.hist(np.sum(binVec, axis=0), np.arange(5))
 j = 0
 for i in eq.drop(["Solid Tissue Normal"]):
     print(i)
     subtypeUnique = (np.sum(binVec, axis=0).astype(int) == 1) & (binVec[j] == 1)
     print(subtypeUnique.sum())
-    test = consensuses[nzCounts][subtypeUnique]
+    test = consensuses[nzCounts]
+    test["Score"] = resAll[i]["t-stat"]
+    test = test.iloc[rankAll[i]][subtypeUnique[rankAll[i]]]
     test.to_csv(paths.outputDir + f"rnaseq/THCA/bed_uniqueDE_{i}", header=None, sep="\t", index=None)
-    pvals = enricher.findEnriched(test, background=consensuses)
+    """pvals = enricher.findEnriched(test, background=consensuses)
     enricher.plotEnrichs(pvals)
     enricher.clusterTreemap(pvals, score="-log10(pval)", 
                             output=paths.outputDir + f"rnaseq/THCA/unique_{i}.pdf")
+    pvals = enricherMF.findEnriched(test, background=consensuses)
+    enricherMF.plotEnrichs(pvals)
+    enricherMF.clusterTreemap(pvals, score="-log10(pval)", 
+                            output=paths.outputDir + f"rnaseq/THCA/uniqueMF_{i}.pdf") """
     j += 1
 # %%
 # Cox LM

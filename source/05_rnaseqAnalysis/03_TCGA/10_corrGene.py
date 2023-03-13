@@ -109,7 +109,7 @@ normedP2Table = allCounts/sf[:, None]
 from lib import rnaseqFuncs
 from joblib.externals.loky import get_reusable_executor
 modelGene = rnaseqFuncs.RnaSeqModeler().fit(usedTable.values, sf, residuals="deviance")
-modelP2 = rnaseqFuncs.RnaSeqModeler().fit(allCounts, sf, residuals="deviance"))
+modelP2 = rnaseqFuncs.RnaSeqModeler().fit(allCounts, sf, residuals="deviance")
 get_reusable_executor().shutdown(wait=False)
 # %%
 # Compute p-value from query probe-gene pairs
@@ -141,9 +141,6 @@ corrP = utils.load(paths.tempDir + "corrPTCGA")
 means = utils.load(paths.tempDir + "meansTCGA")
 randomCorrelations = utils.load(paths.tempDir + "randomTCGA") """
 # %%
-tab = np.concatenate([np.array(corr_name)[:,0], np.array(corr_name)[:,1], 
-                      np.array(correlations), np.array(corrP)]).reshape(len(corrP),-1, order="F")
-# %%
 tab = pd.DataFrame(tab, columns=["Probe ID", "Gene", "Spearman r", "P-value"])
 tab.to_csv(folder + "correlationTab.tsv", sep="\t", index=None)
 # %%
@@ -170,7 +167,7 @@ plt.scatter(np.arange(len(orderCorr)), tab["Spearman r"].astype(float).values[or
 plt.savefig(folder + "allCorrFlagTail.png")
 # %%
 # End of gene @ 5% FDR greater
-sig, fdr = fdrcorrection(corrP)
+sig, fdr = fdrcorrection(tab["P-value"].astype("float").values)
 sigTab = tab[sig]
 sigTab["FDR"] = fdr[sig]
 sigTab.to_csv(folder + "correlationTab_sigPosCor.tsv", sep="\t", index=None)
@@ -200,9 +197,9 @@ plt.scatter(np.arange(len(orderCorr)), sigTab["Spearman r"].astype(float).values
 plt.savefig(folder + "sigCorrFlagTail.png")
 # %%
 # End of gene @ 5% FDR greater
-sigTwo, fdr = fdrcorrection(np.minimum(np.array(corrP),1-np.array(corrP))*2)
+sigTwo, fdr = fdrcorrection(np.minimum(np.array(tab["P-value"].astype("float").values),1-np.array(tab["P-value"].astype("float").values))*2)
 sigTab = tab[sigTwo]
-sigTab["P-value"] = (np.minimum(np.array(corrP),1-np.array(corrP))*2)[sigTwo]
+sigTab["P-value"] = (np.minimum(np.array(tab["P-value"].astype("float").values),1-np.array(tab["P-value"].astype("float").values))*2)[sigTwo]
 sigTab["FDR"] = fdr[sigTwo]
 sigTab.to_csv(folder + "correlationTab_sigTwosided.tsv", sep="\t", index=None)
 # %%
@@ -210,7 +207,7 @@ from sklearn.preprocessing import StandardScaler
 corrPol = []
 corrGene = []
 i = 0
-valid_corr = np.array(corr_name)[sig]
+valid_corr = np.array(tab.iloc[:, [0,1]])[sig]
 """ corrPol = modelP2.residuals[:, valid_corr[:, 0].astype(int)]
 reorder = pd.Series(np.arange(len(normedGeneTable.columns)), 
                     index=normedGeneTable.columns).loc[valid_corr[:, 1]].values
@@ -322,7 +319,7 @@ p2 = 108662
 exprGene = normedGeneTable[gene].values
 exprP2 = normedP2Table[:, p2]
 r, p = spearmanr(np.log10(exprGene+1), np.log10(exprP2+1))
-p = (r < randomCorrelations[:, 0]).mean()
+p = (r < correler.randomCorrelations[:, 0]).mean()
 print(r, p)
 plt.figure(dpi=300, figsize=(3,3))
 plt.scatter(np.log10(exprGene+1), np.log10(exprP2+1), s=1.0, linewidths=0, c=colors)
