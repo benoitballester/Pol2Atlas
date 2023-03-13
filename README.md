@@ -35,9 +35,9 @@ The usage instructions for the project can be found in the `USAGE.md` file in th
 
 ## Data
 
-The data used in this project is publicly available and can be found at the following link:
+The data used in this project is publicly available [@BRUWG5_2023] and can be found at the following link:
 
-[https://example.com/data](https://example.com/data)
+[https://doi.org/10.57745/BRUWG5](https://doi.org/10.57745/BRUWG5)
 
 The data includes X, Y and Z  provided in a standardized format for easy analysis.
 
