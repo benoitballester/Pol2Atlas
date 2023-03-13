@@ -1,7 +1,7 @@
 # A high-resolution atlas of intergenic transcription in nearly 29,000 normal and cancer samples.
 
 
-This project is based on the research paper "A high-resolution atlas of intergenic transcription in nearly 29,000 normal and cancer samples" by Pierre de Langen et al. 
+This project is based on the research paper [A high-resolution atlas of intergenic transcription in nearly 29,000 normal and cancer samples](https://www.biorxiv.org/) by Pierre de Langen et al. 
 
 ## Table of Contents
 
@@ -26,7 +26,6 @@ The installation instructions for the project can be found in the `INSTALL.md` f
    ```sh
    git clone https://github.com/benoitballester/Pol2Atlas.git
 
-
 ## Dependencies
 
 - Python (version X.X)
@@ -39,7 +38,7 @@ The usage instructions for the project can be found in the `USAGE.md` file in th
 
 ## Data
 
-The data used in this project is publicly available [@BRUWG5_2023] and can be found at the following link:
+The data used in this project is publicly available at the "Entrepôt-Catalogue Recherche Data Gouv https://entrepot.recherche.data.gouv.fr" [@BRUWG5_2023] and can be found at the following DOI:
 
 [https://doi.org/10.57745/BRUWG5](https://doi.org/10.57745/BRUWG5)
 
