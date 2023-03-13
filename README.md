@@ -34,7 +34,7 @@ The installation instructions for the project can be found in the `INSTALL.md` f
 
 ## Usage
 
-The usage instructions for the project can be found in the `USAGE.md` file in the repository.
+The usage instructions for the project can be found in the `USAGE.md` file in the repository[@remap2022].
 
 ## Data
 
