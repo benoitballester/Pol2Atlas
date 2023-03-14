@@ -271,3 +271,5 @@ bgCounts = csc_array(vstack(countsBG))
 plotReadDistribs(allReads, allCounts, bgCounts, suffix="GTEx")
 
 # %%
+with open(paths.tempDir + "end050201.txt", "w") as f:
+    f.write("1")

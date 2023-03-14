@@ -5,14 +5,11 @@ import urllib.request
 import sys
 sys.path.append("./")
 from settings import params, paths
+from lib.utils import utils
 
-try:
-    os.mkdir(paths.tempDir + "liftedClusters/")
-    os.mkdir(paths.tempDir + "noLift/")
-    os.mkdir(paths.outputDir + "/ldsc/")
-except:
-    pass
-
+utils.createDir(paths.tempDir + "liftedClusters/")
+utils.createDir(paths.tempDir + "noLift/")
+utils.createDir(paths.outputDir + "/ldsc/")
 
 sumstatsFolder = paths.ldscFilesPath + "/"
 sumstatsFilesAll = os.listdir(sumstatsFolder)
@@ -102,12 +99,12 @@ rule computeSLDSC:
 
 rule plot:
     input:
-        paths.outputDir + "ldsc/{sumstatsFiles}.results"
+        expand(paths.outputDir + "ldsc/{sumstatsFiles}.results", sumstatsFiles=sumstatsFiles)
     singularity:
         paths.singularityImg
     output:
         paths.tempDir + "end0303.txt"
     shell:
         """
-        python source/03_ldsc/03_plot_ldsc.py"
+        python source/03_ldsc/03_plot_ldsc.py
         """

@@ -218,7 +218,6 @@ def enrichForClustHorRel(clust, roadmapGroup, name, consensusEpigenomeMat, epige
     plt.figure(figsize=(2.75,2.5), dpi=500)
     sns.boxenplot(y="Category", x="Proportions", data=dfAll, hue="Targets", dodge=True, scale="area",
                 showfliers=False, order=order[::-1], k_depth="full", linewidth=0.4, width=0.95,
-                flier_kws={"marker": "x", "s":3, "linewidths":0.2, "color":"k"}
                 ) 
     """
     sns.violinplot(y="Category", x="Proportions", data=dfAll, hue="Targets", dodge=True,
@@ -297,8 +296,7 @@ def enrichForClustHor(clust, roadmapGroup, name, consensusEpigenomeMat, epigenom
     order = ["1_TssA", "2_TssAFlnk", "3_TxFlnk", "4_Tx", "5_TxWk", "6_EnhG", "7_Enh", "8_ZNF/Rpts", "9_Het", "10_TssBiv", "11_BivFlnk", "12_EnhBiv", "13_ReprPC", "14_ReprPCWk", "15_Quies"]
     plt.figure(figsize=(2.75,2.5), dpi=500)
     sns.boxenplot(y="Category", x="Proportions", data=dfAll, hue="Targets", dodge=True,
-                showfliers=False, order=order[::-1], k_depth="full", linewidth=0.4, width=0.95,
-                flier_kws={"marker": "x", "s":3, "linewidths":0.2, "color":"k"}
+                showfliers=False, order=order[::-1], k_depth="full", linewidth=0.4, width=0.95
                 ) 
     """
     sns.violinplot(y="Category", x="Proportions", data=dfAll, hue="Targets", dodge=True,

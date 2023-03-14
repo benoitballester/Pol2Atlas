@@ -421,4 +421,5 @@ for c in cases:
         enricher.clusterTreemap(enrichs, output=paths.outputDir + "rnaseq/TumorVsNormal/" + f"/globally_{c}_GREAT_revigo.pdf.pdf")
 
 # %%
-
+with open(paths.tempDir + "end0503.txt", "w") as f:
+    f.write("1")

@@ -7,3 +7,5 @@ $1 subtract -a $2 \
             -A \
             > $4
 
+$1 complement -i $3 \
+              -g $5

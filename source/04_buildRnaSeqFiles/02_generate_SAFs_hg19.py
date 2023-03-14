@@ -10,6 +10,7 @@ import pyranges as pr
 
 # %%
 # Generate intergenic regions
+utils.createDir(paths.tempDir + "noLift/")
 utils.runScript(f"{paths.liftoverPath}liftOver", 
                 [f"{paths.outputDir}consensuses.bed",
                 f"{paths.liftoverPath}hg38ToHg19.over.chain",

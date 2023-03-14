@@ -331,3 +331,5 @@ plt.savefig(folder + "corr_TGFBR2_108662.pdf")
 sigTab = tab[sig][noTail]
 listDECorr = globallyDE.loc[globallyDE.index.intersection(sigTab["Probe ID"].astype(int).values)]
 # %%
+with open(paths.tempDir + "end0509.txt", "w") as f:
+    f.write("1")

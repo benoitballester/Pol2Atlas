@@ -19,9 +19,23 @@ rule integration:
     shell:
         "python source/02_datasetIntegration/01_integrativeAnalysis.py"
 
-rule intersectRef:
+rule generateFiles:
     input:
         paths.tempDir + "end0201.txt"
+    singularity:
+        paths.singularityImg
+    output:
+        paths.tempDir + "Pol2_500.gtf"
+    shell:
+        """
+        python source/04_buildRnaSeqFiles/01_generate_SAFs.py
+        python source/04_buildRnaSeqFiles/02_generate_SAFs_hg19.py
+        python source/04_buildRnaSeqFiles/03_generate_gtf.py
+        """
+
+rule intersectRef:
+    input:
+        paths.tempDir + "Pol2_500.gtf"
     singularity:
         paths.singularityImg
     output:

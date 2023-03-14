@@ -172,3 +172,5 @@ for f in files:
 counts.sort_values(ascending=False,inplace=True)
 sns.barplot(counts)
 # %%
+with open(paths.tempDir + "end0505.txt", "w") as f:
+    f.write("1")

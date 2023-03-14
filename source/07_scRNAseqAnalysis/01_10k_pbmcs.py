@@ -13,11 +13,8 @@ import seaborn as sns
 import sklearn.metrics as metrics
 import umap
 from lib import rnaseqFuncs
-from lib.utils import matrix_utils, plot_utils
-from matplotlib.patches import Patch
+from lib.utils import matrix_utils
 from scipy.io import mmread
-from scipy.spatial.distance import dice
-from scipy.stats import chi2, rankdata
 from settings import params, paths
 from statsmodels.stats.multitest import fdrcorrection
 
@@ -112,7 +109,7 @@ for i in np.unique(matchinglabels):
     print(i)
     grp = (matchinglabels == i).astype(int)
     res2 = ss.ttest_ind(countModel.residuals[grp == 1], countModel.residuals[grp != 1], axis=0,
-                    alternative="greater")
+                    alternative="greater", equal_var=False)
     sig = fdrcorrection(res2[1])[0]
     minpct = np.mean(counts[matchinglabels == i] > 0.5, axis=0) > max(0.1, 1.5/grp.sum())
     fc = np.mean(countModel.normed[matchinglabels == i], axis=0) / (1e-9+np.mean(countModel.normed[matchinglabels != i], axis=0))

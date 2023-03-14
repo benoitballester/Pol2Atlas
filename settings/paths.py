@@ -9,6 +9,7 @@ singularityImg = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/sin
 bedtoolsPath = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/bin/bedtools"
 encodeBlacklist = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/genome_annotation/hg38-blacklist.v2.bed"
 allPol2File = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/pol2.bed"
+allPol2Consensuses = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/consensusesWholeGenome.bed"
 # ---------- Required for peak integrative analysis ---------- 
 peaksFolder = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/Pol2_interg_peaks_per_dataset/"
 remapFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/genome_annotation/remap2020_nr.bed"
@@ -29,10 +30,6 @@ histonePathHeart27Me3 = "/shared/projects/pol2_chipseq/pol2_interg_default/data_
 histonePathLiver27Me3 = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/Dnase/ENCFF556YQA_liver.bigWig"
 histonePathTcell27Me3 = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/Dnase/ENCFF677BPI_Tcells.bigWig"
 consFile = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/conservation/hg38.phyloP100way.bw"
-# ---------- Pol II specific ---------- 
-bedtoolsPath = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/bin/bedtools"
-encodeBlacklist = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/genome_annotation/hg38-blacklist.v2.bed"
-allPol2File = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/pol2.bed"
 # ---------- Genome annotation files ---------- 
 ccrePath = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/genome_annotation/GRCh38-ccREsFix.bed"
 lncpediaPath = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/genome_annotation/lncipedia_5_2_hg38.bed"

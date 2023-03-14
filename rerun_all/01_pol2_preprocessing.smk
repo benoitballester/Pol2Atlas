@@ -47,7 +47,8 @@ rule removeGenic:
         f"sh source/01_pol2_preprocessing/03_remove_transcripts.sh {paths.bedtoolsPath} \
                                                                    {paths.tempDir}filtered.bed \
                                                                    {paths.tempDir}genicRegions_gc38.bed\
-                                                                   {paths.tempDir}filtered_interg.bed"
+                                                                   {paths.tempDir}filtered_interg.bed\
+                                                                   {paths.genomeFile}"
 
 rule splitFilter:
     input:

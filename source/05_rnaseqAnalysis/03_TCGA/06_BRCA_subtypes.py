@@ -17,12 +17,9 @@ from lib.pyGREATglm import pyGREAT
 from lib.utils import matrix_utils, plot_utils, utils
 from matplotlib.patches import Patch
 from settings import params, paths
-from sklearn.metrics import (balanced_accuracy_score, confusion_matrix,
-                             precision_score, recall_score)
-from sklearn.model_selection import StratifiedKFold
 from statsmodels.stats.multitest import fdrcorrection
 
-utils.createDir(paths.outputDir + "rnaseq/THCA")
+utils.createDir(paths.outputDir + "rnaseq/BRCA")
 consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", header=None, sep="\t")
 consensuses.columns = ["Chromosome", "Start", "End", "Name", "Score", "Strand", "ThickStart", "ThickEnd"]
 
@@ -33,6 +30,9 @@ sortedIdx = ["chr1", 'chr2','chr3','chr4','chr5','chr6',
 chrFile = chrFile.loc[sortedIdx]
 
 enricher = pyGREAT(paths.GOfile,
+                          geneFile=paths.gencode,
+                          chrFile=paths.genomeFile)
+enricherMF = pyGREAT(paths.geneSets + "hsapiens.GO:MF.name.gmt",
                           geneFile=paths.gencode,
                           chrFile=paths.genomeFile)
 # %%
@@ -49,7 +49,7 @@ precisions = pd.DataFrame()
 studiedConsensusesCase = dict()
 cases = allAnnots["project_id"].unique()
 # Select only relevant files and annotations
-case = "TCGA-THCA"
+case = "TCGA-BRCA"
 annotation = pd.read_csv(paths.tcgaData + "/perFileAnnotation.tsv", 
                         sep="\t", index_col=0)
 annotation = annotation[(annotation["project_id"] == case)]
@@ -95,17 +95,18 @@ counts = allCounts
 subtypeAnnot = pd.read_csv(paths.tcgaSubtypes, sep=",", index_col="pan.samplesID")
 subtypeAnnot.index = ["-".join(i.split("-")[:4]) for i in subtypeAnnot.index]
 query = annotation.loc[order]["Sample ID"]
-subtype = pd.Series(["None"]*len(query))
 inSubtypeAnnot = np.isin(query, subtypeAnnot.index)
-subtype[inSubtypeAnnot] = subtypeAnnot.loc[query[inSubtypeAnnot]]["Subtype_Selected"].values
-sampleState = annotation.loc[order]["Sample Type"] == "Solid Tissue Normal"
-subtype[sampleState.values] = "Solid Tissue Normal"
-
+subtype = subtypeAnnot.loc[query[inSubtypeAnnot]]["Subtype_Selected"]
+annotation = annotation.loc[order][inSubtypeAnnot]
 # %%
-kept = (subtype != "None").values
-annotation = annotation.loc[order][kept]
-counts = counts[kept]
-subtype = subtype[kept]
+
+""" subtype = annotation["Sample Type"].copy()
+normal = subtype == "Solid Tissue Normal"
+normalInMolAnnot = subtypeAnnot["Subtype_Selected"].loc[query[inSubtypeAnnot]] != "BRCA.Normal"
+subtype[np.logical_not(normal)] = subtypeAnnot.loc[query[inSubtypeAnnot]][normalInMolAnnot]["Subtype_Selected"]
+subtype[normal] = "BRCA.Normal" """
+# %%
+counts = counts[inSubtypeAnnot]
 # %% 
 catSubtype, eq = pd.factorize(subtype)
 # %%
@@ -123,7 +124,7 @@ residuals = countModel.residuals
 countsNorm = countModel.normed
 hv = countModel.hv
 # Compute PCA on the residuals
-decomp = rnaseqFuncs.permutationPA_PCA(residuals[:, hv], mincomp=2) 
+decomp = rnaseqFuncs.permutationPA_PCA(residuals, mincomp=2, whiten=True) 
 
 # Plot PC 1 and 2
 plt.figure(dpi=500)
@@ -134,43 +135,45 @@ plt.close()
 embedding = umap.UMAP(n_neighbors=30, min_dist=0.3,
                     random_state=42, low_memory=False, metric="correlation").fit_transform(decomp)
 # %%
+# Plot UMAP
 import seaborn as sns
 plt.figure(figsize=(10,10), dpi=500)
 plt.title(f"{case} samples")
 patches = []
-palette = np.array(sns.color_palette("Paired"))[[4,5,3,1,9,-1,-1]]
+palette = np.array(sns.color_palette("Paired"))[[4,5,3,1,9]]
 for i in np.unique(catSubtype):
-    legend = Patch(color=palette[i], label=eq[i])
+    legend = Patch(color=palette[i], label=eq[i][5:])
     patches.append(legend)
 plt.legend(handles=patches)
 plt.scatter(embedding[:,0], embedding[:, 1], c=palette[catSubtype], s=50, 
-            linewidths=(0.0+1.0*(subtype.values=="Solid Tissue Normal")), edgecolors="k")
-plt.savefig(paths.outputDir + "rnaseq/THCA/UMAP_subtypes.pdf")
-plt.savefig(paths.outputDir + "rnaseq/THCA/UMAP_subtypes.png")
+            linewidths=(0.0+1.0*(subtype.values=="BRCA.Normal")), edgecolors="k")
+plt.savefig(paths.outputDir + "rnaseq/BRCA/UMAP_subtypes.pdf")
+plt.savefig(paths.outputDir + "rnaseq/BRCA/UMAP_subtypes.png")
 # %%
 data = pd.DataFrame(embedding, columns=["x","y"])
 data["Subtype"] = subtype.values
 plt.figure(dpi=500)
 g = sns.FacetGrid(data, col="Subtype", hue="Subtype", col_wrap=3, palette=palette)
 g.map(sns.scatterplot, "x", "y")
-plt.savefig(paths.outputDir + "rnaseq/THCA/UMAP_subtypes_facetgrid.pdf")
+plt.savefig(paths.outputDir + "rnaseq/BRCA/UMAP_subtypes_facetgrid.pdf")
 # %%
 # Plot heatmap and dendrograms (hv)
 rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
 colOrder, colLink = matrix_utils.threeStagesHClinkage(countModel.residuals.T[hv], "correlation")
 plot_utils.plotHC(residuals.T[hv], subtype, countsNorm.T[hv],  
                 rowOrder=rowOrder, colOrder=colOrder, cmap="vlag", rescale="3SD")
-plt.savefig(paths.outputDir + "rnaseq/THCA/HM_clusters.pdf")
+plt.savefig(paths.outputDir + "rnaseq/BRCA/HM_clusters.pdf")
 # %%
+# Find DE markers
 import scipy.stats as ss
 pctThreshold = 0.1
+lfcMin = 1.0
+refGroup = subtype == "BRCA.Normal"
+binVec = np.zeros((len(eq.drop(["BRCA.Normal"])), countModel.residuals.shape[1]), dtype="int")
+j = 0
 resAll = dict()
 rankAll = dict()
-lfcMin = 1.0
-refGroup = subtype == "Solid Tissue Normal"
-binVec = np.zeros((len(eq.drop(["Solid Tissue Normal"])), countModel.residuals.shape[1]), dtype="int")
-j = 0
-for i in eq.drop(["Solid Tissue Normal"]):
+for i in eq.drop(["BRCA.Normal"]):
     print(i)
     res2 = ss.ttest_ind(countModel.residuals[subtype == i], countModel.residuals[refGroup], axis=0,
                         alternative="two-sided")
@@ -189,11 +192,11 @@ for i in eq.drop(["Solid Tissue Normal"]):
     res = res.iloc[ranked]
     resAll[i] = res
     rankAll[i] = ranked
-    res.to_csv(paths.outputDir + f"rnaseq/THCA/res_{i}.csv")
+    res.to_csv(paths.outputDir + f"rnaseq/BRCA/res_{i}.csv")
     test = consensuses[nzCounts]
     test["Score"] = res["t-stat"]
     test = test.iloc[ranked][sig[ranked]]
-    test.to_csv(paths.outputDir + f"rnaseq/THCA/bed_{i}", header=None, sep="\t", index=None)
+    test.to_csv(paths.outputDir + f"rnaseq/BRCA/bed_{i}", header=None, sep="\t", index=None)
     delta = np.mean(countModel.residuals[subtype == i], axis=0) - np.mean(countModel.residuals[refGroup], axis=0)
     allWithScore = consensuses.copy()[["Chromosome", "Start", "End", "Name"]]
     allWithScore["logFDR"] = 0.0
@@ -202,7 +205,7 @@ for i in eq.drop(["Solid Tissue Normal"]):
     allWithScore["DeltaRes"][nzCounts] = delta
     allWithScore["LFC"] = 0.0
     allWithScore["LFC"][nzCounts] = np.log2(fc)
-    allWithScore.to_csv(paths.outputDir + "rnaseq/THCA/" + f"allWithStats_{i}.bed", sep="\t", index=None)
+    allWithScore.to_csv(paths.outputDir + "rnaseq/BRCA/" + f"allWithStats_{i}.bed", sep="\t", index=None)
     binVec[j, sig] = 1 
     j += 1
     if len(test) == 0:
@@ -210,54 +213,34 @@ for i in eq.drop(["Solid Tissue Normal"]):
     """pvals = enricher.findEnriched(test, background=consensuses)
     enricher.plotEnrichs(pvals)
     enricher.clusterTreemap(pvals, score="-log10(pval)", 
-                            output=paths.outputDir + f"rnaseq/THCA/great_{i}.pdf")
+                            output=paths.outputDir + f"rnaseq/BRCA/great_{i}.pdf")
     pvals = enricherMF.findEnriched(test, background=consensuses)
     enricherMF.plotEnrichs(pvals)
     enricherMF.clusterTreemap(pvals, score="-log10(pval)", 
-                            output=paths.outputDir + f"rnaseq/THCA/greatMF_{i}.pdf")
+                            output=paths.outputDir + f"rnaseq/BRCA/greatMF_{i}.pdf")
     """
-# %%
+ # %%
 # Unique marker per subtype
 plt.hist(np.sum(binVec, axis=0), np.arange(5))
-# %%
-plt.hist(np.sum(binVec, axis=0), np.arange(5))
 j = 0
-for i in eq.drop(["Solid Tissue Normal"]):
+for i in eq.drop(["BRCA.Normal"]):
     print(i)
     subtypeUnique = (np.sum(binVec, axis=0).astype(int) == 1) & (binVec[j] == 1)
     print(subtypeUnique.sum())
     test = consensuses[nzCounts]
     test["Score"] = resAll[i]["t-stat"]
     test = test.iloc[rankAll[i]][subtypeUnique[rankAll[i]]]
-    test.to_csv(paths.outputDir + f"rnaseq/THCA/bed_uniqueDE_{i}", header=None, sep="\t", index=None)
-    """pvals = enricher.findEnriched(test, background=consensuses)
+    test.to_csv(paths.outputDir + f"rnaseq/BRCA/bed_uniqueDE_{i}", header=None, sep="\t", index=None)
+    pvals = enricher.findEnriched(test, background=consensuses)
     enricher.plotEnrichs(pvals)
     enricher.clusterTreemap(pvals, score="-log10(pval)", 
-                            output=paths.outputDir + f"rnaseq/THCA/unique_{i}.pdf")
+                            output=paths.outputDir + f"rnaseq/BRCA/unique_{i}.pdf")
     pvals = enricherMF.findEnriched(test, background=consensuses)
     enricherMF.plotEnrichs(pvals)
     enricherMF.clusterTreemap(pvals, score="-log10(pval)", 
-                            output=paths.outputDir + f"rnaseq/THCA/uniqueMF_{i}.pdf") """
+                            output=paths.outputDir + f"rnaseq/BRCA/uniqueMF_{i}.pdf")
     j += 1
+
 # %%
-# Cox LM
-import lifelines as ll
-df = pd.DataFrame()
-df["Dead"] = np.logical_not(survived[np.isin(timeToEvent.index, order)])
-df["TTE"] = timeToEvent.loc[order].values
-df["TTE"] -= df["TTE"].min() - 1
-df = df[kept]
-# %%
-import kaplanmeier as km
-normal = (annotation["Sample Type"]!='Solid Tissue Normal').values
-for i in np.unique(subtype):
-    if i == "Solid Tissue Normal":
-        continue
-    print(i)
-    kmf = km.fit(df[normal]["TTE"], df[normal]["Dead"].astype(int), 
-                subtype[normal] == i)
-    km.plot(kmf, cii_alpha=0.999)
-    plt.ylim(0,1)
-    plt.show()
-    plt.savefig(paths.outputDir + f"rnaseq/THCA_clust/kaplan_{i}_vs_rest.pdf")
-# %%
+with open(paths.tempDir + "end0506.txt", "w") as f:
+    f.write("1")

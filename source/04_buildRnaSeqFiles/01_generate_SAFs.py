@@ -118,9 +118,10 @@ keptReg.columns = ["Chr", "Start", "End"]
 keptReg["Strand"] = "."
 keptReg.index.name = "GeneID"
 keptReg.to_csv(f"{paths.tempDir}/backgroundReg.saf", sep="\t")
+keptReg.to_csv(f"{paths.tempDir}/background.bed", sep="\t", index=None, header=None)
 # %%
 # All Pol II consensuses
-allPol2ConsensusesDir = "/scratch/pdelangen/projet_these/outputPol2_All/consensuses.bed"
+allPol2ConsensusesDir = paths.allPol2Consensuses
 f = pd.read_csv(allPol2ConsensusesDir, sep="\t", header=None, usecols=[0,1,2,6,7])
 f[3] = f.index
 f = f[[3,0,1,2,6,7]]

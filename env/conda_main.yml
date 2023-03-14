@@ -1,4 +1,4 @@
-name: baseEnv
+name: base
 channels:
   - esri
   - numba
@@ -505,4 +505,3 @@ dependencies:
     - rpy2==3.5.4
     - sklearn==0.0
     - zepid==0.9.0
-prefix: /shared/projects/pol2_chipseq/pkg/miniconda3/envs/baseEnv

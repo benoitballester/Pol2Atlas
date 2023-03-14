@@ -1,6 +1,8 @@
 # %%
 import pandas as pd
 import numpy as np
+import sys
+sys.path.append("./")
 from settings import params, paths
 
 allPeaks = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
@@ -61,6 +63,7 @@ subprocess.run(cmdSplit)
 
 # %%
 import subprocess
+subprocess.run
 shuffledReg = pd.read_csv(paths.tempDir + "background.bed", sep="\t", header=None)
 meanPos = (shuffledReg[2]*0.5 + shuffledReg[1]*0.5).astype(int)
 shuffledReg[[1,2]] = np.array([meanPos, meanPos+1]).T

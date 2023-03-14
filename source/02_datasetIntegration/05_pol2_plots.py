@@ -3,16 +3,13 @@
 import sys
 
 import numpy as np
-from lib.peakMerge import peakMerger
-from lib.utils import matrix_utils, overlap_utils, plot_utils
+
 
 sys.path.append("./")
 import os
-
+from lib.utils import plot_utils
 import matplotlib.pyplot as plt
 import pandas as pd
-import pyranges as pr
-import seaborn as sns
 from scipy.io import mmread
 from settings import params, paths
 

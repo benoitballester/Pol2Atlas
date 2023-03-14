@@ -172,3 +172,5 @@ for tes_ext in tested:
     pd.DataFrame(uniqueGenes).to_csv(paths.outputDir + f"dist_to_genes/genes_{len(uniqueGenes)}_unique_{tes_ext}_TSS_ext.csv", index=None, columns=None)
     
 # %%
+with open(paths.tempDir + "end050202.txt", "w") as f:
+    f.write("1")
