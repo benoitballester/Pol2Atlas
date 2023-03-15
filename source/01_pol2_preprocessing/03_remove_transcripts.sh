@@ -3,9 +3,9 @@
 # $3 = /scratch/pdelangen/projet_these/data_clean/filteredInterg.bed
 
 $1 subtract -a $2 \
-            -b $3\
+            -b $3 \
             -A \
             > $4
 
 $1 complement -i $3 \
-              -g $5
+              -g $5 > $6

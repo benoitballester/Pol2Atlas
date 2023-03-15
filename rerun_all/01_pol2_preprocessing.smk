@@ -42,13 +42,14 @@ rule removeGenic:
     singularity:
         paths.singularityImg
     output:
-        paths.tempDir + "filtered_interg.bed"
+        paths.tempDir + "intergenicRegions_gc38.bed"
     shell:
         f"sh source/01_pol2_preprocessing/03_remove_transcripts.sh {paths.bedtoolsPath} \
                                                                    {paths.tempDir}filtered.bed \
                                                                    {paths.tempDir}genicRegions_gc38.bed\
                                                                    {paths.tempDir}filtered_interg.bed\
-                                                                   {paths.genomeFile}"
+                                                                   {paths.genomeFile} \
+                                                                   {paths.tempDir}intergenicRegions_gc38.bed"
 
 rule splitFilter:
     input:

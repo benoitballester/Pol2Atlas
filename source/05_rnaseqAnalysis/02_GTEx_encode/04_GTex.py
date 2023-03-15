@@ -79,9 +79,6 @@ counts = counts[:, nzCounts]
 # %%
 sf = rnaseqFuncs.scranNorm(counts)
 # %%
-""" rnaseqFuncs.limma1vsAll(counts, sf, annTxt, np.arange(len(nzCounts))[nzCounts], 
-                        paths.outputDir + "rnaseq/gtex_rnaseq/DE/") """
-# %%
 from sklearn.preprocessing import StandardScaler
 design = np.ones((len(counts), 1))
 ischemicTime = annotation.loc[order]["total_ischemic_time"].fillna(annotation.loc[order]["total_ischemic_time"].median())

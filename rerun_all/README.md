@@ -1,15 +1,18 @@
 # Replicating the results of the paper
 All analyses can be replicated or rerun with other data using the main singularity container, excepted Stratified LD-score regression which requires a specific singularity container.
 You can also use the provided conda environments, or the singularity recipes which are located in env/. 
+
 1/ Replace the paths in settings/paths.py with your own file paths. 
-2/ Activate the base singularity environment. (Created with singularity 2.5.2)
-3/ Edit the path for the singularity breach
-4/ Then launch reproduce.sh.
+
+2/ Install snakemake.
+
+3/ Then launch reproduce.sh.
+
 We only skip the download and read counting over Pol II probes in rna-seq files part as it can take over a month and directly provide the read counting result.
 
 Once all paths have been properly specified in settings/paths.py, all of our analyses can be replicated using :
 ```
-sh rerun_all/reproduce.sh [cores]
+sh rerun_all/reproduce.sh [cores] [path_to_singularity_breach]
 ```
 # Re-using part of our analyses
 Here's a quick tutorial on how to re-use some key parts of our code for your analyses. For additional information please open an issue.
