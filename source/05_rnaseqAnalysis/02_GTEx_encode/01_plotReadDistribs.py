@@ -265,11 +265,14 @@ for f in dlFiles:
         continue
 
 ann, eq = pd.factorize(annotation.loc[order]["tissue_type"])
+print("a")
 allReads = np.array(allReads)
 allCounts = csc_array(vstack(counts))
 bgCounts = csc_array(vstack(countsBG))
+print("b")
 plotReadDistribs(allReads, allCounts, bgCounts, suffix="GTEx")
 
 # %%
 with open(paths.tempDir + "end050201.txt", "w") as f:
     f.write("1")
+# %%

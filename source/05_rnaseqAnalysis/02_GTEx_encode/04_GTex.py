@@ -175,7 +175,7 @@ enricher = pyGREAT(paths.GOfile,
                           geneFile=paths.gencode,
                           chrFile=paths.genomeFile)
 consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
-
+consensuses.columns = ["Chromosome", "Start", "End", "Name", "Score", "Strand", "ThickStart", "ThickEnd"]
 try:
     os.mkdir(paths.outputDir + "rnaseq/gtex_rnaseq/DE/")
 except FileExistsError:
@@ -207,12 +207,11 @@ for i in np.unique(ann):
     test.to_csv(paths.outputDir + f"rnaseq/gtex_rnaseq/DE/bed_{fname}", header=None, sep="\t", index=None)
     if len(test) == 0:
         continue
-    '''
     pvals = enricher.findEnriched(test, background=consensuses)
     enricher.plotEnrichs(pvals)
     enricher.clusterTreemap(pvals, score="-log10(pval)", 
-                                output=paths.outputDir + f"rnaseq/gtex_rnaseq/DE/great_{eq[i]}.pdf")
-    '''                           
+                                output=paths.outputDir + f"rnaseq/gtex_rnaseq/DE/great_{fname}.pdf")
+                      
 # %%
 # Find markers per tissue (54)
 try:
@@ -246,6 +245,10 @@ for i in np.unique(annFull):
     test.to_csv(paths.outputDir + f"rnaseq/gtex_rnaseq/DE54/bed_{fname}", header=None, sep="\t", index=None)
     if len(test) == 0:
         continue
+        pvals = enricher.findEnriched(test, background=consensuses)
+    enricher.plotEnrichs(pvals)
+    enricher.clusterTreemap(pvals, score="-log10(pval)", 
+                                output=paths.outputDir + f"rnaseq/gtex_rnaseq/DE/great_{eq[i]}.pdf")
 # %%
 rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
 colOrder, colLink = matrix_utils.threeStagesHClinkage(feat.T, "correlation")

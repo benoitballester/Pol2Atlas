@@ -32,7 +32,13 @@ snakemake --snakefile rerun_all/05_02_GTEx-encode.smk \
           --use-singularity --singularity-args "-B $breachPath" \
           -k
 
-snakemake --snakefile rerun_all/05_03_TCGA.smk \
+snakemake --snakefile rerun_all/06_metacluster.smk \
+          --cores $1 \
+          --rerun-incomplete \
+          --use-singularity --singularity-args "-B $breachPath" \
+          -k
+
+snakemake --snakefile source/06_metacluster/02_ldscPipeline.smk \
           --cores $1 \
           --rerun-incomplete \
           --use-singularity --singularity-args "-B $breachPath" \

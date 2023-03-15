@@ -373,3 +373,5 @@ for t in np.unique(tissue[1].values):
     if len(copy) > 0:
         copy.to_csv(figPath + f"markerCount/min2_{t.replace(' ','_')}.bed", header=None, index=None, sep="\t")
 # %%
+with open(paths.tempDir + "end0601.txt", "w") as f:
+    f.write("1")

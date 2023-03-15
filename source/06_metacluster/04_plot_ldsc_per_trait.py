@@ -28,15 +28,6 @@ for k in results:
     sigEnrichs[k] = results[k]["Enrichment"] * (results[k]["Enrichment_p"] < 0.01/7463).astype(float)
 sigEnrichs = np.maximum(0,sigEnrichs)
 # %%
-""" 
-import seaborn as sns
-import matplotlib.pyplot as plt
-plt.figure(dpi=500)
-normed = (sigEnrichs)/np.mean(sigEnrichs.values, axis=1)[:, None]
-ax=sns.clustermap(sigEnrichs, row_cluster=False, col_cluster=True, metric="correlation",
-                xticklabels=True, yticklabels=True, rasterized=True)
-ax.ax_heatmap.axes.set_xticklabels(ax.ax_heatmap.axes.get_xticklabels(), fontsize=2)
-plt.savefig(paths.tempDir + "test_ldsc.pdf") """
 # %%
 # Plot top markers set for each gwas
 import seaborn as sns
@@ -67,3 +58,5 @@ for trait in usedTraits:
     plt.show()
     plt.close()
 # %%
+with open(paths.tempDir + "end0604.txt", "w") as f:
+    f.write("1")

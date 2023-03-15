@@ -127,11 +127,11 @@ for i in label.unique():
     test.to_csv(paths.outputDir + f"rnaseq/TCGA2/DE/bed_{i}", header=None, sep="\t", index=None)
     if len(test) == 0:
         continue
-    """     
+
     pvals = enricherglm.findEnriched(test, background=consensuses)
     enricherglm.plotEnrichs(pvals)
     enricherglm.clusterTreemap(pvals, score="-log10(pval)", 
-                                output=paths.outputDir + f"rnaseq/TCGA2/DE/great_{i}.pdf") """
+                                output=paths.outputDir + f"rnaseq/TCGA2/DE/great_{i}.pdf")
 
 # %%
 # Compute PCA
@@ -186,7 +186,7 @@ for train, test in StratifiedKFold(10, shuffle=True, random_state=42).split(deco
     # Scale and predict on test data
     x_test = decomp[test]
     pred[test] = model.predict(x_test).ravel()
-from sklearn.metrics import accuracy_score, recall_score, precision_score, confusion_matrix,balanced_accuracy_score
+from sklearn.metrics import balanced_accuracy_score
 acc = balanced_accuracy_score(cancerType, pred)
 # %%
 # Legend of UMAP + balanced accuracy

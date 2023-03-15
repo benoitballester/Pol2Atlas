@@ -97,7 +97,7 @@ get_reusable_executor().shutdown(wait=True)
 hv = countModel.hv
 # %%
 from sklearn.preprocessing import StandardScaler
-feat = countModel.residuals
+feat = countModel.residuals[:, hv]
 decomp = rnaseqFuncs.permutationPA_PCA(feat, perm=10, max_rank=250, figSaveDir=paths.tempDir)
 matrix_utils.looKnnCV(decomp, ann, "correlation", 1)
 # %%
@@ -141,6 +141,7 @@ enricherglm = pyGREATglm(paths.GOfile,
                           geneFile=paths.gencode,
                           chrFile=paths.genomeFile)
 consensuses = pd.read_csv(paths.outputDir + "consensuses.bed", sep="\t", header=None)
+consensuses.columns = ["Chromosome", "Start", "End", "Name", "Score", "Strand", "ThickStart", "ThickEnd"]
 
 try:
     os.mkdir(paths.outputDir + "rnaseq/encode_rnaseq/DE/")
@@ -177,14 +178,12 @@ for i in np.unique(ann):
     test.to_csv(paths.outputDir + f"rnaseq/encode_rnaseq/DE/bed_{fname}", header=None, sep="\t", index=None)
     if len(test) == 0:
         continue
-    '''
     pvals = enricherglm.findEnriched(test, background=consensuses)
     enricherglm.plotEnrichs(pvals)
     enricherglm.clusterTreemap(pvals, score="-log10(pval)", 
-                                output=paths.outputDir + f"rnaseq/encode_rnaseq/DE/great_{eq[i]}.pdf")
-    '''
+                                output=paths.outputDir + f"rnaseq/encode_rnaseq/DE/great_{fname}.pdf")
 
-        
+
 # %%
 rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
 colOrder, colLink = matrix_utils.threeStagesHClinkage(feat.T, "correlation")
