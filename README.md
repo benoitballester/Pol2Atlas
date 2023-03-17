@@ -1,4 +1,4 @@
-# A high-resolution atlas of intergenic transcription in nearly 29,000 normal and cancer samples.
+# Normal and cancer tissues are accurately characterised by intergenic transcription at RNA polymerase 2 binding sites 
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7740073.svg)](https://doi.org/10.5281/zenodo.7740073)
 
