@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use the code used in our work, please cite it as below."
+authors:
+- family-names: "Pierre"
+  given-names: "de Langen"
+  orcid: "https://orcid.org/0000-0001-6119-2438"
+- family-names: "Benoit"
+  given-names: "Ballester"
+  orcid: "https://orcid.org/0000-0002-0834-7135"
+title: "A high-resolution atlas of intergenic transcription in nearly 29,000 normal and cancer samples"
+version: 2.0.4
+doi: 10.5281/zenodo.1234
+date-released: 2023-03-13
+url: "https://github.com/benoitballester/Pol2Atlas"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Pierre"
+    given-names: "de Langen"
+    orcid: "https://orcid.org/0000-0001-6119-2438"
+  - family-names: "Benoit"
+    given-names: "Ballester"
+    orcid: "https://orcid.org/0000-0002-0834-7135"
+  doi: "10.0000/00000"
+  journal: "Journal Title"
+  month: 9
+  start: 1 # First page number
+  end: 10 # Last page number
+  title: "A high-resolution atlas of intergenic transcription in nearly 29,000 normal and cancer samples"
+  issue: 1
+  volume: 1
+  year: 2023

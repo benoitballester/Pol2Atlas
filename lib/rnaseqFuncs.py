@@ -184,8 +184,15 @@ class RnaSeqModeler:
             # Plot mean/variance relationship and selected probes
             v = np.var(self.normed[:, :self.normed.shape[1]], axis=0)
             m = np.mean(self.normed[:, :self.normed.shape[1]], axis=0)
-            c = np.array([[0.0,0.0,1.0]]*(self.normed.shape[1]))
-            c[self.hv] = [1.0,0.0,0.0]
+            if residuals == "pearson":
+                c = np.array([[0.0,0.0,1.0]]*(self.normed.shape[1]))
+                c[self.hv] = [1.0,0.0,0.0]
+            elif residuals == "deviance":
+                c = np.array([[0.0,0.0,0.0]]*(self.normed.shape[1]))
+                w = np.var(self.residuals, axis=0)
+                w = w / w.max()
+                c = c + np.array([1.0*w,0.0*w,0.0*w]).T
+
             plt.figure(dpi=500)
             plt.scatter(m, v, s = 0.5*(100000/len(m)), linewidths=0, c=c, alpha=0.1)
             plt.scatter(m, m+m*m*self.regAlpha, s = 1.0, linewidths=0, c=[0.0,1.0,0.0])

@@ -16,8 +16,6 @@ import umap
 from statsmodels.stats.multitest import fdrcorrection
 from scipy.spatial.distance import dice
 import matplotlib as mpl
-import fastcluster
-import sklearn.metrics as metrics
 import scipy.stats as ss
 
 countDir = paths.countsGTEx
@@ -204,10 +202,10 @@ for i in np.unique(ann):
     test.to_csv(paths.outputDir + f"rnaseq/gtex_rnaseq/DE/bed_{fname}", header=None, sep="\t", index=None)
     if len(test) == 0:
         continue
-    pvals = enricher.findEnriched(test, background=consensuses)
+    """ pvals = enricher.findEnriched(test, background=consensuses)
     enricher.plotEnrichs(pvals)
     enricher.clusterTreemap(pvals, score="-log10(pval)", 
-                                output=paths.outputDir + f"rnaseq/gtex_rnaseq/DE/great_{fname}.pdf")
+                                output=paths.outputDir + f"rnaseq/gtex_rnaseq/DE/great_{fname}.pdf") """
                       
 # %%
 # Find markers per tissue (54)
@@ -243,9 +241,9 @@ for i in np.unique(annFull):
     if len(test) == 0:
         continue
         pvals = enricher.findEnriched(test, background=consensuses)
-    enricher.plotEnrichs(pvals)
+    """ enricher.plotEnrichs(pvals)
     enricher.clusterTreemap(pvals, score="-log10(pval)", 
-                                output=paths.outputDir + f"rnaseq/gtex_rnaseq/DE/great_{eq[i]}.pdf")
+                                output=paths.outputDir + f"rnaseq/gtex_rnaseq/DE/great_{eq[i]}.pdf") """
 # %%
 rowOrder, rowLink = matrix_utils.threeStagesHClinkage(decomp, "correlation")
 colOrder, colLink = matrix_utils.threeStagesHClinkage(feat.T, "correlation")

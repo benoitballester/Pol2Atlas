@@ -2,14 +2,19 @@
 All analyses can be replicated or rerun with other data using the main singularity container, excepted Stratified LD-score regression which requires a specific singularity container.
 You can also use the provided conda environments, or the singularity recipes which are located in env/. 
 
-1/ Replace the paths in settings/paths.py with your own file paths. 
+1. Clone the repo
+   ```sh
+   git clone https://github.com/benoitballester/Pol2Atlas.git
 
-2/ Install snakemake.
+2. Download the input data on Zenodo : https://doi.org/10.5281/zenodo.7740073
 
-3/ Then launch reproduce.sh.
+3. Replace the paths in settings/paths.py with your own file paths (you should only need to specify data folder, output folder and temp folder) 
+
+4. Install snakemake.
+
+5. Then launch reproduce.sh.
 
 We only skip the download and read counting over Pol II probes in rna-seq files part as it can take over a month and directly provide the read counting result.
-
 Once all paths have been properly specified in settings/paths.py, all of our analyses can be replicated using :
 ```
 sh rerun_all/reproduce.sh [cores] [path_to_singularity_breach]
@@ -97,7 +102,7 @@ hv = countModel.hv
 # Compute PCA with optimal number of components
 decomp = rnaseqFuncs.permutationPA_PCA(residuals[:, hv], mincomp=2)
 ```
-Alternatively you can also use deviance residuals which appear to work slightly better for small sample sizes or very small counts, but in that case it is recommended to skip hv gene/probe selection and rescale PCA components to unit variance.
+Alternatively you can also use deviance residuals which appear to work slightly better for small sample sizes or very small counts, but in that case we recommend to skip hv gene/probe selection and rescale PCA components to unit variance.
 ```python
 import rnaseqFuncs
 # Filter genes/probes without at least one read in at least 3 samples
