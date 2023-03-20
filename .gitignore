@@ -1,0 +1,14 @@
+slurmOutput
+trash
+settings_set
+catboost_info
+cache
+.vscode
+.snakemake
+.keras
+.ipynb_checkpoints
+.config
+.cache
+lib/__pycache__
+lib/utils/__pycache__
+settings/__pycache__
