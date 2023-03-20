@@ -31,3 +31,5 @@ source/rnaseqAnalysis/TCGA/__pycache__
 .cache
 .keras
 ldsc.log
+settings_set/
+.gitignore
