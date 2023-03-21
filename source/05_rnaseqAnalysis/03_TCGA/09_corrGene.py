@@ -96,7 +96,7 @@ sf /= sf.mean()
 
 # %%
 # Replace with human readable gene name
-ensemblToID = pd.read_csv("/shared/projects/pol2_chipseq/pol2_interg_default/data/ensembl_toGeneId.tsv", sep="\t", index_col="Gene stable ID")
+ensemblToID = pd.read_csv(paths.ensIdToGeneId, sep="\t", index_col="Gene stable ID")
 ensemblToID = ensemblToID[~ensemblToID.index.duplicated(keep='first')]
 geneStableID = [id.split(".")[0] for id in usedTable.columns]
 valid = np.isin(geneStableID, ensemblToID.index)

@@ -21,7 +21,7 @@ try:
 except:
     pass
 
-manifest = pandas.read_csv("/scratch/pdelangen/projet_these/data_clean/metadata_encode_totalrnaseq.tsv", sep="\t")
+manifest = pandas.read_csv(paths.encodeMetadata, sep="\t")
 manifest = manifest[(manifest["File assembly"] == "GRCh38") & (manifest["Output type"] == "alignments")]
 # Order protocol priority
 prio = ['Lab custom GRCh38', 'ENCODE3 GRCh38 V24', 'ENCODE4 v1.1.0 GRCh38 V29',
@@ -37,11 +37,6 @@ for i in experiments:
     highestPrio = np.max(prioExp)
     kept += list(np.array(experiments[i])[prioExp == highestPrio])
 df = manifest.loc[kept]
-dfAnnot = df.copy()
-dfAnnot = df[["File accession", "Biosample term name"]]
-dfAnnot["Annotation"] = [None]*len(dfAnnot)
-dfAnnot.to_csv("/scratch/pdelangen/projet_these/data_clean/encode_total_rnaseq_annot.tsv", 
-                sep="\t", index=None)
 fileIDs = df["File accession"]
 idNameMap = dict(zip(fileIDs, df["File download URL"]))
 
