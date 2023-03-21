@@ -2,6 +2,8 @@
 import numpy as np
 import pandas as pd
 import os
+import sys
+sys.path.append("./")
 import matplotlib.pyplot as plt
 from settings import params, paths
 from lib import rnaseqFuncs

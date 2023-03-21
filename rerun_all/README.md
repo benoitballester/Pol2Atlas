@@ -5,7 +5,7 @@ You can also use the provided conda environments, or the singularity recipes whi
 1. Clone the repo
    ```sh
    git clone https://github.com/benoitballester/Pol2Atlas.git
-
+    ```
 2. Download the input data on Zenodo : https://doi.org/10.5281/zenodo.7740073
 
 3. Replace the paths in settings/paths.py with your own file paths (you should only need to specify data folder, output folder and temp folder) 

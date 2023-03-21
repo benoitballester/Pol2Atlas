@@ -1,6 +1,7 @@
 # %%
 import os
-
+import sys
+sys.path.append("./")
 import fastcluster
 import matplotlib as mpl
 import matplotlib.pyplot as plt
