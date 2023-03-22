@@ -24,7 +24,7 @@ from lib.pyGREATglm import pyGREAT as pyGREATglm
 
 enricherglm = pyGREATglm(paths.GOfile,
                           geneFile=paths.gencode,
-                          chrFile=paths.genomeFile)
+                          chrFile=paths.genomeFile,gene_biotype="protein_coding")
 # %%
 def symlog_bins(arr, n_bins, a, b, zero_eps=0.1, padding=0):
     """
@@ -115,9 +115,12 @@ except FileExistsError:
 # %%
 gencode = enricherglm.txList
 dst = distPlotter(gencode, consensuses,-1e5,1e5)
+# %%
 plt.figure(dpi=500)
 dst.plot(10000)
-plt.title("All Interg Pol II")
+plt.ylim(plt.ylim()[0], plt.ylim()[1])
+plt.vlines(19000, plt.ylim()[0], plt.ylim()[1], color="r", linestyles="dashed")
+plt.title("All Intergenic RNAP2 consensuses")
 plt.savefig(paths.outputDir + "dist_to_genes/genedist.pdf")
 plt.show()
 plt.close()

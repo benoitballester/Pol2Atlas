@@ -157,7 +157,7 @@ accFiles = [f for f in accFiles if f.startswith("stats_")]
 for f in accFiles:
     with open(paths.outputDir + "dist_to_genes/gtex_tail/"+f) as ftxt:
         txt = "Gene tail up to " + ftxt.readline().rstrip("\n").split("-")[-1] + "bp"
-        txt += "\n(" + ftxt.readline().rstrip("\n").split(" ")[2] + " probes)"
+        txt += "\n(" + ftxt.readline().rstrip("\n").split(" ")[2] + " features)"
         cutoffs.append(txt)
         accuracies.append(float(ftxt.readline().rstrip("\n").split(" ")[-1]))
 # Retrieve non-tailed accuracies
@@ -166,15 +166,15 @@ accFiles = [f for f in accFiles if f.startswith("stats_")]
 for f in accFiles:
     with open(paths.outputDir + "dist_to_genes/gtex_notail/"+f) as ftxt:
         txt = "Non tail up to " + ftxt.readline().rstrip("\n").split("-")[-1] + "bp"
-        txt += "\n(" + ftxt.readline().rstrip("\n").split(" ")[2] + " probes)"
+        txt += "\n(" + ftxt.readline().rstrip("\n").split(" ")[2] + " features)"
         cutoffs.append(txt)
         accuracies.append(float(ftxt.readline().rstrip("\n").split(" ")[-1]))
 
-data = pd.DataFrame([accuracies, cutoffs], index=["Balanced Accuracy", "Used probes"]).T
+data = pd.DataFrame([accuracies, cutoffs], index=["Balanced Accuracy", "Used RNAP2-bound regions"]).T
 data["Group"] = ["Tail"]*3 + ["Non tail"]*3
 # %%
 import seaborn as sns
-graph = sns.barplot(data, x="Balanced Accuracy", y="Used probes", hue="Group")
+graph = sns.barplot(data=data, x="Balanced Accuracy", y="Used RNAP2-bound regions", hue="Group")
 graph.legend_.remove()
 plt.gca().set_aspect(0.02)
 plt.xlim((data["Balanced Accuracy"].min()*0.9 , data["Balanced Accuracy"].max()*1.01))

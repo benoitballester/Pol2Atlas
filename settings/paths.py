@@ -1,3 +1,4 @@
+# You probably only need to change these 3 if you downloaded the zenodo archive
 dataFolder = "/shared/projects/pol2_chipseq/pol2_interg_default/data_all/"
 outputDir = "/shared/projects/pol2_chipseq/pol2_interg_default/outputPol2_repro/"   # Main results
 tempDir = "/shared/projects/pol2_chipseq/pol2_interg_default/tempPol2_repro/"       # Temporary files / unimportant
@@ -44,8 +45,8 @@ dnaseMeuleman = dataFolder + "genome_annotation/dnaseMeuleman.bed"
 remapCrms = dataFolder + "genome_annotation/crm.bed"
 # ---------- Required to download counts from TCGA ---------- 
 tokenPath = dataFolder + "tcga/token.txt" # Use your own !
-manifest = dataFolder + "gdc_manifest.2021-09-22.txt"
-gdcClientPath = dataFolder + "tcga/gdc-client"
+manifest = dataFolder + "tcga/gdc_manifest.2021-09-22.txt"
+gdcClientPath = dataFolder + "bin/gdc-client"
 tcgaData = dataFolder + "tcga/"
 # ---------- Required to download counts from GTEx ---------- 
 gtexData = dataFolder + "GTex/"
