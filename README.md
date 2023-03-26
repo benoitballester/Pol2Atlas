@@ -5,7 +5,7 @@
 
 
 
-This is the code repository for the research paper [Normal and cancer tissues are accurately characterised by intergenic transcription at RNA polymerase 2 binding sites](https://www.biorxiv.org/) by de Langen et al. 
+This is the code repository for the research paper [Normal and cancer tissues are accurately characterised by intergenic transcription at RNA polymerase 2 binding sites](https://doi.org/10.1101/2023.03.24.534112) by de Langen et al. 
 
 ## Table of Contents
 
