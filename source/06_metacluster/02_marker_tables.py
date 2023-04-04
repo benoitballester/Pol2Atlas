@@ -53,11 +53,11 @@ for f in filesEncode:
 
 
 # Files TCGA
-filesEncode = os.listdir(paths.outputDir + "rnaseq/TCGA/DE/")
+filesEncode = os.listdir(paths.outputDir + "rnaseq/TCGA2/DE/")
 filesEncode = [f for f in filesEncode if f.startswith("res_")]
 for f in filesEncode:
     name = "TCGA_" + f[4:-4]
-    res = pd.read_csv(paths.outputDir + "rnaseq/TCGA/DE/" + f, index_col=0)["Upreg"] 
+    res = pd.read_csv(paths.outputDir + "rnaseq/TCGA2/DE/" + f, index_col=0)["Upreg"] 
     vals = res.index[res==1].values
     if len(vals) == 0:
         continue

@@ -238,12 +238,12 @@ df["Hover"] = df["Project"] + "\n" + df["Sample Type"]  + "\n" + subtype.values
 project_id = annotation["project_id"]
 brcaOnly = subtype.copy()
 brcaOnly[["BRCA" not in i for i in subtype.values]] = "N/A"
-subtypecat, eq = pd.factorize(brcaOnly.values, sort=True)
+subtypecat, eqSub = pd.factorize(brcaOnly.values, sort=True)
 colors = palette[subtypecat]
 nas = brcaOnly.values == "N/A"
 colors = np.concatenate([colors, np.ones((len(colors),1))], axis=1)
 colors[nas] = (0.5,0.5,0.5,0.1)
-palette[eq=="N/A"] = (0.5,0.5,0.5)
+palette[eqSub=="N/A"] = (0.5,0.5,0.5)
 df["Color"] = [f"rgb({int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)})" for c in colors]
 #df = df[df["Project"] == "TCGA-BRCA"]
 markers = go.scattergl.Marker(color=df["Color"], size=df["Size"], 
@@ -259,7 +259,7 @@ plt.figure(dpi=500)
 plt.axis('off')
 patches = []
 for i in np.unique(subtypecat):
-    legend = Patch(color=palette[i], label=eq[i])
+    legend = Patch(color=palette[i], label=eqSub[i])
     patches.append(legend)
 plt.legend(handles=patches)
 plt.savefig(paths.outputDir + "rnaseq/TCGA2/umap_subtype_brca_lgd.pdf", bbox_inches="tight")
@@ -277,12 +277,12 @@ df["Hover"] = df["Project"] + "\n" + df["Sample Type"]  + "\n" + subtype.values
 project_id = annotation["project_id"]
 brcaOnly = subtype.copy()
 brcaOnly[["THCA" not in i for i in subtype.values]] = "N/A"
-subtypecat, eq = pd.factorize(brcaOnly.values, sort=True)
+subtypecat, eqSub = pd.factorize(brcaOnly.values, sort=True)
 colors = palette[subtypecat]
 nas = brcaOnly.values == "N/A"
 colors = np.concatenate([colors, np.ones((len(colors),1))], axis=1)
 colors[nas] = (0.5,0.5,0.5,0.1)
-palette[np.argmax(eq=="N/A")] = (0,0,0)
+palette[np.argmax(eqSub=="N/A")] = (0,0,0)
 df["Color"] = [f"rgb({int(c[0]*255)},{int(c[1]*255)},{int(c[2]*255)})" for c in colors]
 #df = df[df["Project"] == "TCGA-BRCA"]
 markers = go.scattergl.Marker(color=df["Color"], size=df["Size"], 
@@ -298,7 +298,7 @@ plt.figure(dpi=500)
 plt.axis('off')
 patches = []
 for i in np.unique(subtypecat):
-    legend = Patch(color=palette[i], label=eq[i])
+    legend = Patch(color=palette[i], label=eqSub[i])
     patches.append(legend)
 plt.legend(handles=patches)
 plt.savefig(paths.outputDir + "rnaseq/TCGA2/umap_subtype_thca_lgd.pdf", bbox_inches="tight")
@@ -318,8 +318,8 @@ df["Hover"] = df["Project"] + "\n" + df["Sample Type"]  + "\n" + subtype.values 
 
 project_id = annotation["project_id"]
 brcaOnly = subtype.copy()
-subtypecat, eq = pd.factorize(df["Stage"].astype("str"), sort=True)
-palette = np.array(sns.color_palette("rocket", len(eq)))
+subtypecat, eqGrade = pd.factorize(df["Stage"].astype("str"), sort=True)
+palette = np.array(sns.color_palette("rocket", len(eqGrade)))
 colors = palette[subtypecat]
 colors = np.concatenate([colors, np.ones((len(colors),1))], axis=1)
 # palette[eq=="N/A"] = (0.5,0.5,0.5)

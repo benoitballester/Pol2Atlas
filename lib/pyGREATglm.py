@@ -307,8 +307,11 @@ class pyGREAT:
         get_reusable_executor().shutdown(wait=False, kill_workers=True)
         # Format results
         results = pd.DataFrame(results)
-        results.set_index(0, inplace=True)
-        results.columns = ["P(Beta > 0)", "Beta"]
+        if results.shape[1] > 0:
+            results.set_index(0, inplace=True)
+            results.columns = ["P(Beta > 0)", "Beta"]
+        else :
+            results = pd.DataFrame(None, columns=["P(Beta > 0)", "Beta"])
         results.dropna(inplace=True)
         results["P(Beta > 0)"] = np.maximum(results["P(Beta > 0)"], 1e-320)
         qvals = results["P(Beta > 0)"].copy()
@@ -375,6 +378,8 @@ class pyGREAT:
             Path to save figure, by default None
         """
         sig = enrichDF[enrichDF["BH corrected p-value"] < alpha]
+        if len(enrichDF) == 0:
+            return
         simplifiedMat = self.mat.loc[sig.index].values.astype(bool)
         clusters = matrix_utils.graphClustering(simplifiedMat, 
                                                 metric, k=int(np.sqrt(len(sig))), r=resolution, snn=True, 

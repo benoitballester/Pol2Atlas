@@ -12,7 +12,7 @@ outputDir = paths.outputDir + "ldsc_meta/"
 
 utils.createDir(outputDir)
 utils.createDir(tempDir)
-utils.createDir(tempDir + "liftedClusters/")
+utils.createDir(tempDir + "liftedMarkers/")
 utils.createDir(tempDir + "noLift/")
 
 
@@ -41,25 +41,25 @@ rule liftover:
     input:
         expand("{abc}", abc=tfPaths)
     output:
-        tempDir + "liftedClusters/{tfClusts}"
+        tempDir + "liftedMarkers/{tfClusts}"
     shell:
         """
             {paths.liftoverPath}liftOver  \
             {tfFolder}{wildcards.tfClusts} \
             {paths.liftoverPath}hg38ToHg19.over.chain \
-            {tempDir}liftedClusters/{wildcards.tfClusts} \
+            {tempDir}liftedMarkers/{wildcards.tfClusts} \
             {tempDir}noLift/{wildcards.tfClusts}
         """
 
 
 rule makeAnnot:
     input:
-        expand(tempDir + "liftedClusters/{tfClusts}", tfClusts=tfClusts)
+        expand(tempDir + "liftedMarkers/{tfClusts}", tfClusts=tfClusts)
     output:
         tempDir + "ld.22.annot.gz"
     shell:
         """
-        python lib/ldsc/makeCustomAnnot.py {tempDir}"liftedClusters/" {tempDir}
+        python lib/ldsc/makeCustomAnnot.py {tempDir}"liftedMarkers/" {tempDir}
         """
 
 rule baselineLD:
@@ -110,5 +110,5 @@ rule plot:
         paths.tempDir + "end0604.txt"
     shell:
         """
-        source/06_metacluster/04_plot_ldsc_per_trait.py
+        python source/06_metacluster/04_plot_ldsc_per_trait.py
         """

@@ -45,13 +45,13 @@ rule genomicIntersect:
     singularity:
         paths.singularityImg
     output:
-        paths.outputDir + "intersections_databases/gtex_heart_rep_family.pdf"
+        paths.outputDir + "intersections_databases/survival_rep_family.pdf"
     shell:
         "python source/05_rnaseqAnalysis/03_TCGA/04_intersect_pancancer.py"
 
 rule drawPanCancerKaplan:
     input:
-        paths.outputDir + "intersections_databases/gtex_heart_rep_family.pdf"
+        paths.outputDir + "intersections_databases/survival_rep_family.pdf"
     singularity:
         paths.singularityImg
     output:

@@ -6,7 +6,9 @@ import os
 from statsmodels.stats.multitest import fdrcorrection
 sys.path.append("./")
 from settings import params, paths
+from lib.utils.utils import createDir
 
+createDir(paths.outputDir + "ldsc_meta_figures/")
 lookupTable = pd.read_csv(f"{paths.ldscFilesPath}/LDSC Sumstat Manifest for Neale UKB GWAS - ukb31063_ldsc_sumstat_manifest.tsv", sep="\t")[["phenotype", "description"]]
 lookupTable.set_index("phenotype", inplace=True)
 lookupTable.index = lookupTable.index.astype(str)
@@ -16,7 +18,7 @@ allFiles = [f for f in allFiles if f.endswith(".results")]
 results = dict()
 for f in allFiles:
     df = pd.read_csv(paths.outputDir + f"ldsc_meta/{f}", sep="\t")
-    df["Category"] = df["Category"].str.split("/liftedClusters/",2,True)[1].str.split("L2_0",2,True)[0].astype("str")
+    df["Category"] = df["Category"].str.split("/liftedMarkers/",2,True)[1].str.split("L2_0",2,True)[0].astype("str")
     df.set_index("Category", inplace=True)
     cats = df.index
     trait = f.split(".")[0]
@@ -25,9 +27,8 @@ for f in allFiles:
 sigEnrichs = pd.DataFrame()
 hmOrder = np.loadtxt(paths.outputDir + "clusterBarplotOrder.txt").astype(int)[::-1]
 for k in results:
-    sigEnrichs[k] = results[k]["Enrichment"] * (results[k]["Enrichment_p"] < 0.01/7463).astype(float)
+    sigEnrichs[k] = results[k]["Enrichment"] * (results[k]["Enrichment_p"] < 0.01/(len(results)*len(df))).astype(float)
 sigEnrichs = np.maximum(0,sigEnrichs)
-# %%
 # %%
 # Plot top markers set for each gwas
 import seaborn as sns
