@@ -1,7 +1,8 @@
 # Normal and cancer tissues are accurately characterised by intergenic transcription at RNA polymerase 2 binding sites
 
 [![DOI:10.1101/2023.03.24.534112](http://img.shields.io/badge/DOI-bioRxiv/2023.03.24.534112-B31B1B.svg)](https://doi.org/10.1101/2023.03.24.534112)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7740073.svg)](https://doi.org/10.5281/zenodo.7740073) `DOI repro`
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7740073.svg)](https://doi.org/10.5281/zenodo.7740073) 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7785393.svg)](https://doi.org/10.5281/zenodo.7785393)
 
 
 
@@ -34,12 +35,10 @@ We provide singularity environments (on Zenodo) and recipes (./env/ folder). Sna
 
 
 ## Data
-The input data used in this project is publicly available at Zenodo and can be found at the following DOI:
+The `input` data used in this project is publicly available at Zenodo and can be found at the following DOI: 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7785393.svg)](https://doi.org/10.5281/zenodo.7785393)
 
-`DOI repro`
-
-The output data produced by this project (RNAP2 occupancy atlas, markers, count tables...) is publicly available at Zenodo and can be found at the following DOI:
-
+The `output` data produced by this project (RNAP2 occupancy atlas, markers, count tables...) is publicly available at Zenodo and can be found at the following DOI:
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7740073.svg)](https://doi.org/10.5281/zenodo.7740073)
 
 
