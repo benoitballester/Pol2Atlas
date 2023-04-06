@@ -1,4 +1,6 @@
-# Normal and cancer tissues are accurately characterised by intergenic transcription at RNA polymerase 2 binding sites
+![Header](./github-header-image.png)
+
+ <! -- # Normal and cancer tissues are accurately characterised by intergenic transcription at RNA polymerase 2 binding sites -->
 
 [![DOI:10.1101/2023.03.24.534112](http://img.shields.io/badge/DOI-bioRxiv/2023.03.24.534112-B31B1B.svg)](https://doi.org/10.1101/2023.03.24.534112)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7740073.svg)](https://doi.org/10.5281/zenodo.7740073) 
