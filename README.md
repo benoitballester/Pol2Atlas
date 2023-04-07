@@ -39,11 +39,14 @@ We provide singularity environments (on Zenodo) and recipes (./env/ folder). Sna
 
 
 ## Data
-The `input` data used in this project is publicly available at Zenodo and can be found at the following DOI: 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7785393.svg)](https://doi.org/10.5281/zenodo.7785393)
+The `input` data used in this project is publicly available at Zenodo and can be found in the table below.  
 
-The `output` data produced by this project (RNAP2 occupancy atlas, markers, count tables...) is publicly available at Zenodo and can be found at the following DOI:
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7740073.svg)](https://doi.org/10.5281/zenodo.7740073)
+The `output` data produced by this project (RNAP2 occupancy atlas, markers, count tables...) is publicly available at Zenodo and can be found in the table below.
+
+Intergenic RNAP2 Atlas | Zenodo DOI
+------------- | -------------
+`input` data | [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7785393.svg)](https://doi.org/10.5281/zenodo.7785393)
+`output` data |  [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7740073.svg)](https://doi.org/10.5281/zenodo.7740073)
 
 
 ## License
