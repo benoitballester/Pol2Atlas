@@ -8,6 +8,8 @@ genomeFile = dataFolder + "hg38.chrom.sizes.sorted"
 annotationFile = dataFolder + "dataset_annotation/annotPol2_lowlevel.tsv"
 polIIannotationPalette = dataFolder + "palettes/annot.tsv"
 singularityImg = dataFolder + "singularity/main/main_singularity.img"
+# ---------- HOMER ---------- 
+hg38_homer = dataFolder + "homer/genomes/hg38/" 
 # ---------- Pol II specific ---------- 
 bedtoolsPath = dataFolder + "bin/bedtools"
 encodeBlacklist = dataFolder + "genome_annotation/hg38-blacklist.v2.bed"

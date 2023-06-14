@@ -20,9 +20,9 @@ consensusesPr["Name"] = np.arange(len(consensusesPr))
 consensusesPr.columns = ["Chromosome", "Start", "End", "Name"]
 consensusesPr = pr.PyRanges(consensusesPr)
 # %%
-def addAnnotation(summits, tab, colName, inputBed, showCol="Name"):
+def addAnnotation(summits, tab, colName, inputBed, showCol="Name", slack=0):
     annotBed = pr.read_bed(inputBed)
-    joined = summits.join(annotBed).as_df()
+    joined = summits.join(annotBed, slack=slack).as_df()
     if showCol is not None:
         tab.loc[:, colName] = None
         try:
@@ -38,8 +38,8 @@ addAnnotation(consensusesPr, intersectTab, "Encode CCREs",
               paths.ccrePath)
 # %%
 # lncpedia
-addAnnotation(consensusesPr, intersectTab, "lncpedia", 
-              paths.lncpediaPath)
+addAnnotation(consensusesPr, intersectTab, "LNCipedia", 
+              paths.lncpediaPath, slack=1000)
 # %%
 # Repeat Family
 addAnnotation(consensusesPr, intersectTab, "Repeat Family", 
@@ -54,7 +54,7 @@ addAnnotation(consensusesPr, intersectTab, "Repeat Type",
               paths.repeatTypeBed)              
 # %%
 # Fantom eRNA
-addAnnotation(consensusesPr, intersectTab, "Fantom 5 bidirectionnal enhancers", showCol=None,
+addAnnotation(consensusesPr, intersectTab, "Fantom 5 Enhancers", showCol=None,
               inputBed=paths.f5Enh)
 # %%
 # Fantom TSS
@@ -66,8 +66,28 @@ addAnnotation(consensusesPr, intersectTab, "DNase meuleman",
               inputBed=paths.dnaseMeuleman)
 # %%
 # CRM remap
-addAnnotation(consensusesPr, intersectTab, "ReMap CRM", showCol="Score",
+addAnnotation(consensusesPr, intersectTab, "ReMap CRMs", showCol="Score",
               inputBed=paths.remapCrms)
+# %%
+# STARR-seq
+starrseq = pr.read_bed(paths.dataFolder+"genome_annotation/ENCODE_narrowpeak_sorted_hg38.narrowPeak")
+has_starr = consensusesPr.overlap(starrseq).as_df()["Name"]
+intersectTab["ENCODE STARR-seq"] = False
+intersectTab.loc[has_starr, "ENCODE STARR-seq"] = True
+# %%
+# LNCipedia promoters
+lnc = pr.read_bed(paths.lncpediaPath, as_df=True)
+tss = lnc["Start"].where(lnc["Strand"]=="+", lnc["End"]+1)
+lncProms = lnc[["Chromosome", "Start", "End", "Name"]].copy()
+lncProms["Start"] = np.maximum(tss - 1000, 0) 
+lncProms["End"] = tss + 1000 
+joined = consensusesPr.join(pr.PyRanges(lncProms)).as_df()
+intersectTab.loc[:, "LNCipedia Promoter"] = None
+try:
+    intersectTab.loc[joined["Name"].values, "LNCipedia Promoter"] = joined["Name" + "_b"].values
+except KeyError:
+    intersectTab.loc[joined["Name"].values, "LNCipedia Promoter"] = joined["Name"].values
+
 # %%
 intersectTab.to_csv(paths.outputDir + "intersectIntergPol2.tsv", sep="\t", index=None)
 genomeSize = pd.read_csv(paths.genomeFile, sep="\t", header=None)[1].sum()
@@ -110,7 +130,7 @@ pvals = binom(len(consensuses), prob.loc[proportions.index]).sf(proportions-1)
 pvals = np.minimum(pvals, binom(len(consensuses), prob.loc[proportions.index]).cdf(proportions-1))*2.0
 sig = fdrcorrection(pvals)[0]
 plt.figure(dpi=500)
-sns.barplot(proportions.values/len(intersectTab), proportions.index)
+sns.barplot(x=proportions.values/len(intersectTab), y=proportions.index)
 plt.xticks(rotation=90)
 plt.ylabel("CCRE Category")
 plt.xlabel("Fraction of Pol II consensuses")
@@ -153,7 +173,7 @@ pvals = binom(len(consensuses), prob.loc[proportions.index]).sf(proportions-1)
 pvals = np.minimum(pvals, binom(len(consensuses), prob.loc[proportions.index]).cdf(proportions-1))*2.0
 sig = fdrcorrection(pvals)[0]
 plt.figure(dpi=500)
-sns.barplot(proportions.values/len(intersectTab), proportions.index)
+sns.barplot(x=proportions.values/len(intersectTab), y=proportions.index)
 plt.xticks(rotation=90)
 plt.ylabel("CCRE Category")
 plt.xlabel("Fraction of Pol II consensuses")
@@ -182,15 +202,15 @@ def computeSubsetProbNoCat(bedPath, intergRegions, minScore=None):
     intergSize = intergData["Size"].sum()
     return coverage / intergSize
 probLinc = computeSubsetProbNoCat(paths.lncpediaPath, intergenicBed)
-intersectLinc = intersectTab["lncpedia"].value_counts().sum()
+intersectLinc = intersectTab["LNCipedia"].value_counts().sum()
 probCCRE = computeSubsetProbNoCat(paths.ccrePath, intergenicBed)
 intersectCCRE = intersectTab["Encode CCREs"].value_counts().sum()
 probRemap = computeSubsetProbNoCat(paths.remapCrms, intergenicBed, 10)
-intersectRemap = (intersectTab["ReMap CRM"] >= 10).sum()
+intersectRemap = (intersectTab["ReMap CRMs"] >= 10).sum()
 probRepeat = computeSubsetProbNoCat(paths.repeatFamilyBed, intergenicBed)
 intersectRepeat = intersectTab["Repeat Family"].value_counts().sum()
 probF5Enh = computeSubsetProbNoCat(paths.f5Enh, intergenicBed)
-intersectF5Enh = intersectTab["Fantom 5 bidirectionnal enhancers"].sum()
+intersectF5Enh = intersectTab["Fantom 5 Enhancers"].sum()
 probF5TSS = computeSubsetProbNoCat(paths.f5Cage, intergenicBed)
 intersectF5TSS = intersectTab["Fantom 5 TSSs"].sum()
 probDnase = computeSubsetProbNoCat(paths.dnaseMeuleman, intergenicBed)
@@ -230,7 +250,7 @@ pvals = binom(len(consensuses), prob.loc[proportions.index]).sf(proportions-1)
 pvals = np.minimum(pvals, binom(len(consensuses), prob.loc[proportions.index]).cdf(proportions-1))*2.0
 sig = fdrcorrection(pvals)[0]
 plt.figure(dpi=500)
-sns.barplot(proportions.values/len(intersectTab), proportions.index)
+sns.barplot(x=proportions.values/len(intersectTab), y=proportions.index)
 plt.xticks(rotation=90)
 plt.ylabel("CCRE Category")
 plt.xlabel("Fraction of Pol II consensuses")

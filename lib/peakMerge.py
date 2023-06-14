@@ -667,7 +667,8 @@ class peakMerger:
                         labelbottom=False) # labels along the bottom edge are off
                 plt.legend(handles=patches, prop={'size': 7}, bbox_to_anchor=(0,1.02,1,0.2),
                     loc="lower left", mode="expand", ncol=4)
-                plt.savefig(self.outputPath + f"consensuses_summary_ordered.{figureFmt}", bbox_inches='tight')
+                plt.savefig(self.outputPath + f"consensuses_summary_ordered.{figureFmt}", 
+                            bbox_inches='tight')
                 plt.show()
                 plt.close()
                 # Same order

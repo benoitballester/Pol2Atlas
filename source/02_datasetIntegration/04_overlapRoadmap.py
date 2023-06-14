@@ -117,7 +117,6 @@ def enrichForClust(clust, roadmapGroup, name, consensusEpigenomeMat, epigenomeMe
             txt = "+"
         plt.text(pos, maxVal+0.01, sig*txt, ha="center", fontsize=8, fontweight="heavy")
     plt.legend(fontsize=8)
-    plt.legend([],[], frameon=False)
     plt.xticks(rotation=70)
     plt.savefig(paths.outputDir + "epigenetic/" + f"clust_{name}_roadmap_{roadmapGroup}.pdf", bbox_inches="tight")
     plt.figure()
@@ -465,7 +464,6 @@ def enrichForClustBubble(clust, roadmapGroup, name, consensusEpigenomeMat, epige
         except ValueError:
             p = 1.0
         pos = order[::-1].index(k)
-
         allP.append(-np.log10(p+1e-300))
         lfc = np.log2(np.mean(prop2)/np.mean(prop1))
         logP = -np.log10(p) + np.log10(0.05)

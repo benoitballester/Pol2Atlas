@@ -491,7 +491,8 @@ def donutPlot(donutSize, counts, nMult, labels,
             labels=labelsOnCond(labels, counts/np.sum(counts), labelsCutThreshold), 
             colors=palette,
             autopct=lambda p:str(int(p*nMult/100+0.5))+"%"*showPct,
-            pctdistance= 1.0-donutSize*0.5, shadow=False, labeldistance=1.1, wedgeprops = { 'linewidth' : 7, 'edgecolor' : 'white' })
+            pctdistance= 1.0-donutSize*0.5, shadow=False, labeldistance=1.1, 
+            wedgeprops = { 'linewidth' : 7, 'edgecolor' : 'white' })
 
     for i in range(len(label)):
         plt.setp(label[i], **{'color':palette[i], 'weight':'bold', 'fontsize':40})
