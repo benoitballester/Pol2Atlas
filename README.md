@@ -1,11 +1,12 @@
-# Normal and cancer tissues are accurately characterised by intergenic transcription at RNA polymerase 2 binding sites
+![Header](./github-header-image.png)
+<!-- # Normal and cancer tissues are accurately characterised by intergenic transcription at RNA polymerase 2 binding sites -->
+![Header](./header.png)
+
+This is the code repository for the research paper [Normal and cancer tissues are accurately characterised by intergenic transcription at RNA polymerase 2 binding sites](https://doi.org/10.1101/2023.03.24.534112) by de Langen _et al_. 
 
 [![DOI:10.1101/2023.03.24.534112](http://img.shields.io/badge/DOI-bioRxiv/2023.03.24.534112-B31B1B.svg)](https://doi.org/10.1101/2023.03.24.534112)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7740073.svg)](https://doi.org/10.5281/zenodo.7740073) `DOI repro`
-
-
-
-This is the code repository for the research paper [Normal and cancer tissues are accurately characterised by intergenic transcription at RNA polymerase 2 binding sites](https://doi.org/10.1101/2023.03.24.534112) by de Langen et al. 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7740073.svg)](https://doi.org/10.5281/zenodo.7740073) 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7785393.svg)](https://doi.org/10.5281/zenodo.7785393)
 
 ## Table of Contents
 
@@ -15,7 +16,6 @@ This is the code repository for the research paper [Normal and cancer tissues ar
 - [Data](#data)
 - [License](#license)
 - [Acknowledgements](#acknowledgements)
-- [References](#references)
 
 ## Background
 
@@ -26,21 +26,27 @@ We developed a meta-clustering methodology to integrate our RNAP2 atlas with act
 We demonstrate that intergenic transcription at RNAP2 bound regions are novel per-cancer and pan-cancer biomarkers showing genomic and clinically relevant characteristics including the ability to differentiate cancer subtypes and are associated with overall survival. Our results demonstrate the effectiveness of coherent data integration to uncover and characterise intergenic transcriptional activity in both normal and cancer tissues. 
 
 ## Code re-use and reproducibility
-We detail how to reproduce our results and how to re-use some parts of our code in `rerun_all/README.md`.
+All details on how to reproduce our results and how to re-use some parts of our code is in [rerun_all/README.md](rerun_all/README.md). It containts the following sections :
 
+* [Replicating the results of the paper](rerun_all/README.md#replicating-the-results-of-the-paper)
+* [Re-using part of our analyses](rerun_all/README.md#re-using-part-of-our-analyses)
+  + [Atlas of RNA Polymerase II bound regions](rerun_all/README.md#atlas-of-rna-polymerase-ii-bound-regions)
+  + [GSEA of nearby genes of a subset of genomic regions](rerun_all/README.md#gsea-of-nearby-genes-of-a-subset-of-genomic-regions)
+  + [Using the RNA Polymerase II atlas to quantify the non-coding expression in RNA-seq and scRNA-seq](rerun_all/README.md#using-the-pol-ii-atlas-to-quantify-the-non-coding-expression-in-rna-seq-and-scrna-seq)
 
 ## Dependencies
 We provide singularity environments (on Zenodo) and recipes (./env/ folder). Snakemake is required to re-run all analyses.
 
 
 ## Data
-The input data used in this project is publicly available at Zenodo and can be found at the following DOI:
+The `input` data used in this project is publicly available at Zenodo and can be found in the table below.  
 
-`DOI repro`
+The `output` data produced by this project (RNAP2 occupancy atlas, markers, count tables...) is publicly available at Zenodo and can be found in the table below.
 
-The output data produced by this project (RNAP2 occupancy atlas, markers, count tables...) is publicly available at Zenodo and can be found at the following DOI:
-
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7740073.svg)](https://doi.org/10.5281/zenodo.7740073)
+Intergenic RNAP2 Atlas | Zenodo DOI
+------------- | -------------
+`input` data | [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7785393.svg)](https://doi.org/10.5281/zenodo.7785393)
+`output` data |  [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7740073.svg)](https://doi.org/10.5281/zenodo.7740073)
 
 
 ## License
