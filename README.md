@@ -1,11 +1,11 @@
 ![Header](./github-header-image.png)
-<!-- # Normal and cancer tissues are accurately characterised by intergenic transcription at RNA polymerase 2 binding sites -->
+<!-- # Characterising intergenic transcription at RNA polymerase II binding sites in normal and cancer tissues -->
 ![Header](./header.png)
 
-This is the code repository for the research paper [Normal and cancer tissues are accurately characterised by intergenic transcription at RNA polymerase 2 binding sites](https://doi.org/10.1101/2023.03.24.534112) by de Langen _et al_. 
+This is the code repository for the research paper [Characterising intergenic transcription at RNA polymerase II binding sites in normal and cancer tissues](https://doi.org/10.1101/2023.03.24.534112) by de Langen _et al_. 
 
 [![DOI:10.1101/2023.03.24.534112](http://img.shields.io/badge/DOI-bioRxiv/2023.03.24.534112-B31B1B.svg)](https://doi.org/10.1101/2023.03.24.534112)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7740073.svg)](https://doi.org/10.5281/zenodo.7740073) 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.8091826.svg)](https://doi.org/10.5281/zenodo.8091826)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7785393.svg)](https://doi.org/10.5281/zenodo.7785393)
 
 ## Table of Contents
@@ -46,7 +46,7 @@ The `output` data produced by this project (RNAP2 occupancy atlas, markers, coun
 Intergenic RNAP2 Atlas | Zenodo DOI
 ------------- | -------------
 `input` data | [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7785393.svg)](https://doi.org/10.5281/zenodo.7785393)
-`output` data |  [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7740073.svg)](https://doi.org/10.5281/zenodo.7740073)
+`output` data |  [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.8091826.svg)](https://doi.org/10.5281/zenodo.8091826)
 
 
 ## License
